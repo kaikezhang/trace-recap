@@ -81,6 +81,7 @@ function EditorContent() {
 
     engine.on("complete", () => {
       setPlaybackState("idle");
+      setCurrentSegmentIndex(0);
     });
 
     return () => {
