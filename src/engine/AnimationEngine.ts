@@ -70,7 +70,6 @@ export class AnimationEngine {
       Math.max(TARGET_DURATION.min, n * 5)
     );
 
-    const hoverTime = PHASE_DURATIONS.HOVER;
     const arriveTime = PHASE_DURATIONS.ARRIVE;
     const photoTime = PHASE_DURATIONS.PHOTO_DISPLAY;
 
@@ -79,6 +78,7 @@ export class AnimationEngine {
 
     let totalFixed = 0;
     for (let i = 0; i < n; i++) {
+      const hoverTime = this.camera.getHoverDuration(i);
       totalFixed += hoverTime + arriveTime;
       const toLoc = this.locations.find(
         (l) => l.id === this.segments[i].toId
@@ -96,6 +96,7 @@ export class AnimationEngine {
       const toLoc = this.locations.find((l) => l.id === seg.toId);
       const hasPhotos = toLoc && toLoc.photos.length > 0;
 
+      const hoverTime = this.camera.getHoverDuration(i);
       const zoomOutDur = variablePerSegment * 0.25;
       const flyDur = variablePerSegment * 0.45;
       const zoomInDur = variablePerSegment * 0.3;

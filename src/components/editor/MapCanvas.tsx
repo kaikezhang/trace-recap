@@ -8,7 +8,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
 import { MAPBOX_TOKEN, getDefaultMapOptions } from "@/lib/mapbox";
 import { MAP_STYLES } from "@/lib/constants";
-import type { Segment, TransportMode } from "@/types";
+import type { TransportMode } from "@/types";
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -44,6 +44,7 @@ export default function MapCanvas() {
   const segments = useProjectStore((s) => s.segments);
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const playbackState = useAnimationStore((s) => s.playbackState);
+  const completedSegmentsRef = useRef<Set<string>>(new Set());
 
   // Initialize map
   useEffect(() => {
@@ -276,34 +277,76 @@ export default function MapCanvas() {
     }
   }, []);
 
-  // Hide static segment layers during playback, show when idle
+  // Manage static segment layer visibility during playback
+  // On play: hide all static layers (completed ones get shown back as segments finish)
+  // On idle: show all static layers and clear animated route
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    const visibility = playbackState === "playing" ? "none" : "visible";
-    for (const layerId of segmentLayersRef.current) {
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, "visibility", visibility);
+    if (playbackState === "playing") {
+      // Hide all static layers; completed ones will be re-shown via segmentChange events
+      completedSegmentsRef.current.clear();
+      for (const layerId of segmentLayersRef.current) {
+        if (map.getLayer(layerId)) {
+          map.setLayoutProperty(layerId, "visibility", "none");
+        }
+        const segId = layerId.replace(SEGMENT_LAYER_PREFIX, "");
+        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + segId;
+        if (map.getLayer(glowLayerId)) {
+          map.setLayoutProperty(glowLayerId, "visibility", "none");
+        }
       }
-      // Also hide/show glow layer
-      const segId = layerId.replace(SEGMENT_LAYER_PREFIX, "");
-      const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + segId;
-      if (map.getLayer(glowLayerId)) {
-        map.setLayoutProperty(glowLayerId, "visibility", visibility);
+    } else {
+      // Show all static layers when idle/paused
+      completedSegmentsRef.current.clear();
+      for (const layerId of segmentLayersRef.current) {
+        if (map.getLayer(layerId)) {
+          map.setLayoutProperty(layerId, "visibility", "visible");
+        }
+        const segId = layerId.replace(SEGMENT_LAYER_PREFIX, "");
+        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + segId;
+        if (map.getLayer(glowLayerId)) {
+          map.setLayoutProperty(glowLayerId, "visibility", "visible");
+        }
       }
-    }
 
-    // Clear animated route when playback stops
-    if (playbackState === "idle") {
-      const src = map.getSource(ANIM_ROUTE_SOURCE) as
-        | mapboxgl.GeoJSONSource
-        | undefined;
-      if (src) {
-        src.setData({ type: "FeatureCollection", features: [] });
+      // Clear animated route when playback stops
+      if (playbackState === "idle") {
+        const src = map.getSource(ANIM_ROUTE_SOURCE) as
+          | mapboxgl.GeoJSONSource
+          | undefined;
+        if (src) {
+          src.setData({ type: "FeatureCollection", features: [] });
+        }
       }
     }
   }, [playbackState]);
+
+  // Expose a method for AnimationEngine to mark segments as completed
+  // This is called from the animation event listener in the parent
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const handleSegmentComplete = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { segmentId: string };
+      completedSegmentsRef.current.add(detail.segmentId);
+      const layerId = SEGMENT_LAYER_PREFIX + detail.segmentId;
+      const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + detail.segmentId;
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, "visibility", "visible");
+      }
+      if (map.getLayer(glowLayerId)) {
+        map.setLayoutProperty(glowLayerId, "visibility", "visible");
+      }
+    };
+
+    window.addEventListener("segment-complete", handleSegmentComplete);
+    return () => {
+      window.removeEventListener("segment-complete", handleSegmentComplete);
+    };
+  }, []);
 
   // Sync map style — re-add layers after style change
   useEffect(() => {

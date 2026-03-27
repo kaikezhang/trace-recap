@@ -53,7 +53,7 @@ export default function LeftPanel() {
   };
 
   return (
-    <div className="flex h-full w-80 flex-col border-r bg-background">
+    <div className="flex h-full w-80 flex-col overflow-hidden border-r bg-background">
       <div className="border-b px-3 py-2">
         <h2 className="text-sm font-semibold">Route</h2>
       </div>
@@ -77,7 +77,7 @@ export default function LeftPanel() {
           onChange={handleImport}
         />
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <RouteList />
       </ScrollArea>
     </div>
