@@ -1,80 +1,66 @@
-# TASK.md — Fix: Current segment route line not visible during animation
+# TASK.md — Audit & Fix Route Visibility During Animation
 
 ## ⚠️ DO NOT MERGE THE PR. Create PR and stop. DO NOT MERGE.
 
-## Bug Description
-During animation playback, the CURRENT segment's route line is invisible. Only past (completed) segments show their static route lines. The animated progressive route overlay that should draw the current segment in real-time is not rendering.
+## Current Behavior (WRONG)
+When animation plays:
+- ALL route lines are visible from the start (including future segments that haven't been traveled yet)
+- The current segment's line gets HIDDEN then progressively redrawn as it's traveled
+- This looks like the line disappears then reappears
 
-## Expected Behavior
-When the animation plays:
-- Past segments: static route lines visible (colored by transport mode)  
-- Current segment: a line progressively drawn from start to the icon's current position
-- Future segments: hidden
+## Expected Behavior (CORRECT)
+When animation plays:
+- **Past segments** (already completed): full route line visible
+- **Current segment**: line progressively drawn from 0% to 100% as the icon travels
+- **Future segments**: HIDDEN (not visible at all until their turn)
+- When animation stops/resets: ALL lines visible
 
-## Root Cause Analysis
-The progressive route drawing uses an animated overlay approach:
-1. `AnimationEngine` emits `routeDrawProgress` events with `routeDrawFraction` (0-1)
-2. `EditorLayout.tsx` handles these events, uses `turf.lineSliceAlong()` to slice the route geometry, and updates an animated GeoJSON source (`anim-route-src`)
-3. `MapCanvas.tsx` renders this source with layers `anim-route-layer` and `anim-route-glow-layer`
+## What to Audit & Fix
 
-The problem is likely one or more of these issues:
-- The animated route layers (`anim-route-layer`, `anim-route-glow-layer`) may be BELOW static segment layers in the Mapbox layer stack, making them invisible
-- The animated route source may not be getting the sliced geometry data correctly
-- The `routeDrawProgress` events may not be firing or the fraction may always be 0
-- There's a `segment-complete` CustomEvent mechanism that may be interfering
+### 1. Read and understand the current code flow:
+- `src/components/editor/MapCanvas.tsx` — has a `useEffect` that manages layer visibility based on `playbackState` and `currentSegmentIndex`
+- `src/components/editor/routeSegmentSources.ts` — has `updateSegmentProgress()` that updates a segment's GeoJSON source with sliced geometry
+- `src/components/editor/EditorLayout.tsx` — handles `routeDrawProgress` events from the engine and calls the update functions
+- `src/stores/animationStore.ts` — has `currentSegmentIndex` state
 
-## What to Do
+### 2. The visibility logic in MapCanvas.tsx should work like this:
 
-### Step 1: Investigate
-Run `npm run dev`, open http://localhost:3000/editor, import `fixtures/taiwan-trip.json`, click play, and check browser console for:
-- `[routeDraw]` log messages (already added) — are they appearing? What are the fraction values?
-- Any errors related to mapbox sources/layers
+When `playbackState === "playing"` or `"paused"`:
+```
+for each segment at index i:
+  if i < currentSegmentIndex:
+    // Past: show full line
+    set layer visibility = "visible"
+    restore full geometry to source (in case it was sliced)
+  
+  if i === currentSegmentIndex:
+    // Current: show layer, geometry is being updated by routeDrawProgress
+    set layer visibility = "visible"
+  
+  if i > currentSegmentIndex:
+    // Future: hide
+    set layer visibility = "none"
+```
 
-### Step 2: Fix the animated route rendering
-The approach should be SIMPLE. Abandon the separate animated overlay GeoJSON source approach — it's fragile and has z-order issues.
+When `playbackState === "idle"`:
+```
+for each segment:
+  set layer visibility = "visible"
+  restore full geometry to source
+```
 
-**Better approach: Use the STATIC segment layers themselves for progressive drawing.**
+### 3. Key issue to check:
+- Is `currentSegmentIndex` being updated correctly in the store? (It should be set in EditorLayout's `progress` event handler)
+- Is the visibility `useEffect` in MapCanvas reacting to `currentSegmentIndex` changes?
+- When currentSegmentIndex changes from N to N+1, segment N needs its full geometry restored
+- The `routeSegmentSources.ts` `updateSegmentProgress()` modifies the segment source data — when a segment completes, its source needs to be reset to the FULL geometry
 
-For each segment, during the FLY phase:
-- Instead of hiding the static layer and drawing a separate animated layer, keep the static layer visible but modify its GeoJSON source data to only show the portion of the route drawn so far
-- Use `turf.lineSliceAlong()` to compute the visible portion
-- Update the segment's own GeoJSON source with the sliced geometry each frame
+### 4. Critical: Store and restore original geometries
+When the animation modifies a segment's GeoJSON source (slicing it for progressive draw), the ORIGINAL full geometry must be stored somewhere so it can be restored when:
+- The segment is "completed" (currentSegmentIndex moves past it)
+- The animation stops/resets
 
-This eliminates z-order issues because the line is rendered in its own layer at the correct position in the stack.
-
-### Implementation:
-
-**EditorLayout.tsx changes:**
-- In the `routeDrawProgress` handler, instead of updating `anim-route-src`, update the STATIC segment source directly:
-  ```
-  const srcId = `segment-src-${seg.id}`;
-  const src = map.getSource(srcId) as mapboxgl.GeoJSONSource;
-  if fraction <= 0: set empty FeatureCollection
-  if fraction >= 1: set full geometry
-  else: set turf.lineSliceAlong(geometry, 0, fraction * totalLength)
-  ```
-- Remove all `anim-route-src` / `anim-route-layer` / `anim-route-glow-layer` logic from this file
-
-**MapCanvas.tsx changes:**
-- Remove the animated route source/layer setup (`ANIM_ROUTE_SOURCE`, `ANIM_ROUTE_LAYER`, `ANIM_ROUTE_GLOW_LAYER`)
-- Remove the `moveLayer` calls for animated layers
-- In the playback visibility effect:
-  - Past segments (index < currentSegmentIndex): static layer visible with FULL geometry
-  - Current segment (index === currentSegmentIndex): static layer visible (geometry updated by EditorLayout)
-  - Future segments (index > currentSegmentIndex): static layer HIDDEN
-- When playback stops (idle): restore all segments to their full geometry and show all layers
-
-**AnimationEngine.ts** — no changes needed, `routeDrawProgress` events are fine
-
-**Store the original full geometries** somewhere so you can restore them after playback. You can store them in a ref in MapCanvas or EditorLayout.
-
-### Step 3: Verify
-- Import taiwan-trip.json
-- Play animation
-- Current segment should show a line progressively drawing from start to icon position
-- Past segments should show their full route line
-- Future segments should be hidden
-- When animation ends or is reset, all route lines should show in full
+Check if `routeSegmentSources.ts` or MapCanvas stores the original geometries. If not, add a mechanism for this.
 
 ## Branch
-Create branch: `fix/current-segment-route-line`
+Create branch: `fix/route-visibility-v2`
