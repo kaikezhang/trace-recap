@@ -44,6 +44,7 @@ export default function MapCanvas() {
   const segments = useProjectStore((s) => s.segments);
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const playbackState = useAnimationStore((s) => s.playbackState);
+  const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
   const completedSegmentsRef = useRef<Set<string>>(new Set());
 
   // Initialize map
@@ -277,15 +278,40 @@ export default function MapCanvas() {
     }
   }, []);
 
-  // Keep all static route layers visible at ALL times during playback.
-  // The animated progressive line draws ON TOP for the current segment.
-  // On idle/reset: just clear the animated route overlay.
+  // Route visibility during playback:
+  // - Past segments (index < currentSegmentIndex): VISIBLE (already traveled)
+  // - Current segment: drawn progressively via animated overlay
+  // - Future segments (index > currentSegmentIndex): HIDDEN
+  // On idle: show all, clear animated overlay
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map) return;
+    if (!map || !map.isStyleLoaded()) return;
 
-    if (playbackState === "idle") {
-      // Clear animated route overlay when stopped
+    if (playbackState === "playing" || playbackState === "paused") {
+      segments.forEach((seg, i) => {
+        const layerId = SEGMENT_LAYER_PREFIX + seg.id;
+        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+        // Show past segments, hide current and future
+        const vis = i < currentSegmentIndex ? "visible" : "none";
+        if (map.getLayer(layerId)) {
+          map.setLayoutProperty(layerId, "visibility", vis);
+        }
+        if (map.getLayer(glowLayerId)) {
+          map.setLayoutProperty(glowLayerId, "visibility", vis);
+        }
+      });
+    } else {
+      // idle: show all static layers, clear animated route
+      for (const layerId of segmentLayersRef.current) {
+        if (map.getLayer(layerId)) {
+          map.setLayoutProperty(layerId, "visibility", "visible");
+        }
+        const segId = layerId.replace(SEGMENT_LAYER_PREFIX, "");
+        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + segId;
+        if (map.getLayer(glowLayerId)) {
+          map.setLayoutProperty(glowLayerId, "visibility", "visible");
+        }
+      }
       const src = map.getSource(ANIM_ROUTE_SOURCE) as
         | mapboxgl.GeoJSONSource
         | undefined;
@@ -293,7 +319,7 @@ export default function MapCanvas() {
         src.setData({ type: "FeatureCollection", features: [] });
       }
     }
-  }, [playbackState]);
+  }, [playbackState, currentSegmentIndex, segments]);
 
   // Expose a method for AnimationEngine to mark segments as completed
   // This is called from the animation event listener in the parent
