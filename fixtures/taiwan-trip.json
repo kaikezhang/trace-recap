@@ -1,0 +1,22 @@
+{
+  "name": "Taiwan Ring Tour 2026",
+  "locations": [
+    { "name": "Hong Kong", "coordinates": [114.1694, 22.3193] },
+    { "name": "Taipei", "coordinates": [121.5654, 25.0330] },
+    { "name": "Jiufen", "coordinates": [121.8457, 25.1089] },
+    { "name": "Taichung", "coordinates": [120.6736, 24.1477] },
+    { "name": "Tainan", "coordinates": [120.2270, 22.9998] },
+    { "name": "Chiayi", "coordinates": [120.4491, 23.4800] },
+    { "name": "Alishan", "coordinates": [120.7000, 23.5100] },
+    { "name": "Taoyuan", "coordinates": [121.2168, 25.0000] }
+  ],
+  "segments": [
+    { "fromIndex": 0, "toIndex": 1, "transportMode": "flight" },
+    { "fromIndex": 1, "toIndex": 2, "transportMode": "bus" },
+    { "fromIndex": 2, "toIndex": 3, "transportMode": "train" },
+    { "fromIndex": 3, "toIndex": 4, "transportMode": "train" },
+    { "fromIndex": 4, "toIndex": 5, "transportMode": "train" },
+    { "fromIndex": 5, "toIndex": 6, "transportMode": "train" },
+    { "fromIndex": 6, "toIndex": 7, "transportMode": "car" }
+  ]
+}
