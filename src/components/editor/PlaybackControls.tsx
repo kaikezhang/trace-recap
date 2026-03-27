@@ -1,0 +1,74 @@
+"use client";
+
+import { Play, Pause, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { useAnimationStore } from "@/stores/animationStore";
+
+interface PlaybackControlsProps {
+  onPlay: () => void;
+  onPause: () => void;
+  onReset: () => void;
+  onSeek: (progress: number) => void;
+}
+
+function formatTime(seconds: number): string {
+  const s = Math.floor(seconds);
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}:${String(rem).padStart(2, "0")}`;
+}
+
+export default function PlaybackControls({
+  onPlay,
+  onPause,
+  onReset,
+  onSeek,
+}: PlaybackControlsProps) {
+  const playbackState = useAnimationStore((s) => s.playbackState);
+  const currentTime = useAnimationStore((s) => s.currentTime);
+  const totalDuration = useAnimationStore((s) => s.totalDuration);
+
+  const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+  const isPlaying = playbackState === "playing";
+
+  return (
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-3 rounded-xl bg-background/90 backdrop-blur-sm border shadow-lg px-4 py-2">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={onReset}
+      >
+        <RotateCcw className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={isPlaying ? onPause : onPlay}
+      >
+        {isPlaying ? (
+          <Pause className="h-4 w-4" />
+        ) : (
+          <Play className="h-4 w-4" />
+        )}
+      </Button>
+      <div className="w-48">
+        <Slider
+          value={[progress]}
+          min={0}
+          max={100}
+          step={0.1}
+          onValueChange={(v) => {
+            const val = Array.isArray(v) ? v[0] : v;
+            onSeek(val / 100);
+          }}
+        />
+      </div>
+      <span className="text-xs text-muted-foreground min-w-[70px]">
+        {formatTime(currentTime)} / {formatTime(totalDuration)}
+      </span>
+    </div>
+  );
+}
