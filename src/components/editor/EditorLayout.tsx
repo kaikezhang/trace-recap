@@ -16,6 +16,18 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
 
 const ANIM_ROUTE_SOURCE = "anim-route-src";
+const ANIM_ROUTE_LAYER = "anim-route-layer";
+const ANIM_ROUTE_GLOW_LAYER = "anim-route-glow-layer";
+
+const MODE_COLORS: Record<string, string> = {
+  flight: "#6366f1",
+  car: "#f59e0b",
+  train: "#10b981",
+  bus: "#8b5cf6",
+  ferry: "#06b6d4",
+  walk: "#ec4899",
+  bicycle: "#14b8a6",
+};
 
 function EditorContent() {
   const { map } = useMap();
@@ -80,6 +92,11 @@ function EditorContent() {
 
       const fraction = e.routeDrawFraction ?? 0;
 
+      // Debug: log route draw progress
+      if (Math.random() < 0.05) {
+        console.log(`[routeDraw] seg=${e.segmentIndex} phase=${e.phase} fraction=${fraction.toFixed(3)}`);
+      }
+
       // When segment enters ARRIVE phase, mark it as completed
       // so its static layer becomes visible again
       if (fraction >= 1 && (e.phase === "ZOOM_IN" || e.phase === "ARRIVE")) {
@@ -91,6 +108,15 @@ function EditorContent() {
       if (fraction <= 0) {
         src.setData({ type: "FeatureCollection", features: [] });
         return;
+      }
+
+      // Update animated route color to match current segment's transport mode
+      const segColor = MODE_COLORS[seg.transportMode] || "#6366f1";
+      if (map.getLayer(ANIM_ROUTE_LAYER)) {
+        map.setPaintProperty(ANIM_ROUTE_LAYER, "line-color", segColor);
+      }
+      if (map.getLayer(ANIM_ROUTE_GLOW_LAYER)) {
+        map.setPaintProperty(ANIM_ROUTE_GLOW_LAYER, "line-color", segColor);
       }
 
       const line = turf.lineString(seg.geometry.coordinates);

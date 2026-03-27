@@ -214,6 +214,14 @@ export default function MapCanvas() {
           segmentLayersRef.current.add(layerId);
         }
       }
+
+      // Ensure animated route layers stay on top of static segment layers
+      if (map.getLayer(ANIM_ROUTE_GLOW_LAYER)) {
+        map.moveLayer(ANIM_ROUTE_GLOW_LAYER);
+      }
+      if (map.getLayer(ANIM_ROUTE_LAYER)) {
+        map.moveLayer(ANIM_ROUTE_LAYER);
+      }
     };
 
     if (map.isStyleLoaded()) {
