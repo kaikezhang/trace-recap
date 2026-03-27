@@ -138,11 +138,12 @@ export class CameraController {
 
     const eased = PHASE_EASINGS[phase](progress);
 
-    // Get the arrive zoom of the previous segment (or this segment's arrive zoom for first)
+    // Get the arrive zoom of the previous segment
+    // For the first segment, start at a city-level zoom on the departure city
     const prevArriveZoom =
       segmentIndex > 0
         ? this.segmentCameras[segmentIndex - 1].arriveZoom
-        : sc.arriveZoom;
+        : clamp(sc.flyZoom + 4, 10, 13);
 
     switch (phase) {
       case "HOVER": {
