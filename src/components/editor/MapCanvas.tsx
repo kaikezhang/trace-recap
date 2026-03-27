@@ -208,6 +208,19 @@ export default function MapCanvas() {
     } else {
       map.once("style.load", ensureStyleLoaded);
     }
+
+    // After syncing layers, re-apply visibility if currently playing
+    const ps = useAnimationStore.getState().playbackState;
+    const csi = useAnimationStore.getState().currentSegmentIndex;
+    if (ps === "playing" || ps === "paused") {
+      segments.forEach((seg, i) => {
+        const layerId = SEGMENT_LAYER_PREFIX + seg.id;
+        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+        const vis = i <= csi ? "visible" : "none";
+        if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", vis);
+        if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", vis);
+      });
+    }
   }, [segments]);
 
   // Track previous segment index to detect transitions and clear source data
