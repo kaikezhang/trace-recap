@@ -225,6 +225,9 @@ export default function MapCanvas() {
 
     if (playbackState === "playing" || playbackState === "paused") {
       const segmentChanged = currentSegmentIndex !== prevSegmentIndexRef.current;
+      if (segmentChanged) {
+        console.log(`[visibility] segment changed: ${prevSegmentIndexRef.current} → ${currentSegmentIndex}, total segments: ${segments.length}`);
+      }
 
       segments.forEach((seg, i) => {
         const layerId = SEGMENT_LAYER_PREFIX + seg.id;
