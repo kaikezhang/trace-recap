@@ -45,12 +45,15 @@ const ICON_SVGS: Record<TransportMode, string> = {
   </svg>`,
 };
 
+const BASE_SIZE = 44;
+
 export class IconAnimator {
   private map: mapboxgl.Map;
   private segments: Segment[];
   private marker: mapboxgl.Marker | null = null;
   private iconEl: HTMLDivElement;
   private currentMode: string = "";
+  private prevBearing: number = 0;
 
   constructor(map: mapboxgl.Map, segments: Segment[]) {
     this.map = map;
@@ -58,7 +61,7 @@ export class IconAnimator {
 
     this.iconEl = document.createElement("div");
     this.iconEl.style.cssText =
-      "width:44px;height:44px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));pointer-events:none;";
+      "width:44px;height:44px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));pointer-events:none;transition:opacity 0.3s ease;";
   }
 
   private ensureMarker() {
@@ -66,8 +69,6 @@ export class IconAnimator {
       this.marker = new mapboxgl.Marker({
         element: this.iconEl,
         anchor: "center",
-        // rotationAlignment "map" makes the icon rotate with map bearing
-        // but since bearing is always 0, "viewport" also works
         rotationAlignment: "viewport",
         pitchAlignment: "viewport",
       })
@@ -102,17 +103,23 @@ export class IconAnimator {
     let position: [number, number];
     let bearing = 0;
     let showIcon = true;
+    let scale = 1.0;
+    let opacity = 1.0;
+    let glowIntensity = 0;
 
     switch (phase) {
       case "HOVER": {
         position = coords[0] as [number, number];
-        // Point toward next point on route
-        const nextPt = coords[Math.min(5, coords.length - 1)] as [number, number];
+        const nextPt = coords[Math.min(5, coords.length - 1)] as [
+          number,
+          number,
+        ];
         bearing = turf.bearing(turf.point(position), turf.point(nextPt));
+        // Subtle pulse at hover
+        glowIntensity = 0.3 + Math.sin(progress * Math.PI * 2) * 0.1;
         break;
       }
       case "ZOOM_OUT": {
-        // Move slightly along route
         const earlyProgress = progress * 0.05;
         const along = turf.along(line, earlyProgress * totalLength);
         position = along.geometry.coordinates as [number, number];
@@ -121,20 +128,34 @@ export class IconAnimator {
           Math.min(0.1, earlyProgress + 0.05) * totalLength
         );
         bearing = turf.bearing(along, lookAhead);
+        // Scale up as we zoom out
+        scale = lerp(1.0, 1.2, progress);
+        glowIntensity = lerp(0.3, 0.6, progress);
         break;
       }
       case "FLY": {
         const along = turf.along(line, progress * totalLength);
         position = along.geometry.coordinates as [number, number];
-        // Look ahead for smooth bearing
-        const aheadDist = Math.min((progress + 0.05) * totalLength, totalLength);
+        const aheadDist = Math.min(
+          (progress + 0.05) * totalLength,
+          totalLength
+        );
         const ahead = turf.along(line, aheadDist);
-        bearing = turf.bearing(along, ahead);
+        const rawBearing = turf.bearing(along, ahead);
+        // Smooth bearing
+        bearing = smoothBearing(this.prevBearing, rawBearing, 0.2);
+        // Larger during flight with subtle pulse
+        scale = 1.2 + Math.sin(progress * Math.PI * 4) * 0.05;
+        // Pulsing glow during movement
+        glowIntensity = 0.6 + Math.sin(progress * Math.PI * 6) * 0.2;
         break;
       }
       case "ZOOM_IN": {
         position = coords[coords.length - 1] as [number, number];
-        showIcon = progress < 0.5;
+        // Fade out smoothly over the full ZOOM_IN phase
+        opacity = lerp(1.0, 0.0, progress);
+        scale = lerp(1.2, 1.0, progress);
+        glowIntensity = lerp(0.6, 0.0, progress);
         break;
       }
       case "ARRIVE": {
@@ -146,11 +167,28 @@ export class IconAnimator {
         position = coords[0] as [number, number];
     }
 
+    this.prevBearing = bearing;
     this.marker!.setLngLat(position);
-    // setRotation: degrees clockwise from north
-    // Our SVG icons point NORTH by default, so bearing maps directly
     this.marker!.setRotation(bearing);
+
+    // Apply scale
+    const size = Math.round(BASE_SIZE * scale);
+    this.iconEl.style.width = `${size}px`;
+    this.iconEl.style.height = `${size}px`;
+
+    // Apply opacity
+    this.iconEl.style.opacity = showIcon ? String(opacity) : "0";
     this.iconEl.style.display = showIcon ? "block" : "none";
+
+    // Apply pulsing glow
+    if (glowIntensity > 0 && showIcon) {
+      const glowRadius = Math.round(6 + glowIntensity * 10);
+      const glowOpacity = (glowIntensity * 0.5).toFixed(2);
+      this.iconEl.style.filter = `drop-shadow(0 2px 6px rgba(0,0,0,0.35)) drop-shadow(0 0 ${glowRadius}px rgba(99,102,241,${glowOpacity}))`;
+    } else {
+      this.iconEl.style.filter =
+        "drop-shadow(0 2px 6px rgba(0,0,0,0.35))";
+    }
   }
 
   hide() {
@@ -163,4 +201,19 @@ export class IconAnimator {
       this.marker = null;
     }
   }
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function smoothBearing(
+  current: number,
+  target: number,
+  smoothing: number
+): number {
+  let diff = target - current;
+  while (diff > 180) diff -= 360;
+  while (diff < -180) diff += 360;
+  return current + diff * smoothing;
 }
