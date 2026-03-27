@@ -210,9 +210,13 @@ export default function MapCanvas() {
     }
   }, [segments]);
 
+  // Track previous segment index to detect transitions and clear source data
+  // only when the current segment actually changes (not on pause/resume).
+  const prevSegmentIndexRef = useRef<number>(-1);
+
   // Route visibility during playback:
-  // - Past segments (index < currentSegmentIndex): VISIBLE (already traveled)
-  // - Current segment: VISIBLE and drawn progressively in its own source
+  // - Past segments (index < currentSegmentIndex): VISIBLE with full geometry
+  // - Current segment: VISIBLE, source managed by routeDrawProgress
   // - Future segments (index > currentSegmentIndex): HIDDEN
   // On idle: show all and restore full geometries
   useEffect(() => {
@@ -220,37 +224,45 @@ export default function MapCanvas() {
     if (!map || !map.isStyleLoaded()) return;
 
     if (playbackState === "playing" || playbackState === "paused") {
+      const segmentChanged = currentSegmentIndex !== prevSegmentIndexRef.current;
+
       segments.forEach((seg, i) => {
         const layerId = SEGMENT_LAYER_PREFIX + seg.id;
         const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
-        const vis = i <= currentSegmentIndex ? "visible" : "none";
 
         if (i < currentSegmentIndex) {
+          // Past: visible with full geometry (restore in case it was sliced)
+          if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
+          if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
           setSegmentSourceData(map, seg.id, seg.geometry);
-        }
-
-        if (map.getLayer(layerId)) {
-          map.setLayoutProperty(layerId, "visibility", vis);
-        }
-        if (map.getLayer(glowLayerId)) {
-          map.setLayoutProperty(glowLayerId, "visibility", vis);
+        } else if (i === currentSegmentIndex) {
+          // Current: visible, progressively drawn by routeDrawProgress
+          if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
+          if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
+          // When this segment first becomes current, clear its source so
+          // progressive draw starts from empty (routeDrawProgress fills it in).
+          // Skip on pause/resume so we don't erase existing progress.
+          if (segmentChanged) {
+            setSegmentSourceData(map, seg.id, seg.geometry, 0);
+          }
+        } else {
+          // Future: hidden
+          if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "none");
+          if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "none");
         }
       });
+
+      prevSegmentIndexRef.current = currentSegmentIndex;
     } else {
-      // idle: show all static layers and restore full geometries
-      for (const layerId of segmentLayersRef.current) {
-        if (map.getLayer(layerId)) {
-          map.setLayoutProperty(layerId, "visibility", "visible");
-        }
-        const segId = layerId.replace(SEGMENT_LAYER_PREFIX, "");
-        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + segId;
-        if (map.getLayer(glowLayerId)) {
-          map.setLayoutProperty(glowLayerId, "visibility", "visible");
-        }
-      }
+      // idle: show all segments with full geometry
       segments.forEach((seg) => {
+        const layerId = SEGMENT_LAYER_PREFIX + seg.id;
+        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+        if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
+        if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
         setSegmentSourceData(map, seg.id, seg.geometry);
       });
+      prevSegmentIndexRef.current = -1;
     }
   }, [playbackState, currentSegmentIndex, segments]);
 
