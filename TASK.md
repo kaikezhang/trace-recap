@@ -1,60 +1,109 @@
-# TASK.md — PR #2 Fixes + Import Feature
+# TASK.md — Camera & Route Overhaul (Round 2)
 
 ## ⚠️ DO NOT MERGE THE PR. Create PR and stop. DO NOT MERGE.
 
-## Context
-PR #2 (feat/animation-engine-rewrite) was reviewed by Codex and got REQUEST_CHANGES. We need to fix the issues AND add an import feature.
+## Problems to Fix
 
-## Part 1: Fix PR #2 Issues (on a new branch based on current main, which has PR #2 merged)
+### 1. Bearing rotation is disorienting — LOCK NORTH
+Currently the camera bearing rotates to follow route direction during FLY. This is confusing and ugly.
+**Fix**: Set bearing = 0 at ALL times. North always up. Remove ALL dynamic bearing logic from CameraController. Remove bearing smoothing. The IconAnimator can still rotate the icon to face travel direction, but the MAP must stay north-up.
 
-### Issue 1: Progressive route drawing not working
-The static route lines in MapCanvas remain visible during animation. The animated overlay route just adds on top.
-**Fix**: During playback, hide the static segment route layers. Show them again when playback stops/resets. Use `map.setLayoutProperty(layerId, 'visibility', 'none')` to hide, `'visible'` to show.
+### 2. Every destination gets city-level zoom — need smart "look-ahead" zoom
+Currently every segment does: zoom in to city → zoom out → fly → zoom in to city → repeat. This is monotonous and wrong. For transit stops (short layovers where the next destination is nearby), we shouldn't zoom in fully.
 
-### Issue 2: Phase transition camera jump  
-ZOOM_OUT → FLY transition causes camera to snap back to route start.
-**Fix**: In CameraController, during ZOOM_OUT the camera should interpolate from `fromCenter` toward the route midpoint. At progress=1.0 of ZOOM_OUT, the camera center should be exactly where FLY phase starts at progress=0.0. Ensure continuity.
+**Fix: Look-ahead zoom strategy**
+For each destination, calculate the "arrive zoom" based on the NEXT segment's distance:
+- If it's the LAST destination → zoom to city level (12-13)
+- If next segment distance < 100km → zoom to level that fits both current + next city (using turf.bbox of current + next destination)
+- If next segment distance >= 100km → moderate zoom (9-10), don't go to city level
+- If next segment distance >= 1000km → barely zoom in (6-7), just pause briefly
 
-### Issue 3: Bearing snaps to north at end of FLY
-When `turf.bearing(point, point)` is called with the same point (at route end), it returns 0.
-**Fix**: Cache the last valid bearing during FLY phase. When the look-ahead point is the same as current (at route end), use the cached bearing instead of recalculating.
+This creates a natural flow where transit hubs get a quick pause and the camera only zooms in deeply at the final destination or when the next leg is short (exploring nearby).
 
-### Issue 4: Animated route not cleared between segments
-Previous segment's animated route stays visible during next segment's HOVER/ZOOM_OUT.
-**Fix**: In AnimationEngine, emit `routeDrawProgress` with value 0 (or a reset signal) during HOVER and ZOOM_OUT phases of each NEW segment. MapCanvas should clear the animated route data when progress is 0.
+The HOVER phase duration should also scale:
+- Last destination: 2.0s (final arrival)
+- Next segment < 100km: 1.5s (short pause, about to explore nearby)
+- Next segment >= 100km: 1.0s (transit, just passing through)
+- Next segment >= 1000km: 0.8s (barely stopping)
 
-## Part 2: Import Feature
+### 3. Route lines disappear during animation
+Bus/train/car route lines vanish during playback (only static lines show after). The current code hides static layers during play but the animated progressive route only shows for the CURRENT segment.
 
-Add the ability to import a trip from a JSON file. The JSON format:
-```json
-{
-  "name": "Trip Name",
-  "locations": [
-    { "name": "City", "coordinates": [lng, lat] }
-  ],
-  "segments": [
-    { "fromIndex": 0, "toIndex": 1, "transportMode": "flight" }
-  ]
-}
+**Fix**: Keep ALL previously-completed segments' route lines visible during animation. Implementation:
+- When animation starts, do NOT hide the static segment layers. Instead, use the static layers for COMPLETED segments and only use the animated progressive layer for the CURRENT segment.
+- After each segment completes (ARRIVE phase), make its static route layer visible (if it was hidden).
+- The animated progressive line draws the CURRENT segment from start to the icon's current position.
+- Result: viewer sees all past route lines + the current one being drawn.
+
+### 4. Left panel scroll broken
+When many locations are added, the route list doesn't scroll.
+**Fix**: In LeftPanel.tsx, ensure the ScrollArea wrapping RouteList has proper flex constraints. The parent div should be `flex flex-col h-full overflow-hidden` and the ScrollArea should take remaining space with `flex-1 min-h-0`.
+
+### 5. Pitch changes are too aggressive
+60° pitch during fly looks weird on a 2D flat map (no 3D terrain).
+**Fix**: Remove ALL pitch changes. Keep pitch = 0 at all times. The map is 2D, tilting adds nothing and distorts the view.
+
+## Implementation Details
+
+### CameraController.ts — Major Rewrite
+```
+constructor(locations, segments):
+  For each segment, precompute:
+  - fromCenter, toCenter, midpoint
+  - flyZoom: zoom level to fit both endpoints in view (from bbox)
+  - arriveZoom: smart look-ahead zoom based on NEXT segment distance
+  - routeLine, routeLength
+
+getCameraState(segmentIndex, phase, progress):
+  bearing = 0  // ALWAYS
+  pitch = 0    // ALWAYS
+  
+  HOVER:
+    center = fromCenter (or toCenter for arrive hover)
+    zoom = previous segment's arriveZoom (or first segment's arriveZoom)
+  
+  ZOOM_OUT:
+    center = lerp(fromCenter → midpoint, progress)
+    zoom = lerp(arriveZoom → flyZoom, progress)
+  
+  FLY:
+    center = along route at progress
+    zoom = flyZoom (constant during fly)
+  
+  ZOOM_IN:
+    center = lerp(routeEnd → toCenter, progress)
+    zoom = lerp(flyZoom → arriveZoom, progress)
+  
+  ARRIVE:
+    center = toCenter
+    zoom = arriveZoom
 ```
 
-### Implementation:
-1. **projectStore.ts** — Add `importRoute(data)` action that:
-   - Clears existing route
-   - Adds all locations from the JSON
-   - Sets transport modes from the JSON
-   - Triggers geometry generation for each segment
+### AnimationEngine.ts — Timing Updates
+- HOVER duration scales based on look-ahead (see above)
+- Remove routeDrawProgress complexity — simplify to just tracking current segment index
+- Emit: segmentIndex, phase, phaseProgress (same as now, just cleaner)
 
-2. **LeftPanel.tsx** — Add an "Import" button (with Upload icon) below CitySearch
-   - Opens a file picker for .json files
-   - Reads the file, parses JSON, calls `importRoute()`
+### MapCanvas.tsx — Route Visibility Logic
+- On play: hide static layers for segments NOT YET completed
+- As each segment's FLY phase starts, begin drawing animated progressive route
+- When segment completes (enters ARRIVE), show its static layer permanently
+- On reset/stop: show all static layers
 
-3. **Test fixture** — A fixture file exists at `fixtures/taiwan-trip.json` for testing
+### LeftPanel.tsx — Scroll Fix
+Fix the flex layout so ScrollArea works properly with many items.
 
 ## Branch
-Create branch: `feat/fixes-and-import`
+Create branch: `feat/camera-overhaul-v2`
 
 ## How to Verify
 1. `npx tsc --noEmit` — must compile
-2. `npm run build` — must succeed
-3. Import `fixtures/taiwan-trip.json`, play animation → route draws progressively, no jumps, no bearing snap, routes clear between segments
+2. `npm run build` — must succeed  
+3. Import taiwan-trip.json (8 cities):
+   - Map should stay north-up at all times (bearing=0)
+   - No pitch tilt
+   - Hong Kong → Taipei (flight, long distance): quick pause at Taipei, moderate zoom
+   - Taipei → Jiufen (bus, short): deeper zoom at Jiufen since next is also short
+   - Through to Alishan → Taoyuan (car, short): deep zoom at final stop
+   - All completed route lines stay visible throughout
+   - Left panel scrolls when many locations
