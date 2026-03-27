@@ -92,8 +92,8 @@ export class CameraController {
       }
 
       case "ZOOM_OUT": {
-        // Ease from city to midpoint, zoom out, pitch up
-        const center = lerp2d(sc.fromCenter, sc.midpoint, eased * 0.3);
+        // Zoom out from city, keeping center at fromCenter so FLY starts seamlessly
+        const center = sc.fromCenter;
         const zoom = lerp(sc.cityZoom, sc.flyZoom, eased);
         const pitch = lerp(0, 60, eased);
         // Start rotating bearing toward route direction
@@ -118,9 +118,19 @@ export class CameraController {
             sc.routeLength
           );
           const ahead = turf.along(line, lookAheadDist);
-          const rawBearing = turf.bearing(along, ahead);
-          // Smooth bearing to avoid jerky rotation
-          bearing = smoothBearing(this.prevBearing, rawBearing, 0.15);
+          const aCoord = along.geometry.coordinates;
+          const bCoord = ahead.geometry.coordinates;
+          // When look-ahead equals current (at route end), reuse cached bearing
+          if (
+            Math.abs(aCoord[0] - bCoord[0]) < 1e-9 &&
+            Math.abs(aCoord[1] - bCoord[1]) < 1e-9
+          ) {
+            bearing = this.prevBearing;
+          } else {
+            const rawBearing = turf.bearing(along, ahead);
+            // Smooth bearing to avoid jerky rotation
+            bearing = smoothBearing(this.prevBearing, rawBearing, 0.15);
+          }
         } else {
           center = lerp2d(sc.fromCenter, sc.toCenter, eased);
           bearing = turf.bearing(

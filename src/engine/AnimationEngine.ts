@@ -274,6 +274,20 @@ export class AnimationEngine {
       showPhotos,
     });
 
+    // Reset animated route at start of each new segment (HOVER/ZOOM_OUT)
+    if (phase === "HOVER" || phase === "ZOOM_OUT") {
+      this.emit({
+        type: "routeDrawProgress",
+        time: clamped,
+        progress,
+        segmentIndex,
+        phase,
+        cityLabel: null,
+        showPhotos: false,
+        routeDrawFraction: 0,
+      });
+    }
+
     // Emit route draw progress during FLY phase
     if (phase === "FLY") {
       const easing = this.camera.getEasing("FLY");

@@ -276,11 +276,26 @@ export default function MapCanvas() {
     }
   }, []);
 
-  // Clear animated route when playback stops
+  // Hide static segment layers during playback, show when idle
   useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const visibility = playbackState === "playing" ? "none" : "visible";
+    for (const layerId of segmentLayersRef.current) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, "visibility", visibility);
+      }
+      // Also hide/show glow layer
+      const segId = layerId.replace(SEGMENT_LAYER_PREFIX, "");
+      const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + segId;
+      if (map.getLayer(glowLayerId)) {
+        map.setLayoutProperty(glowLayerId, "visibility", visibility);
+      }
+    }
+
+    // Clear animated route when playback stops
     if (playbackState === "idle") {
-      const map = mapInstanceRef.current;
-      if (!map) return;
       const src = map.getSource(ANIM_ROUTE_SOURCE) as
         | mapboxgl.GeoJSONSource
         | undefined;
