@@ -1,6 +1,49 @@
 import mapboxgl from "mapbox-gl";
 import * as turf from "@turf/turf";
-import type { Segment, AnimationPhase } from "@/types";
+import type { Segment, AnimationPhase, TransportMode } from "@/types";
+
+// Inline SVG icons — all point NORTH (up) by default
+// so setRotation(bearing) will orient them correctly
+const ICON_SVGS: Record<TransportMode, string> = {
+  flight: `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M20 2L24 16H36L20 38L4 16H16L20 2Z" fill="#6366f1" stroke="#4338ca" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="20" cy="18" r="2.5" fill="white"/>
+  </svg>`,
+  car: `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="12" y="8" width="16" height="24" rx="4" fill="#f59e0b" stroke="#d97706" stroke-width="1.5"/>
+    <rect x="14" y="10" width="12" height="6" rx="2" fill="#fef3c7"/>
+    <circle cx="16" cy="28" r="2" fill="#78716c"/>
+    <circle cx="24" cy="28" r="2" fill="#78716c"/>
+  </svg>`,
+  train: `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="6" width="20" height="28" rx="4" fill="#10b981" stroke="#059669" stroke-width="1.5"/>
+    <rect x="13" y="9" width="14" height="8" rx="2" fill="#d1fae5"/>
+    <circle cx="14" cy="30" r="2" fill="#78716c"/>
+    <circle cx="26" cy="30" r="2" fill="#78716c"/>
+  </svg>`,
+  bus: `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="6" width="20" height="28" rx="4" fill="#8b5cf6" stroke="#7c3aed" stroke-width="1.5"/>
+    <rect x="12" y="8" width="16" height="10" rx="2" fill="#ede9fe"/>
+    <circle cx="14" cy="30" r="2" fill="#78716c"/>
+    <circle cx="26" cy="30" r="2" fill="#78716c"/>
+  </svg>`,
+  ferry: `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 24C8 24 12 18 20 18C28 18 32 24 32 24L30 32H10L8 24Z" fill="#06b6d4" stroke="#0891b2" stroke-width="1.5"/>
+    <rect x="17" y="10" width="6" height="8" rx="1" fill="#ecfeff" stroke="#06b6d4" stroke-width="1"/>
+  </svg>`,
+  walk: `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="8" r="4" fill="#ec4899"/>
+    <path d="M20 12V24L16 34" stroke="#db2777" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M20 24L24 34" stroke="#db2777" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M14 18L20 14L26 18" stroke="#db2777" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>`,
+  bicycle: `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="26" r="6" stroke="#0d9488" stroke-width="2" fill="none"/>
+    <circle cx="28" cy="26" r="6" stroke="#0d9488" stroke-width="2" fill="none"/>
+    <path d="M12 26L18 12H24L28 26" stroke="#14b8a6" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="18" cy="10" r="2.5" fill="#14b8a6"/>
+  </svg>`,
+};
 
 export class IconAnimator {
   private map: mapboxgl.Map;
@@ -15,7 +58,7 @@ export class IconAnimator {
 
     this.iconEl = document.createElement("div");
     this.iconEl.style.cssText =
-      "width:48px;height:48px;font-size:36px;line-height:48px;text-align:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));pointer-events:none;";
+      "width:44px;height:44px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));pointer-events:none;";
   }
 
   private ensureMarker() {
@@ -23,27 +66,20 @@ export class IconAnimator {
       this.marker = new mapboxgl.Marker({
         element: this.iconEl,
         anchor: "center",
-        pitchAlignment: "map",
-        rotationAlignment: "map",
+        // rotationAlignment "map" makes the icon rotate with map bearing
+        // but since bearing is always 0, "viewport" also works
+        rotationAlignment: "viewport",
+        pitchAlignment: "viewport",
       })
         .setLngLat([0, 0])
         .addTo(this.map);
     }
   }
 
-  private setIcon(mode: string) {
+  private setIcon(mode: TransportMode) {
     if (mode === this.currentMode) return;
     this.currentMode = mode;
-    const icons: Record<string, string> = {
-      flight: "\u2708\uFE0F",
-      car: "\uD83D\uDE97",
-      train: "\uD83D\uDE84",
-      bus: "\uD83D\uDE8C",
-      ferry: "\u26F4\uFE0F",
-      walk: "\uD83D\uDEB6",
-      bicycle: "\uD83D\uDEB2",
-    };
-    this.iconEl.textContent = icons[mode] || "\u2708\uFE0F";
+    this.iconEl.innerHTML = ICON_SVGS[mode] || ICON_SVGS.flight;
   }
 
   update(segmentIndex: number, phase: AnimationPhase, progress: number) {
@@ -59,47 +95,46 @@ export class IconAnimator {
       return;
     }
 
-    this.iconEl.style.display = "block";
-
     const line = turf.lineString(routeLine.coordinates);
     const totalLength = turf.length(line);
     const coords = routeLine.coordinates;
 
     let position: [number, number];
-    let rotation = 0;
+    let bearing = 0;
     let showIcon = true;
 
     switch (phase) {
       case "HOVER": {
         position = coords[0] as [number, number];
-        // Point in the direction of travel
+        // Point toward next point on route
         const nextPt = coords[Math.min(5, coords.length - 1)] as [number, number];
-        rotation = turf.bearing(turf.point(position), turf.point(nextPt));
+        bearing = turf.bearing(turf.point(position), turf.point(nextPt));
         break;
       }
       case "ZOOM_OUT": {
-        // Icon starts moving slightly along the route during zoom out
-        const earlyProgress = progress * 0.05; // move 5% of route during zoom-out
+        // Move slightly along route
+        const earlyProgress = progress * 0.05;
         const along = turf.along(line, earlyProgress * totalLength);
         position = along.geometry.coordinates as [number, number];
-        const lookAhead = turf.along(line, Math.min(0.1, earlyProgress + 0.05) * totalLength);
-        rotation = turf.bearing(along, lookAhead);
+        const lookAhead = turf.along(
+          line,
+          Math.min(0.1, earlyProgress + 0.05) * totalLength
+        );
+        bearing = turf.bearing(along, lookAhead);
         break;
       }
       case "FLY": {
         const along = turf.along(line, progress * totalLength);
         position = along.geometry.coordinates as [number, number];
-
-        // Look ahead for smooth rotation
+        // Look ahead for smooth bearing
         const aheadDist = Math.min((progress + 0.05) * totalLength, totalLength);
         const ahead = turf.along(line, aheadDist);
-        rotation = turf.bearing(along, ahead);
+        bearing = turf.bearing(along, ahead);
         break;
       }
       case "ZOOM_IN": {
-        // Icon at destination
         position = coords[coords.length - 1] as [number, number];
-        showIcon = progress < 0.5; // fade out halfway through zoom-in
+        showIcon = progress < 0.5;
         break;
       }
       case "ARRIVE": {
@@ -112,7 +147,9 @@ export class IconAnimator {
     }
 
     this.marker!.setLngLat(position);
-    this.marker!.setRotation(rotation);
+    // setRotation: degrees clockwise from north
+    // Our SVG icons point NORTH by default, so bearing maps directly
+    this.marker!.setRotation(bearing);
     this.iconEl.style.display = showIcon ? "block" : "none";
   }
 
