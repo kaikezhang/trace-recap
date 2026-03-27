@@ -4,6 +4,13 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useMap } from "./MapContext";
+import {
+  getEmptyRouteData,
+  SEGMENT_GLOW_LAYER_PREFIX,
+  SEGMENT_LAYER_PREFIX,
+  SEGMENT_SOURCE_PREFIX,
+  setSegmentSourceData,
+} from "./routeSegmentSources";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
 import { MAPBOX_TOKEN, getDefaultMapOptions } from "@/lib/mapbox";
@@ -11,13 +18,6 @@ import { MAP_STYLES } from "@/lib/constants";
 import type { TransportMode } from "@/types";
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
-
-const SEGMENT_LAYER_PREFIX = "segment-";
-const SEGMENT_SOURCE_PREFIX = "segment-src-";
-const SEGMENT_GLOW_LAYER_PREFIX = "segment-glow-";
-const ANIM_ROUTE_SOURCE = "anim-route-src";
-const ANIM_ROUTE_LAYER = "anim-route-layer";
-const ANIM_ROUTE_GLOW_LAYER = "anim-route-glow-layer";
 
 const MODE_LINE_STYLES: Record<
   TransportMode,
@@ -37,7 +37,6 @@ export default function MapCanvas() {
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const segmentLayersRef = useRef<Set<string>>(new Set());
-  const animRouteInitRef = useRef(false);
   const { setMap } = useMap();
   const addLocation = useProjectStore((s) => s.addLocation);
   const locations = useProjectStore((s) => s.locations);
@@ -45,7 +44,6 @@ export default function MapCanvas() {
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
-  const completedSegmentsRef = useRef<Set<string>>(new Set());
 
   // Initialize map
   useEffect(() => {
@@ -160,23 +158,8 @@ export default function MapCanvas() {
         const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
         const lineStyle = MODE_LINE_STYLES[seg.transportMode];
 
-        const geojsonData: GeoJSON.FeatureCollection = {
-          type: "FeatureCollection",
-          features: seg.geometry
-            ? [
-                {
-                  type: "Feature",
-                  properties: {},
-                  geometry: seg.geometry,
-                },
-              ]
-            : [],
-        };
-
         if (map.getSource(srcId)) {
-          (map.getSource(srcId) as mapboxgl.GeoJSONSource).setData(
-            geojsonData
-          );
+          setSegmentSourceData(map, seg.id, seg.geometry);
           if (map.getLayer(layerId)) {
             map.setPaintProperty(layerId, "line-color", lineStyle.color);
             map.setPaintProperty(
@@ -186,7 +169,11 @@ export default function MapCanvas() {
             );
           }
         } else {
-          map.addSource(srcId, { type: "geojson", data: geojsonData });
+          map.addSource(srcId, {
+            type: "geojson",
+            data: getEmptyRouteData(),
+          });
+          setSegmentSourceData(map, seg.id, seg.geometry);
           // Glow layer (wider, blurred underneath)
           map.addLayer({
             id: glowLayerId,
@@ -214,14 +201,6 @@ export default function MapCanvas() {
           segmentLayersRef.current.add(layerId);
         }
       }
-
-      // Ensure animated route layers stay on top of static segment layers
-      if (map.getLayer(ANIM_ROUTE_GLOW_LAYER)) {
-        map.moveLayer(ANIM_ROUTE_GLOW_LAYER);
-      }
-      if (map.getLayer(ANIM_ROUTE_LAYER)) {
-        map.moveLayer(ANIM_ROUTE_LAYER);
-      }
     };
 
     if (map.isStyleLoaded()) {
@@ -231,66 +210,11 @@ export default function MapCanvas() {
     }
   }, [segments]);
 
-  // Setup animated route source/layers for progressive drawing
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    const setupAnimRoute = () => {
-      if (animRouteInitRef.current) return;
-      if (!map.isStyleLoaded()) return;
-
-      const emptyGeoJSON: GeoJSON.FeatureCollection = {
-        type: "FeatureCollection",
-        features: [],
-      };
-
-      if (!map.getSource(ANIM_ROUTE_SOURCE)) {
-        map.addSource(ANIM_ROUTE_SOURCE, {
-          type: "geojson",
-          data: emptyGeoJSON,
-        });
-      }
-      if (!map.getLayer(ANIM_ROUTE_GLOW_LAYER)) {
-        map.addLayer({
-          id: ANIM_ROUTE_GLOW_LAYER,
-          type: "line",
-          source: ANIM_ROUTE_SOURCE,
-          paint: {
-            "line-color": "#6366f1",
-            "line-width": 12,
-            "line-opacity": 0.25,
-            "line-blur": 8,
-          },
-        });
-      }
-      if (!map.getLayer(ANIM_ROUTE_LAYER)) {
-        map.addLayer({
-          id: ANIM_ROUTE_LAYER,
-          type: "line",
-          source: ANIM_ROUTE_SOURCE,
-          paint: {
-            "line-color": "#6366f1",
-            "line-width": 4,
-            "line-opacity": 0.9,
-          },
-        });
-      }
-      animRouteInitRef.current = true;
-    };
-
-    if (map.isStyleLoaded()) {
-      setupAnimRoute();
-    } else {
-      map.once("style.load", setupAnimRoute);
-    }
-  }, []);
-
   // Route visibility during playback:
   // - Past segments (index < currentSegmentIndex): VISIBLE (already traveled)
-  // - Current segment: drawn progressively via animated overlay
+  // - Current segment: VISIBLE and drawn progressively in its own source
   // - Future segments (index > currentSegmentIndex): HIDDEN
-  // On idle: show all, clear animated overlay
+  // On idle: show all and restore full geometries
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !map.isStyleLoaded()) return;
@@ -299,8 +223,12 @@ export default function MapCanvas() {
       segments.forEach((seg, i) => {
         const layerId = SEGMENT_LAYER_PREFIX + seg.id;
         const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
-        // Show past segments, hide current and future
-        const vis = i < currentSegmentIndex ? "visible" : "none";
+        const vis = i <= currentSegmentIndex ? "visible" : "none";
+
+        if (i < currentSegmentIndex) {
+          setSegmentSourceData(map, seg.id, seg.geometry);
+        }
+
         if (map.getLayer(layerId)) {
           map.setLayoutProperty(layerId, "visibility", vis);
         }
@@ -309,7 +237,7 @@ export default function MapCanvas() {
         }
       });
     } else {
-      // idle: show all static layers, clear animated route
+      // idle: show all static layers and restore full geometries
       for (const layerId of segmentLayersRef.current) {
         if (map.getLayer(layerId)) {
           map.setLayoutProperty(layerId, "visibility", "visible");
@@ -320,39 +248,11 @@ export default function MapCanvas() {
           map.setLayoutProperty(glowLayerId, "visibility", "visible");
         }
       }
-      const src = map.getSource(ANIM_ROUTE_SOURCE) as
-        | mapboxgl.GeoJSONSource
-        | undefined;
-      if (src) {
-        src.setData({ type: "FeatureCollection", features: [] });
-      }
+      segments.forEach((seg) => {
+        setSegmentSourceData(map, seg.id, seg.geometry);
+      });
     }
   }, [playbackState, currentSegmentIndex, segments]);
-
-  // Expose a method for AnimationEngine to mark segments as completed
-  // This is called from the animation event listener in the parent
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    const handleSegmentComplete = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { segmentId: string };
-      completedSegmentsRef.current.add(detail.segmentId);
-      const layerId = SEGMENT_LAYER_PREFIX + detail.segmentId;
-      const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + detail.segmentId;
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, "visibility", "visible");
-      }
-      if (map.getLayer(glowLayerId)) {
-        map.setLayoutProperty(glowLayerId, "visibility", "visible");
-      }
-    };
-
-    window.addEventListener("segment-complete", handleSegmentComplete);
-    return () => {
-      window.removeEventListener("segment-complete", handleSegmentComplete);
-    };
-  }, []);
 
   // Sync map style — re-add layers after style change
   useEffect(() => {
@@ -364,7 +264,6 @@ export default function MapCanvas() {
 
     map.once("style.load", () => {
       segmentLayersRef.current.clear();
-      animRouteInitRef.current = false;
 
       // Re-add segment layers
       const currentSegments = useProjectStore.getState().segments;
@@ -374,20 +273,11 @@ export default function MapCanvas() {
         const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
         const lineStyle = MODE_LINE_STYLES[seg.transportMode];
 
-        const geojsonData: GeoJSON.FeatureCollection = {
-          type: "FeatureCollection",
-          features: seg.geometry
-            ? [
-                {
-                  type: "Feature",
-                  properties: {},
-                  geometry: seg.geometry,
-                },
-              ]
-            : [],
-        };
-
-        map.addSource(srcId, { type: "geojson", data: geojsonData });
+        map.addSource(srcId, {
+          type: "geojson",
+          data: getEmptyRouteData(),
+        });
+        setSegmentSourceData(map, seg.id, seg.geometry);
         map.addLayer({
           id: glowLayerId,
           type: "line",
@@ -412,38 +302,6 @@ export default function MapCanvas() {
         });
         segmentLayersRef.current.add(layerId);
       }
-
-      // Re-add animated route layers
-      const emptyGeoJSON: GeoJSON.FeatureCollection = {
-        type: "FeatureCollection",
-        features: [],
-      };
-      map.addSource(ANIM_ROUTE_SOURCE, {
-        type: "geojson",
-        data: emptyGeoJSON,
-      });
-      map.addLayer({
-        id: ANIM_ROUTE_GLOW_LAYER,
-        type: "line",
-        source: ANIM_ROUTE_SOURCE,
-        paint: {
-          "line-color": "#6366f1",
-          "line-width": 12,
-          "line-opacity": 0.25,
-          "line-blur": 8,
-        },
-      });
-      map.addLayer({
-        id: ANIM_ROUTE_LAYER,
-        type: "line",
-        source: ANIM_ROUTE_SOURCE,
-        paint: {
-          "line-color": "#6366f1",
-          "line-width": 4,
-          "line-opacity": 0.9,
-        },
-      });
-      animRouteInitRef.current = true;
     });
   }, [mapStyle]);
 
