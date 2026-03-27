@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import * as turf from "@turf/turf";
-import mapboxgl from "mapbox-gl";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
 import LeftPanel from "./LeftPanel";
@@ -11,23 +9,13 @@ import MapCanvas from "./MapCanvas";
 import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
 import ExportDialog from "./ExportDialog";
+import {
+  SEGMENT_SOURCE_PREFIX,
+  setSegmentSourceData,
+} from "./routeSegmentSources";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
-
-const ANIM_ROUTE_SOURCE = "anim-route-src";
-const ANIM_ROUTE_LAYER = "anim-route-layer";
-const ANIM_ROUTE_GLOW_LAYER = "anim-route-glow-layer";
-
-const MODE_COLORS: Record<string, string> = {
-  flight: "#6366f1",
-  car: "#f59e0b",
-  train: "#10b981",
-  bus: "#8b5cf6",
-  ferry: "#06b6d4",
-  walk: "#ec4899",
-  bicycle: "#14b8a6",
-};
 
 function EditorContent() {
   const { map } = useMap();
@@ -79,62 +67,16 @@ function EditorContent() {
       }
     });
 
-    // Progressive route drawing + segment completion tracking
+    // Progressive route drawing updates each segment's own source directly.
     engine.on("routeDrawProgress", (e) => {
       if (!map) return;
       const seg = segments[e.segmentIndex];
       if (!seg?.geometry || seg.geometry.coordinates.length < 2) return;
-
-      const src = map.getSource(ANIM_ROUTE_SOURCE) as
-        | mapboxgl.GeoJSONSource
-        | undefined;
-      if (!src) return;
+      if (!map.getSource(`${SEGMENT_SOURCE_PREFIX}${seg.id}`)) return;
 
       const fraction = e.routeDrawFraction ?? 0;
 
-      // Debug: log route draw progress
-      if (Math.random() < 0.05) {
-        console.log(`[routeDraw] seg=${e.segmentIndex} phase=${e.phase} fraction=${fraction.toFixed(3)}`);
-      }
-
-      // When segment enters ARRIVE phase, mark it as completed
-      // so its static layer becomes visible again
-      if (fraction >= 1 && (e.phase === "ZOOM_IN" || e.phase === "ARRIVE")) {
-        window.dispatchEvent(
-          new CustomEvent("segment-complete", { detail: { segmentId: seg.id } })
-        );
-      }
-
-      if (fraction <= 0) {
-        src.setData({ type: "FeatureCollection", features: [] });
-        return;
-      }
-
-      // Update animated route color to match current segment's transport mode
-      const segColor = MODE_COLORS[seg.transportMode] || "#6366f1";
-      if (map.getLayer(ANIM_ROUTE_LAYER)) {
-        map.setPaintProperty(ANIM_ROUTE_LAYER, "line-color", segColor);
-      }
-      if (map.getLayer(ANIM_ROUTE_GLOW_LAYER)) {
-        map.setPaintProperty(ANIM_ROUTE_GLOW_LAYER, "line-color", segColor);
-      }
-
-      const line = turf.lineString(seg.geometry.coordinates);
-      const totalLength = turf.length(line);
-      const sliceLength = fraction * totalLength;
-
-      const sliced = turf.lineSliceAlong(line, 0, sliceLength);
-
-      src.setData({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            properties: {},
-            geometry: sliced.geometry,
-          },
-        ],
-      });
+      setSegmentSourceData(map, seg.id, seg.geometry, fraction);
     });
 
     engine.on("complete", () => {
