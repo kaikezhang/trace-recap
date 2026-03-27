@@ -53,6 +53,7 @@ export interface CameraState {
   center: [number, number]; // [lng, lat]
   zoom: number;
   bearing: number;
+  pitch: number;
 }
 
 export type PlaybackState = "idle" | "playing" | "paused" | "exporting";

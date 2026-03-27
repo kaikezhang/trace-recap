@@ -30,7 +30,7 @@ export interface AnimationEvent {
 
 type AnimationListener = (event: AnimationEvent) => void;
 
-const easeInOut = BezierEasing(0.42, 0, 0.58, 1);
+const easeInOut = BezierEasing(0.25, 0.1, 0.25, 1.0);
 
 export class AnimationEngine {
   private map: mapboxgl.Map;
@@ -100,9 +100,9 @@ export class AnimationEngine {
       const toLoc = this.locations.find((l) => l.id === seg.toId);
       const hasPhotos = toLoc && toLoc.photos.length > 0;
 
-      const zoomOutDur = variablePerSegment * 0.2;
-      const flyDur = variablePerSegment * 0.6;
-      const zoomInDur = variablePerSegment * 0.2;
+      const zoomOutDur = variablePerSegment * 0.25;
+      const flyDur = variablePerSegment * 0.45;
+      const zoomInDur = variablePerSegment * 0.3;
       const arriveDur = arriveTime + (hasPhotos ? photoTime : 0);
 
       const phases: SegmentTiming["phases"] = [
@@ -253,6 +253,7 @@ export class AnimationEngine {
       center: cameraState.center,
       zoom: cameraState.zoom,
       bearing: cameraState.bearing,
+      pitch: cameraState.pitch,
     });
 
     // Icon

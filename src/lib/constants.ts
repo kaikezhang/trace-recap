@@ -1,8 +1,8 @@
 import type { TransportMode, MapStyle } from "@/types";
 
 export const PHASE_DURATIONS = {
-  HOVER: 0.5,
-  ARRIVE: 0.5,
+  HOVER: 1.0,
+  ARRIVE: 1.2,
   PHOTO_DISPLAY: 2.0,
 } as const;
 
@@ -14,7 +14,7 @@ export const ZOOM_RANGE = {
 } as const;
 
 export const TARGET_DURATION = {
-  min: 15,
+  min: 20,
   max: 30,
 } as const;
 
