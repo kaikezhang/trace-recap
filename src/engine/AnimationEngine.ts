@@ -1,12 +1,10 @@
 import * as turf from "@turf/turf";
-import BezierEasing from "bezier-easing";
 import type mapboxgl from "mapbox-gl";
 import type {
   Location,
   Segment,
   SegmentTiming,
   AnimationPhase,
-  CameraState,
 } from "@/types";
 import { CameraController } from "./CameraController";
 import { IconAnimator } from "./IconAnimator";
@@ -16,7 +14,8 @@ export type AnimationEventType =
   | "progress"
   | "phaseChange"
   | "segmentChange"
-  | "complete";
+  | "complete"
+  | "routeDrawProgress";
 
 export interface AnimationEvent {
   type: AnimationEventType;
@@ -26,11 +25,11 @@ export interface AnimationEvent {
   phase: AnimationPhase;
   cityLabel: string | null;
   showPhotos: boolean;
+  /** For routeDrawProgress: fraction of route drawn (0-1) */
+  routeDrawFraction?: number;
 }
 
 type AnimationListener = (event: AnimationEvent) => void;
-
-const easeInOut = BezierEasing(0.25, 0.1, 0.25, 1.0);
 
 export class AnimationEngine {
   private map: mapboxgl.Map;
@@ -66,13 +65,11 @@ export class AnimationEngine {
     const n = this.segments.length;
     if (n === 0) return [];
 
-    // Compute total target duration
     const totalTarget = Math.min(
       TARGET_DURATION.max,
       Math.max(TARGET_DURATION.min, n * 5)
     );
 
-    // Fixed times
     const hoverTime = PHASE_DURATIONS.HOVER;
     const arriveTime = PHASE_DURATIONS.ARRIVE;
     const photoTime = PHASE_DURATIONS.PHOTO_DISPLAY;
@@ -80,7 +77,6 @@ export class AnimationEngine {
     const timeline: SegmentTiming[] = [];
     let currentTime = 0;
 
-    // First, compute total fixed time
     let totalFixed = 0;
     for (let i = 0; i < n; i++) {
       totalFixed += hoverTime + arriveTime;
@@ -243,11 +239,11 @@ export class AnimationEngine {
     const fromLoc = this.locations.find((l) => l.id === seg.fromId)!;
     const toLoc = this.locations.find((l) => l.id === seg.toId)!;
 
-    // Camera
+    // Camera — easing is applied inside CameraController per-phase
     const cameraState = this.camera.getCameraState(
       segmentIndex,
       phase,
-      easeInOut(phaseProgress)
+      phaseProgress
     );
     this.map.jumpTo({
       center: cameraState.center,
@@ -256,7 +252,7 @@ export class AnimationEngine {
       pitch: cameraState.pitch,
     });
 
-    // Icon
+    // Icon — pass raw progress, IconAnimator handles its own smoothing
     this.iconAnimator.update(segmentIndex, phase, phaseProgress);
 
     // City label
@@ -277,6 +273,33 @@ export class AnimationEngine {
       cityLabel,
       showPhotos,
     });
+
+    // Emit route draw progress during FLY phase
+    if (phase === "FLY") {
+      const easing = this.camera.getEasing("FLY");
+      this.emit({
+        type: "routeDrawProgress",
+        time: clamped,
+        progress,
+        segmentIndex,
+        phase,
+        cityLabel: null,
+        showPhotos: false,
+        routeDrawFraction: easing(phaseProgress),
+      });
+    } else if (phase === "ZOOM_IN" || phase === "ARRIVE") {
+      // Route fully drawn after FLY completes
+      this.emit({
+        type: "routeDrawProgress",
+        time: clamped,
+        progress,
+        segmentIndex,
+        phase,
+        cityLabel: null,
+        showPhotos: false,
+        routeDrawFraction: 1,
+      });
+    }
   }
 
   private resolveTimePosition(time: number): {
@@ -298,13 +321,11 @@ export class AnimationEngine {
             };
           }
         }
-        // Fallback: last phase
         const lastPhase = st.phases[st.phases.length - 1];
         return { segmentIndex: i, phase: lastPhase.phase, phaseProgress: 1 };
       }
     }
 
-    // Past end — last segment ARRIVE
     if (this.timeline.length > 0) {
       return {
         segmentIndex: this.timeline.length - 1,
