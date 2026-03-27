@@ -16,7 +16,7 @@ interface SegmentCamera {
   toCenter: [number, number];
   midpoint: [number, number];
   flyZoom: number;
-  cityZoom: number;
+  arriveZoom: number;
   routeLine: GeoJSON.LineString | null;
   routeLength: number;
   distanceKm: number;
@@ -24,10 +24,10 @@ interface SegmentCamera {
 
 export class CameraController {
   private segmentCameras: SegmentCamera[];
-  private prevBearing: number = 0;
 
   constructor(locations: Location[], segments: Segment[]) {
-    this.segmentCameras = segments.map((seg) => {
+    // First pass: compute basic segment data
+    const basicData = segments.map((seg) => {
       const fromLoc = locations.find((l) => l.id === seg.fromId)!;
       const toLoc = locations.find((l) => l.id === seg.toId)!;
       const distKm = turf.distance(
@@ -35,10 +35,21 @@ export class CameraController {
         turf.point(toLoc.coordinates)
       );
 
-      // Fly zoom based on distance: farther = more zoomed out
-      const flyZoom = clamp(7 - Math.log2(Math.max(distKm, 1) / 200), 1.5, 6);
-      // City zoom: close-up view
-      const cityZoom = clamp(flyZoom + 6, 12, 14);
+      // Fly zoom: fit both endpoints in view using bbox
+      const bbox = turf.bbox(
+        turf.featureCollection([
+          turf.point(fromLoc.coordinates),
+          turf.point(toLoc.coordinates),
+        ])
+      );
+      const bboxWidth = Math.abs(bbox[2] - bbox[0]);
+      const bboxHeight = Math.abs(bbox[3] - bbox[1]);
+      const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
+      const flyZoom = clamp(
+        Math.log2(360 / maxSpan) - 1,
+        1.5,
+        8
+      );
 
       const routeLine = seg.geometry;
       const routeLength = routeLine
@@ -53,11 +64,47 @@ export class CameraController {
           (fromLoc.coordinates[1] + toLoc.coordinates[1]) / 2,
         ] as [number, number],
         flyZoom,
-        cityZoom,
+        arriveZoom: 12, // placeholder, computed in second pass
         routeLine,
         routeLength,
         distanceKm: distKm,
       };
+    });
+
+    // Second pass: compute arriveZoom using look-ahead to NEXT segment
+    this.segmentCameras = basicData.map((cam, i) => {
+      const isLast = i === basicData.length - 1;
+
+      if (isLast) {
+        // Last destination: zoom to city level
+        cam.arriveZoom = clamp(cam.flyZoom + 5, 12, 13);
+      } else {
+        const nextDist = basicData[i + 1].distanceKm;
+
+        if (nextDist < 100) {
+          // Short next segment: zoom to fit current + next destination
+          const nextCam = basicData[i + 1];
+          const bbox = turf.bbox(
+            turf.featureCollection([
+              turf.point(cam.toCenter),
+              turf.point(nextCam.toCenter),
+            ])
+          );
+          const bboxWidth = Math.abs(bbox[2] - bbox[0]);
+          const bboxHeight = Math.abs(bbox[3] - bbox[1]);
+          const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
+          const fitZoom = Math.log2(360 / maxSpan) - 1;
+          cam.arriveZoom = clamp(fitZoom, 9, 13);
+        } else if (nextDist >= 1000) {
+          // Very long next segment: barely zoom in
+          cam.arriveZoom = clamp(cam.flyZoom + 2, 6, 7);
+        } else {
+          // Medium next segment (100-1000km): moderate zoom
+          cam.arriveZoom = clamp(cam.flyZoom + 3, 9, 10);
+        }
+      }
+
+      return cam;
     });
   }
 
@@ -66,10 +113,23 @@ export class CameraController {
     return PHASE_EASINGS[phase];
   }
 
+  /** Get the look-ahead hover duration for a segment */
+  getHoverDuration(segmentIndex: number): number {
+    const n = this.segmentCameras.length;
+    const isLast = segmentIndex === n - 1;
+
+    if (isLast) return 2.0;
+
+    const nextDist = this.segmentCameras[segmentIndex + 1]?.distanceKm ?? 0;
+    if (nextDist < 100) return 1.5;
+    if (nextDist >= 1000) return 0.8;
+    return 1.0;
+  }
+
   getCameraState(
     segmentIndex: number,
     phase: AnimationPhase,
-    progress: number // raw progress (0-1), easing applied internally
+    progress: number
   ): CameraState {
     const sc = this.segmentCameras[segmentIndex];
     if (!sc) {
@@ -78,75 +138,41 @@ export class CameraController {
 
     const eased = PHASE_EASINGS[phase](progress);
 
+    // Get the arrive zoom of the previous segment (or this segment's arrive zoom for first)
+    const prevArriveZoom =
+      segmentIndex > 0
+        ? this.segmentCameras[segmentIndex - 1].arriveZoom
+        : sc.arriveZoom;
+
     switch (phase) {
       case "HOVER": {
-        // Compute initial bearing toward route start direction
-        const bearing = this.getInitialBearing(sc);
-        this.prevBearing = bearing;
         return {
           center: sc.fromCenter,
-          zoom: sc.cityZoom,
+          zoom: prevArriveZoom,
           bearing: 0,
           pitch: 0,
         };
       }
 
       case "ZOOM_OUT": {
-        // Zoom out from city, keeping center at fromCenter so FLY starts seamlessly
-        const center = sc.fromCenter;
-        const zoom = lerp(sc.cityZoom, sc.flyZoom, eased);
-        const pitch = lerp(0, 60, eased);
-        // Start rotating bearing toward route direction
-        const targetBearing = this.getInitialBearing(sc);
-        const bearing = lerp(0, targetBearing, eased);
-        this.prevBearing = bearing;
-        return { center, zoom, bearing, pitch };
+        const center = lerp2d(sc.fromCenter, sc.midpoint, eased);
+        const zoom = lerp(prevArriveZoom, sc.flyZoom, eased);
+        return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "FLY": {
         let center: [number, number];
-        let bearing: number;
 
         if (sc.routeLine && sc.routeLine.coordinates.length > 1) {
           const line = turf.lineString(sc.routeLine.coordinates);
           const along = turf.along(line, eased * sc.routeLength);
           center = along.geometry.coordinates as [number, number];
-
-          // Dynamic bearing: look ahead along route
-          const lookAheadDist = Math.min(
-            (eased + 0.05) * sc.routeLength,
-            sc.routeLength
-          );
-          const ahead = turf.along(line, lookAheadDist);
-          const aCoord = along.geometry.coordinates;
-          const bCoord = ahead.geometry.coordinates;
-          // When look-ahead equals current (at route end), reuse cached bearing
-          if (
-            Math.abs(aCoord[0] - bCoord[0]) < 1e-9 &&
-            Math.abs(aCoord[1] - bCoord[1]) < 1e-9
-          ) {
-            bearing = this.prevBearing;
-          } else {
-            const rawBearing = turf.bearing(along, ahead);
-            // Smooth bearing to avoid jerky rotation
-            bearing = smoothBearing(this.prevBearing, rawBearing, 0.15);
-          }
         } else {
           center = lerp2d(sc.fromCenter, sc.toCenter, eased);
-          bearing = turf.bearing(
-            turf.point(sc.fromCenter),
-            turf.point(sc.toCenter)
-          );
         }
 
-        this.prevBearing = bearing;
-
-        // Gentle zoom pulse mid-flight
-        const zoomPulse = Math.sin(eased * Math.PI) * 0.4;
-        const zoom = sc.flyZoom + zoomPulse;
-        const pitch = 60;
-
-        return { center, zoom, bearing, pitch };
+        const zoom = sc.flyZoom;
+        return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "ZOOM_IN": {
@@ -156,18 +182,14 @@ export class CameraController {
             ] as [number, number])
           : sc.toCenter;
         const center = lerp2d(routeEnd, sc.toCenter, eased);
-        const zoom = lerp(sc.flyZoom + 0.4, sc.cityZoom, eased);
-        const pitch = lerp(60, 0, eased);
-        // Ease bearing back to 0
-        const bearing = lerp(this.prevBearing, 0, eased);
-        return { center, zoom, bearing, pitch };
+        const zoom = lerp(sc.flyZoom, sc.arriveZoom, eased);
+        return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "ARRIVE":
-        this.prevBearing = 0;
         return {
           center: sc.toCenter,
-          zoom: sc.cityZoom,
+          zoom: sc.arriveZoom,
           bearing: 0,
           pitch: 0,
         };
@@ -175,7 +197,7 @@ export class CameraController {
       default:
         return {
           center: sc.fromCenter,
-          zoom: sc.cityZoom,
+          zoom: sc.arriveZoom,
           bearing: 0,
           pitch: 0,
         };
@@ -185,19 +207,6 @@ export class CameraController {
   /** Get the route length for a segment (used for progressive drawing) */
   getRouteLength(segmentIndex: number): number {
     return this.segmentCameras[segmentIndex]?.routeLength ?? 0;
-  }
-
-  private getInitialBearing(sc: SegmentCamera): number {
-    if (sc.routeLine && sc.routeLine.coordinates.length > 1) {
-      const start = sc.routeLine.coordinates[0] as [number, number];
-      const lookIdx = Math.min(10, sc.routeLine.coordinates.length - 1);
-      const lookPt = sc.routeLine.coordinates[lookIdx] as [number, number];
-      return turf.bearing(turf.point(start), turf.point(lookPt));
-    }
-    return turf.bearing(
-      turf.point(sc.fromCenter),
-      turf.point(sc.toCenter)
-    );
   }
 }
 
@@ -215,17 +224,4 @@ function lerp2d(
   t: number
 ): [number, number] {
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)];
-}
-
-/** Smoothly interpolate between two bearings, handling the 360° wrap */
-function smoothBearing(
-  current: number,
-  target: number,
-  smoothing: number
-): number {
-  // Normalize both to [-180, 180]
-  let diff = target - current;
-  while (diff > 180) diff -= 360;
-  while (diff < -180) diff += 360;
-  return current + diff * smoothing;
 }

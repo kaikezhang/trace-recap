@@ -65,7 +65,7 @@ function EditorContent() {
       }
     });
 
-    // Progressive route drawing
+    // Progressive route drawing + segment completion tracking
     engine.on("routeDrawProgress", (e) => {
       if (!map) return;
       const seg = segments[e.segmentIndex];
@@ -77,6 +77,15 @@ function EditorContent() {
       if (!src) return;
 
       const fraction = e.routeDrawFraction ?? 0;
+
+      // When segment enters ARRIVE phase, mark it as completed
+      // so its static layer becomes visible again
+      if (fraction >= 1 && (e.phase === "ZOOM_IN" || e.phase === "ARRIVE")) {
+        window.dispatchEvent(
+          new CustomEvent("segment-complete", { detail: { segmentId: seg.id } })
+        );
+      }
+
       if (fraction <= 0) {
         src.setData({ type: "FeatureCollection", features: [] });
         return;
