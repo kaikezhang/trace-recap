@@ -7,6 +7,12 @@ import type {
   MapStyle,
 } from "@/types";
 
+export interface ImportRouteData {
+  name: string;
+  locations: { name: string; coordinates: [number, number] }[];
+  segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
+}
+
 interface ProjectState {
   locations: Location[];
   segments: Segment[];
@@ -25,6 +31,7 @@ interface ProjectState {
 
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
+  importRoute: (data: ImportRouteData) => void;
 }
 
 let nextId = 1;
@@ -151,4 +158,24 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setMapStyle: (style) => set({ mapStyle: style }),
 
   clearRoute: () => set({ locations: [], segments: [] }),
+
+  importRoute: (data) =>
+    set(() => {
+      const locations: Location[] = data.locations.map((loc) => ({
+        id: generateId(),
+        name: loc.name,
+        coordinates: loc.coordinates,
+        photos: [],
+      }));
+
+      const segments: Segment[] = data.segments.map((seg) => ({
+        id: generateId(),
+        fromId: locations[seg.fromIndex].id,
+        toId: locations[seg.toIndex].id,
+        transportMode: seg.transportMode,
+        geometry: null,
+      }));
+
+      return { locations, segments };
+    }),
 }));
