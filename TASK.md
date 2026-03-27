@@ -1,109 +1,80 @@
-# TASK.md — Camera & Route Overhaul (Round 2)
+# TASK.md — Fix: Current segment route line not visible during animation
 
 ## ⚠️ DO NOT MERGE THE PR. Create PR and stop. DO NOT MERGE.
 
-## Problems to Fix
+## Bug Description
+During animation playback, the CURRENT segment's route line is invisible. Only past (completed) segments show their static route lines. The animated progressive route overlay that should draw the current segment in real-time is not rendering.
 
-### 1. Bearing rotation is disorienting — LOCK NORTH
-Currently the camera bearing rotates to follow route direction during FLY. This is confusing and ugly.
-**Fix**: Set bearing = 0 at ALL times. North always up. Remove ALL dynamic bearing logic from CameraController. Remove bearing smoothing. The IconAnimator can still rotate the icon to face travel direction, but the MAP must stay north-up.
+## Expected Behavior
+When the animation plays:
+- Past segments: static route lines visible (colored by transport mode)  
+- Current segment: a line progressively drawn from start to the icon's current position
+- Future segments: hidden
 
-### 2. Every destination gets city-level zoom — need smart "look-ahead" zoom
-Currently every segment does: zoom in to city → zoom out → fly → zoom in to city → repeat. This is monotonous and wrong. For transit stops (short layovers where the next destination is nearby), we shouldn't zoom in fully.
+## Root Cause Analysis
+The progressive route drawing uses an animated overlay approach:
+1. `AnimationEngine` emits `routeDrawProgress` events with `routeDrawFraction` (0-1)
+2. `EditorLayout.tsx` handles these events, uses `turf.lineSliceAlong()` to slice the route geometry, and updates an animated GeoJSON source (`anim-route-src`)
+3. `MapCanvas.tsx` renders this source with layers `anim-route-layer` and `anim-route-glow-layer`
 
-**Fix: Look-ahead zoom strategy**
-For each destination, calculate the "arrive zoom" based on the NEXT segment's distance:
-- If it's the LAST destination → zoom to city level (12-13)
-- If next segment distance < 100km → zoom to level that fits both current + next city (using turf.bbox of current + next destination)
-- If next segment distance >= 100km → moderate zoom (9-10), don't go to city level
-- If next segment distance >= 1000km → barely zoom in (6-7), just pause briefly
+The problem is likely one or more of these issues:
+- The animated route layers (`anim-route-layer`, `anim-route-glow-layer`) may be BELOW static segment layers in the Mapbox layer stack, making them invisible
+- The animated route source may not be getting the sliced geometry data correctly
+- The `routeDrawProgress` events may not be firing or the fraction may always be 0
+- There's a `segment-complete` CustomEvent mechanism that may be interfering
 
-This creates a natural flow where transit hubs get a quick pause and the camera only zooms in deeply at the final destination or when the next leg is short (exploring nearby).
+## What to Do
 
-The HOVER phase duration should also scale:
-- Last destination: 2.0s (final arrival)
-- Next segment < 100km: 1.5s (short pause, about to explore nearby)
-- Next segment >= 100km: 1.0s (transit, just passing through)
-- Next segment >= 1000km: 0.8s (barely stopping)
+### Step 1: Investigate
+Run `npm run dev`, open http://localhost:3000/editor, import `fixtures/taiwan-trip.json`, click play, and check browser console for:
+- `[routeDraw]` log messages (already added) — are they appearing? What are the fraction values?
+- Any errors related to mapbox sources/layers
 
-### 3. Route lines disappear during animation
-Bus/train/car route lines vanish during playback (only static lines show after). The current code hides static layers during play but the animated progressive route only shows for the CURRENT segment.
+### Step 2: Fix the animated route rendering
+The approach should be SIMPLE. Abandon the separate animated overlay GeoJSON source approach — it's fragile and has z-order issues.
 
-**Fix**: Keep ALL previously-completed segments' route lines visible during animation. Implementation:
-- When animation starts, do NOT hide the static segment layers. Instead, use the static layers for COMPLETED segments and only use the animated progressive layer for the CURRENT segment.
-- After each segment completes (ARRIVE phase), make its static route layer visible (if it was hidden).
-- The animated progressive line draws the CURRENT segment from start to the icon's current position.
-- Result: viewer sees all past route lines + the current one being drawn.
+**Better approach: Use the STATIC segment layers themselves for progressive drawing.**
 
-### 4. Left panel scroll broken
-When many locations are added, the route list doesn't scroll.
-**Fix**: In LeftPanel.tsx, ensure the ScrollArea wrapping RouteList has proper flex constraints. The parent div should be `flex flex-col h-full overflow-hidden` and the ScrollArea should take remaining space with `flex-1 min-h-0`.
+For each segment, during the FLY phase:
+- Instead of hiding the static layer and drawing a separate animated layer, keep the static layer visible but modify its GeoJSON source data to only show the portion of the route drawn so far
+- Use `turf.lineSliceAlong()` to compute the visible portion
+- Update the segment's own GeoJSON source with the sliced geometry each frame
 
-### 5. Pitch changes are too aggressive
-60° pitch during fly looks weird on a 2D flat map (no 3D terrain).
-**Fix**: Remove ALL pitch changes. Keep pitch = 0 at all times. The map is 2D, tilting adds nothing and distorts the view.
+This eliminates z-order issues because the line is rendered in its own layer at the correct position in the stack.
 
-## Implementation Details
+### Implementation:
 
-### CameraController.ts — Major Rewrite
-```
-constructor(locations, segments):
-  For each segment, precompute:
-  - fromCenter, toCenter, midpoint
-  - flyZoom: zoom level to fit both endpoints in view (from bbox)
-  - arriveZoom: smart look-ahead zoom based on NEXT segment distance
-  - routeLine, routeLength
+**EditorLayout.tsx changes:**
+- In the `routeDrawProgress` handler, instead of updating `anim-route-src`, update the STATIC segment source directly:
+  ```
+  const srcId = `segment-src-${seg.id}`;
+  const src = map.getSource(srcId) as mapboxgl.GeoJSONSource;
+  if fraction <= 0: set empty FeatureCollection
+  if fraction >= 1: set full geometry
+  else: set turf.lineSliceAlong(geometry, 0, fraction * totalLength)
+  ```
+- Remove all `anim-route-src` / `anim-route-layer` / `anim-route-glow-layer` logic from this file
 
-getCameraState(segmentIndex, phase, progress):
-  bearing = 0  // ALWAYS
-  pitch = 0    // ALWAYS
-  
-  HOVER:
-    center = fromCenter (or toCenter for arrive hover)
-    zoom = previous segment's arriveZoom (or first segment's arriveZoom)
-  
-  ZOOM_OUT:
-    center = lerp(fromCenter → midpoint, progress)
-    zoom = lerp(arriveZoom → flyZoom, progress)
-  
-  FLY:
-    center = along route at progress
-    zoom = flyZoom (constant during fly)
-  
-  ZOOM_IN:
-    center = lerp(routeEnd → toCenter, progress)
-    zoom = lerp(flyZoom → arriveZoom, progress)
-  
-  ARRIVE:
-    center = toCenter
-    zoom = arriveZoom
-```
+**MapCanvas.tsx changes:**
+- Remove the animated route source/layer setup (`ANIM_ROUTE_SOURCE`, `ANIM_ROUTE_LAYER`, `ANIM_ROUTE_GLOW_LAYER`)
+- Remove the `moveLayer` calls for animated layers
+- In the playback visibility effect:
+  - Past segments (index < currentSegmentIndex): static layer visible with FULL geometry
+  - Current segment (index === currentSegmentIndex): static layer visible (geometry updated by EditorLayout)
+  - Future segments (index > currentSegmentIndex): static layer HIDDEN
+- When playback stops (idle): restore all segments to their full geometry and show all layers
 
-### AnimationEngine.ts — Timing Updates
-- HOVER duration scales based on look-ahead (see above)
-- Remove routeDrawProgress complexity — simplify to just tracking current segment index
-- Emit: segmentIndex, phase, phaseProgress (same as now, just cleaner)
+**AnimationEngine.ts** — no changes needed, `routeDrawProgress` events are fine
 
-### MapCanvas.tsx — Route Visibility Logic
-- On play: hide static layers for segments NOT YET completed
-- As each segment's FLY phase starts, begin drawing animated progressive route
-- When segment completes (enters ARRIVE), show its static layer permanently
-- On reset/stop: show all static layers
+**Store the original full geometries** somewhere so you can restore them after playback. You can store them in a ref in MapCanvas or EditorLayout.
 
-### LeftPanel.tsx — Scroll Fix
-Fix the flex layout so ScrollArea works properly with many items.
+### Step 3: Verify
+- Import taiwan-trip.json
+- Play animation
+- Current segment should show a line progressively drawing from start to icon position
+- Past segments should show their full route line
+- Future segments should be hidden
+- When animation ends or is reset, all route lines should show in full
 
 ## Branch
-Create branch: `feat/camera-overhaul-v2`
-
-## How to Verify
-1. `npx tsc --noEmit` — must compile
-2. `npm run build` — must succeed  
-3. Import taiwan-trip.json (8 cities):
-   - Map should stay north-up at all times (bearing=0)
-   - No pitch tilt
-   - Hong Kong → Taipei (flight, long distance): quick pause at Taipei, moderate zoom
-   - Taipei → Jiufen (bus, short): deeper zoom at Jiufen since next is also short
-   - Through to Alishan → Taoyuan (car, short): deep zoom at final stop
-   - All completed route lines stay visible throughout
-   - Left panel scrolls when many locations
+Create branch: `fix/current-segment-route-line`
