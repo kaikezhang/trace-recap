@@ -2,9 +2,11 @@
 
 import { useProjectStore } from "@/stores/projectStore";
 import LocationCard from "./LocationCard";
+import TransportSelector from "./TransportSelector";
 
 export default function RouteList() {
   const locations = useProjectStore((s) => s.locations);
+  const segments = useProjectStore((s) => s.segments);
   const removeLocation = useProjectStore((s) => s.removeLocation);
   const reorderLocations = useProjectStore((s) => s.reorderLocations);
 
@@ -19,17 +21,21 @@ export default function RouteList() {
   }
 
   return (
-    <div className="flex flex-col gap-2 p-3">
+    <div className="flex flex-col gap-1 p-3">
       {locations.map((loc, i) => (
-        <LocationCard
-          key={loc.id}
-          location={loc}
-          index={i}
-          total={locations.length}
-          onRemove={removeLocation}
-          onMoveUp={(idx) => reorderLocations(idx, idx - 1)}
-          onMoveDown={(idx) => reorderLocations(idx, idx + 1)}
-        />
+        <div key={loc.id}>
+          <LocationCard
+            location={loc}
+            index={i}
+            total={locations.length}
+            onRemove={removeLocation}
+            onMoveUp={(idx) => reorderLocations(idx, idx - 1)}
+            onMoveDown={(idx) => reorderLocations(idx, idx + 1)}
+          />
+          {i < segments.length && (
+            <TransportSelector segment={segments[i]} />
+          )}
+        </div>
       ))}
     </div>
   );
