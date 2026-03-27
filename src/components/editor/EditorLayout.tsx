@@ -8,6 +8,7 @@ import LeftPanel from "./LeftPanel";
 import MapCanvas from "./MapCanvas";
 import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
+import ExportDialog from "./ExportDialog";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
@@ -154,6 +155,7 @@ export default function EditorLayout() {
   return (
     <MapProvider>
       <EditorContent />
+      <ExportDialog />
     </MapProvider>
   );
 }

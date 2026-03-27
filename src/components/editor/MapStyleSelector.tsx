@@ -21,7 +21,7 @@ export default function MapStyleSelector() {
   const setMapStyle = useProjectStore((s) => s.setMapStyle);
 
   return (
-    <Select value={mapStyle} onValueChange={(v) => setMapStyle(v as MapStyle)}>
+    <Select value={mapStyle} onValueChange={(v) => v && setMapStyle(v as MapStyle)}>
       <SelectTrigger className="w-[130px] h-8 text-xs">
         <SelectValue />
       </SelectTrigger>
