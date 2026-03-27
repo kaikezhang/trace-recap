@@ -277,48 +277,20 @@ export default function MapCanvas() {
     }
   }, []);
 
-  // Manage static segment layer visibility during playback
-  // On play: hide all static layers (completed ones get shown back as segments finish)
-  // On idle: show all static layers and clear animated route
+  // Keep all static route layers visible at ALL times during playback.
+  // The animated progressive line draws ON TOP for the current segment.
+  // On idle/reset: just clear the animated route overlay.
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    if (playbackState === "playing") {
-      // Hide all static layers; completed ones will be re-shown via segmentChange events
-      completedSegmentsRef.current.clear();
-      for (const layerId of segmentLayersRef.current) {
-        if (map.getLayer(layerId)) {
-          map.setLayoutProperty(layerId, "visibility", "none");
-        }
-        const segId = layerId.replace(SEGMENT_LAYER_PREFIX, "");
-        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + segId;
-        if (map.getLayer(glowLayerId)) {
-          map.setLayoutProperty(glowLayerId, "visibility", "none");
-        }
-      }
-    } else {
-      // Show all static layers when idle/paused
-      completedSegmentsRef.current.clear();
-      for (const layerId of segmentLayersRef.current) {
-        if (map.getLayer(layerId)) {
-          map.setLayoutProperty(layerId, "visibility", "visible");
-        }
-        const segId = layerId.replace(SEGMENT_LAYER_PREFIX, "");
-        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + segId;
-        if (map.getLayer(glowLayerId)) {
-          map.setLayoutProperty(glowLayerId, "visibility", "visible");
-        }
-      }
-
-      // Clear animated route when playback stops
-      if (playbackState === "idle") {
-        const src = map.getSource(ANIM_ROUTE_SOURCE) as
-          | mapboxgl.GeoJSONSource
-          | undefined;
-        if (src) {
-          src.setData({ type: "FeatureCollection", features: [] });
-        }
+    if (playbackState === "idle") {
+      // Clear animated route overlay when stopped
+      const src = map.getSource(ANIM_ROUTE_SOURCE) as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (src) {
+        src.setData({ type: "FeatureCollection", features: [] });
       }
     }
   }, [playbackState]);
