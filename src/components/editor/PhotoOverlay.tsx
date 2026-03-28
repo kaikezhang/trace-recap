@@ -96,15 +96,15 @@ function getLayoutStyle(
   }
 
   if (total === 4) {
-    if (isPortrait) return { maxWidth: "22vw", maxHeight: "42vh" };
-    if (isLandscape) return { maxWidth: "28vw", maxHeight: "32vh" };
-    return { maxWidth: "25vw", maxHeight: "36vh" };
+    if (isPortrait) return { maxWidth: "24vw", maxHeight: "42vh" };
+    if (isLandscape) return { maxWidth: "40vw", maxHeight: "36vh" };
+    return { maxWidth: "32vw", maxHeight: "38vh" };
   }
 
   // 5 photos
-  if (isPortrait) return { maxWidth: "18vw", maxHeight: "38vh" };
-  if (isLandscape) return { maxWidth: "24vw", maxHeight: "28vh" };
-  return { maxWidth: "20vw", maxHeight: "32vh" };
+  if (isPortrait) return { maxWidth: "20vw", maxHeight: "40vh" };
+  if (isLandscape) return { maxWidth: "35vw", maxHeight: "32vh" };
+  return { maxWidth: "28vw", maxHeight: "35vh" };
 }
 
 export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
