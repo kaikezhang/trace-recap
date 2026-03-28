@@ -52,6 +52,7 @@ export default function ExportDialog() {
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const exporterRef = useRef<VideoExporter | null>(null);
 
   const handleExport = useCallback(async () => {
@@ -60,6 +61,7 @@ export default function ExportDialog() {
     setIsExporting(true);
     setDownloadUrl(null);
     setProgress(null);
+    setExportError(null);
 
     const settings: ExportSettings = {
       aspectRatio,
@@ -71,20 +73,30 @@ export default function ExportDialog() {
     const exporter = new VideoExporter(engine, map, settings);
     exporterRef.current = exporter;
 
-    const blob = await exporter.export(setProgress);
-    engine.destroy();
+    try {
+      const blob = await exporter.export(setProgress);
 
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      setDownloadUrl(url);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        setDownloadUrl(url);
+      }
+    } catch (error) {
+      setExportError(
+        error instanceof Error
+          ? error.message
+          : "Video export failed. Please try again."
+      );
+      setProgress(null);
+    } finally {
+      engine.destroy();
+      setIsExporting(false);
+      exporterRef.current = null;
     }
-
-    setIsExporting(false);
-    exporterRef.current = null;
   }, [map, locations, segments, aspectRatio, resolution]);
 
   const handleCancel = () => {
     exporterRef.current?.cancel();
+    setExportError(null);
     setIsExporting(false);
   };
 
@@ -93,6 +105,7 @@ export default function ExportDialog() {
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
     setDownloadUrl(null);
     setProgress(null);
+    setExportError(null);
     setOpen(newOpen);
   };
 
@@ -158,6 +171,13 @@ export default function ExportDialog() {
               <span>
                 Your browser doesn&apos;t support this resolution. Try 720p instead.
               </span>
+            </div>
+          )}
+
+          {exportError && (
+            <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{exportError}</span>
             </div>
           )}
 
