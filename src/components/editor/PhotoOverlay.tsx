@@ -15,26 +15,33 @@ interface PhotoMeta extends Photo {
 
 function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
   const [dims, setDims] = useState<PhotoMeta[]>([]);
+  // Stable dependency: only re-run when photo URLs actually change
+  const photoKey = photos.map(p => p.url).join("|");
 
   useEffect(() => {
     if (photos.length === 0) { setDims([]); return; }
     const results: PhotoMeta[] = [];
     let loaded = 0;
+    let cancelled = false;
     photos.forEach((photo, i) => {
       const img = new Image();
       img.onload = () => {
+        if (cancelled) return;
         results[i] = { ...photo, aspect: img.naturalWidth / img.naturalHeight };
         loaded++;
         if (loaded === photos.length) setDims([...results]);
       };
       img.onerror = () => {
+        if (cancelled) return;
         results[i] = { ...photo, aspect: 4 / 3 };
         loaded++;
         if (loaded === photos.length) setDims([...results]);
       };
       img.src = photo.url;
     });
-  }, [photos]);
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoKey]);
   return dims;
 }
 
