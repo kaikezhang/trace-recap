@@ -174,6 +174,10 @@ export class AnimationEngine {
     return this.segments;
   }
 
+  getLocations(): Location[] {
+    return this.locations;
+  }
+
   private computeTimeline(): SegmentTiming[] {
     const n = this.groups.length;
     if (n === 0) return [];
