@@ -6,8 +6,6 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["*.trycloudflare.com"],
   async headers() {
     // COOP/COEP needed for SharedArrayBuffer (FFmpeg.wasm video export)
-    // Disabled in dev to avoid cross-origin issues with tunnels
-    if (isDev) return [];
     return [
       {
         source: "/(.*)",
