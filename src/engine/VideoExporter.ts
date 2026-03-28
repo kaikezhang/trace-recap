@@ -42,10 +42,19 @@ export class VideoExporter {
     const totalFrames = Math.ceil(totalDuration * fps);
     const canvas = this.map.getCanvas();
 
-    // Pre-warm: render start and end to prime the cache
+    // Pre-warm: render key positions to load tiles
     this.engine.renderFrame(0);
     await this.waitForMapIdle();
+    await new Promise(r => setTimeout(r, 1000));
+    this.engine.renderFrame(totalDuration * 0.25);
+    await this.waitForMapIdle();
+    this.engine.renderFrame(totalDuration * 0.5);
+    await this.waitForMapIdle();
+    this.engine.renderFrame(totalDuration * 0.75);
+    await this.waitForMapIdle();
     this.engine.renderFrame(totalDuration);
+    await this.waitForMapIdle();
+    this.engine.renderFrame(0);
     await this.waitForMapIdle();
 
     // Start a server session
@@ -133,7 +142,7 @@ export class VideoExporter {
       const timeout = setTimeout(() => {
         this.map.off("idle", onIdle);
         resolve();
-      }, 500);
+      }, 3000);
       const onIdle = () => {
         clearTimeout(timeout);
         resolve();
