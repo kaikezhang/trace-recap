@@ -28,7 +28,6 @@ export class IconAnimator {
   private iconEl: HTMLDivElement;
   private imgEl: HTMLImageElement;
   private currentMode: string = "";
-  private prevBearing: number = 0;
 
   constructor(map: mapboxgl.Map, segments: Segment[]) {
     this.map = map;
@@ -88,41 +87,35 @@ export class IconAnimator {
     const coords = routeLine.coordinates;
 
     let position: [number, number];
-    let bearing = 0;
     let showIcon = true;
     let scale = 1.0;
     let opacity = 1.0;
 
+    // Fixed bearing for the entire segment: from start to end
+    const startPt = coords[0] as [number, number];
+    const endPt = coords[coords.length - 1] as [number, number];
+    const bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
+
     switch (phase) {
       case "HOVER": {
         position = coords[0] as [number, number];
-        const nextPt = coords[Math.min(5, coords.length - 1)] as [number, number];
-        bearing = turf.bearing(turf.point(position), turf.point(nextPt));
         break;
       }
       case "ZOOM_OUT": {
         const earlyProgress = progress * 0.05;
         const along = turf.along(line, earlyProgress * totalLength);
         position = along.geometry.coordinates as [number, number];
-        const lookAhead = turf.along(line, Math.min(0.1, earlyProgress + 0.05) * totalLength);
-        bearing = turf.bearing(along, lookAhead);
         scale = lerp(1.0, 1.15, progress);
         break;
       }
       case "FLY": {
         const along = turf.along(line, progress * totalLength);
         position = along.geometry.coordinates as [number, number];
-        const aheadDist = Math.min((progress + 0.05) * totalLength, totalLength);
-        const ahead = turf.along(line, aheadDist);
-        const rawBearing = turf.bearing(along, ahead);
-        // Smooth bearing changes to avoid jerky rotation
-        bearing = smoothBearing(this.prevBearing, rawBearing, 0.15);
         scale = 1.15;
         break;
       }
       case "ZOOM_IN": {
         position = coords[coords.length - 1] as [number, number];
-        bearing = this.prevBearing; // Keep last bearing
         opacity = lerp(1.0, 0.0, progress);
         scale = lerp(1.15, 0.9, progress);
         break;
@@ -136,7 +129,6 @@ export class IconAnimator {
         position = coords[0] as [number, number];
     }
 
-    this.prevBearing = bearing;
     this.marker!.setLngLat(position);
 
     // Apply rotation: turf.bearing gives clockwise from north
@@ -170,10 +162,4 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-function smoothBearing(current: number, target: number, smoothing: number): number {
-  // Handle angle wrapping
-  let diff = target - current;
-  while (diff > 180) diff -= 360;
-  while (diff < -180) diff += 360;
-  return current + diff * smoothing;
-}
+
