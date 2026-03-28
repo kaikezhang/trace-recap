@@ -111,7 +111,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // Ensure first and last locations are never waypoints
       if (locations.length > 0) {
         locations[0] = { ...locations[0], isWaypoint: false };
-        locations[locations.length - 1] = { ...locations[locations.length - 1], isWaypoint: false };
       }
       return {
         locations,
@@ -127,7 +126,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // Ensure first and last locations are never waypoints
       if (locations.length > 0) {
         locations[0] = { ...locations[0], isWaypoint: false };
-        locations[locations.length - 1] = { ...locations[locations.length - 1], isWaypoint: false };
       }
       return {
         locations,

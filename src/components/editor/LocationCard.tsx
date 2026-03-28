@@ -22,7 +22,7 @@ export default function LocationCard({
   onRemove,
   onToggleWaypoint,
 }: LocationCardProps) {
-  const isFirstOrLast = index === 0 || index === total - 1;
+  const isFirst = index === 0;
   const isWaypoint = location.isWaypoint;
 
   const {
@@ -79,7 +79,7 @@ export default function LocationCard({
             {location.coordinates[0].toFixed(2)}
           </p>
         </div>
-        {!isFirstOrLast && (
+        {!isFirst && (
           <Button
             variant="ghost"
             size="icon"
