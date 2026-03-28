@@ -134,17 +134,27 @@ export default function ExportDialog() {
                 <span className="text-muted-foreground">
                   {progress.phase === "capturing"
                     ? "Capturing frames..."
+                    : progress.phase === "uploading"
+                    ? "Uploading frames..."
                     : progress.phase === "encoding"
-                    ? "Encoding video..."
+                    ? "Encoding on server..."
                     : "Done!"}
                 </span>
-                <span className="font-medium">{progressPercent}%</span>
+                {progress.phase === "capturing" ? (
+                  <span className="font-medium">{progressPercent}%</span>
+                ) : progress.phase === "encoding" || progress.phase === "uploading" ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : null}
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
+                {progress.phase === "encoding" || progress.phase === "uploading" ? (
+                  <div className="h-full bg-primary animate-pulse w-full" />
+                ) : (
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                )}
               </div>
             </div>
           )}

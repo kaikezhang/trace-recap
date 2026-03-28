@@ -1,11 +1,9 @@
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
 import type mapboxgl from "mapbox-gl";
 import type { ExportSettings } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 
 export type ExportProgress = {
-  phase: "capturing" | "encoding" | "done";
+  phase: "capturing" | "uploading" | "encoding" | "done";
   current: number;
   total: number;
 };
@@ -44,8 +42,8 @@ export class VideoExporter {
       await this.waitForMapIdle();
     }
 
-    // Capture frames
-    const frames: Uint8Array[] = [];
+    // Capture frames as blobs
+    const frameBlobs: Blob[] = [];
 
     for (let i = 0; i < totalFrames; i++) {
       if (this.cancelled) return null;
@@ -63,8 +61,7 @@ export class VideoExporter {
 
       if (!blob) continue;
 
-      const buffer = await blob.arrayBuffer();
-      frames.push(new Uint8Array(buffer));
+      frameBlobs.push(blob);
 
       onProgress({
         phase: "capturing",
@@ -75,44 +72,31 @@ export class VideoExporter {
 
     if (this.cancelled) return null;
 
-    // Encode with FFmpeg
-    onProgress({ phase: "encoding", current: 0, total: 1 });
+    // Upload frames to server for encoding
+    onProgress({ phase: "uploading", current: 0, total: 1 });
 
-    const ffmpeg = new FFmpeg();
-    await ffmpeg.load();
-
-    // Write frames to virtual FS
-    for (let i = 0; i < frames.length; i++) {
-      const name = `frame${String(i).padStart(5, "0")}.jpg`;
-      await ffmpeg.writeFile(name, frames[i]);
+    const formData = new FormData();
+    formData.append("fps", String(fps));
+    for (const blob of frameBlobs) {
+      formData.append("frames", blob, "frame.jpg");
     }
 
-    // Encode
-    await ffmpeg.exec([
-      "-framerate",
-      String(fps),
-      "-i",
-      "frame%05d.jpg",
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-preset",
-      "fast",
-      "-crf",
-      "23",
-      "output.mp4",
-    ]);
+    onProgress({ phase: "encoding", current: 0, total: 1 });
 
-    const data = await ffmpeg.readFile("output.mp4");
-    ffmpeg.terminate();
+    const response = await fetch("/api/encode-video", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Encoding failed: ${response.statusText}`);
+    }
+
+    const mp4Blob = await response.blob();
 
     onProgress({ phase: "done", current: 1, total: 1 });
 
-    const mp4Data = data instanceof Uint8Array
-      ? new Uint8Array(data) as unknown as BlobPart
-      : data as unknown as BlobPart;
-    return new Blob([mp4Data], { type: "video/mp4" });
+    return mp4Blob;
   }
 
   private waitForMapIdle(): Promise<void> {
