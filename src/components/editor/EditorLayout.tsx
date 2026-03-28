@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
 import LeftPanel from "./LeftPanel";
+import BottomSheet from "./BottomSheet";
 import MapCanvas from "./MapCanvas";
 import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
@@ -135,7 +136,8 @@ function EditorContent() {
       <TopToolbar />
       <div className="flex flex-1 overflow-hidden">
         <LeftPanel />
-        <div className="flex-1 relative">
+        {/* Map area: full width on mobile, flex-1 on desktop */}
+        <div className="flex-1 relative pb-14 md:pb-0">
           <MapCanvas />
           {/* City label overlay */}
           <AnimatePresence>
@@ -200,6 +202,10 @@ function EditorContent() {
             />
           )}
         </div>
+      </div>
+      {/* Mobile bottom sheet */}
+      <div className="md:hidden">
+        <BottomSheet />
       </div>
     </div>
   );

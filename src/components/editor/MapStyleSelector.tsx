@@ -22,7 +22,7 @@ export default function MapStyleSelector() {
 
   return (
     <Select value={mapStyle} onValueChange={(v) => v && setMapStyle(v as MapStyle)}>
-      <SelectTrigger className="w-[130px] h-8 text-xs">
+      <SelectTrigger className="w-[100px] md:w-[130px] h-7 md:h-8 text-xs">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

@@ -52,7 +52,7 @@ export default function LeftPanel() {
   };
 
   return (
-    <div className="flex h-full w-80 flex-col overflow-hidden border-r bg-background">
+    <div className="hidden md:flex h-full w-80 flex-col overflow-hidden border-r bg-background">
       <div className="border-b px-3 py-2">
         <h2 className="text-sm font-semibold">Route</h2>
       </div>
