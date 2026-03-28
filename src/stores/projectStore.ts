@@ -9,7 +9,7 @@ import type {
 
 export interface ImportRouteData {
   name: string;
-  locations: { name: string; coordinates: [number, number] }[];
+  locations: { name: string; coordinates: [number, number]; isWaypoint?: boolean }[];
   segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
 }
 
@@ -18,10 +18,11 @@ interface ProjectState {
   segments: Segment[];
   mapStyle: MapStyle;
 
-  addLocation: (location: Omit<Location, "id" | "photos">) => void;
+  addLocation: (location: Omit<Location, "id" | "photos" | "isWaypoint">) => void;
   removeLocation: (id: string) => void;
   reorderLocations: (fromIndex: number, toIndex: number) => void;
   updateLocation: (id: string, updates: Partial<Pick<Location, "name" | "coordinates">>) => void;
+  toggleWaypoint: (locationId: string) => void;
 
   setTransportMode: (segmentId: string, mode: TransportMode) => void;
   setSegmentGeometry: (segmentId: string, geometry: GeoJSON.LineString) => void;
@@ -80,6 +81,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
         name: loc.name,
         coordinates: loc.coordinates,
         photos: [],
+        isWaypoint: false,
       };
       const locations = [...state.locations, newLocation];
       return {
@@ -91,6 +93,11 @@ export const useProjectStore = create<ProjectState>((set) => ({
   removeLocation: (id) =>
     set((state) => {
       const locations = state.locations.filter((l) => l.id !== id);
+      // Ensure first and last locations are never waypoints
+      if (locations.length > 0) {
+        locations[0] = { ...locations[0], isWaypoint: false };
+        locations[locations.length - 1] = { ...locations[locations.length - 1], isWaypoint: false };
+      }
       return {
         locations,
         segments: rebuildSegments(locations, state.segments),
@@ -102,6 +109,11 @@ export const useProjectStore = create<ProjectState>((set) => ({
       const locations = [...state.locations];
       const [moved] = locations.splice(fromIndex, 1);
       locations.splice(toIndex, 0, moved);
+      // Ensure first and last locations are never waypoints
+      if (locations.length > 0) {
+        locations[0] = { ...locations[0], isWaypoint: false };
+        locations[locations.length - 1] = { ...locations[locations.length - 1], isWaypoint: false };
+      }
       return {
         locations,
         segments: rebuildSegments(locations, state.segments),
@@ -114,6 +126,18 @@ export const useProjectStore = create<ProjectState>((set) => ({
         l.id === id ? { ...l, ...updates } : l
       ),
     })),
+
+  toggleWaypoint: (locationId) =>
+    set((state) => {
+      const idx = state.locations.findIndex((l) => l.id === locationId);
+      // First and last locations can never be waypoints
+      if (idx <= 0 || idx >= state.locations.length - 1) return state;
+      return {
+        locations: state.locations.map((l) =>
+          l.id === locationId ? { ...l, isWaypoint: !l.isWaypoint } : l
+        ),
+      };
+    }),
 
   setTransportMode: (segmentId, mode) =>
     set((state) => ({
@@ -161,11 +185,13 @@ export const useProjectStore = create<ProjectState>((set) => ({
 
   importRoute: (data) =>
     set(() => {
-      const locations: Location[] = data.locations.map((loc) => ({
+      const locations: Location[] = data.locations.map((loc, i) => ({
         id: generateId(),
         name: loc.name,
         coordinates: loc.coordinates,
         photos: [],
+        // First and last can never be waypoints
+        isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
       }));
 
       const segments: Segment[] = data.segments.map((seg) => ({

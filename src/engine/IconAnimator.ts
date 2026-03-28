@@ -1,6 +1,6 @@
 import mapboxgl from "mapbox-gl";
 import * as turf from "@turf/turf";
-import type { Segment, AnimationPhase, TransportMode } from "@/types";
+import type { AnimationGroup, AnimationPhase, TransportMode } from "@/types";
 
 // 4 direction variants per transport mode
 // Bearing ranges: right (315-45°), down (45-135°), left (135-225°), up (225-315°)
@@ -28,15 +28,15 @@ const BASE_SIZE = 52;
 
 export class IconAnimator {
   private map: mapboxgl.Map;
-  private segments: Segment[];
+  private groups: AnimationGroup[];
   private marker: mapboxgl.Marker | null = null;
   private iconEl: HTMLDivElement;
   private imgEl: HTMLImageElement;
   private currentIconKey: string = "";
 
-  constructor(map: mapboxgl.Map, segments: Segment[]) {
+  constructor(map: mapboxgl.Map, groups: AnimationGroup[]) {
     this.map = map;
-    this.segments = segments;
+    this.groups = groups;
 
     this.iconEl = document.createElement("div");
     this.iconEl.style.cssText = `
@@ -76,13 +76,13 @@ export class IconAnimator {
     this.imgEl.src = getIconPath(mode, direction);
   }
 
-  update(segmentIndex: number, phase: AnimationPhase, progress: number) {
-    const seg = this.segments[segmentIndex];
-    if (!seg) return;
+  update(groupIndex: number, phase: AnimationPhase, progress: number) {
+    const group = this.groups[groupIndex];
+    if (!group) return;
 
     this.ensureMarker();
 
-    const routeLine = seg.geometry;
+    const routeLine = group.mergedGeometry;
     if (!routeLine || routeLine.coordinates.length < 2) {
       this.iconEl.style.display = "none";
       return;
@@ -92,14 +92,15 @@ export class IconAnimator {
     const totalLength = turf.length(line);
     const coords = routeLine.coordinates;
 
-    // Fixed bearing for the entire segment: from start to end
+    // Fixed bearing for the entire group: from start to end
     const startPt = coords[0] as [number, number];
     const endPt = coords[coords.length - 1] as [number, number];
     const bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
     const direction = bearingToDirection(bearing);
 
-    // Set the correct directional icon (no CSS rotation needed!)
-    this.setIcon(seg.transportMode, direction);
+    // Determine which sub-segment the current position is on for the correct icon
+    const mode = this.getTransportModeAtProgress(group, totalLength, phase, progress);
+    this.setIcon(mode, direction);
 
     let position: [number, number];
     let showIcon = true;
@@ -148,6 +149,39 @@ export class IconAnimator {
     this.iconEl.style.height = `${size}px`;
     this.iconEl.style.opacity = showIcon ? String(opacity) : "0";
     this.iconEl.style.display = showIcon ? "block" : "none";
+  }
+
+  private getTransportModeAtProgress(
+    group: AnimationGroup,
+    totalLength: number,
+    phase: AnimationPhase,
+    progress: number
+  ): TransportMode {
+    // For single-segment groups or non-FLY phases, use the first/last segment
+    if (group.segments.length <= 1) return group.segments[0].transportMode;
+    if (phase === "ARRIVE" || phase === "ZOOM_IN") {
+      return group.segments[group.segments.length - 1].transportMode;
+    }
+    if (phase === "HOVER") {
+      return group.segments[0].transportMode;
+    }
+
+    // For FLY and ZOOM_OUT, determine position along the merged route
+    const distance = phase === "ZOOM_OUT"
+      ? progress * 0.05 * totalLength
+      : progress * totalLength;
+
+    let accumulated = 0;
+    for (const seg of group.segments) {
+      if (!seg.geometry || seg.geometry.coordinates.length < 2) continue;
+      const segLength = turf.length(turf.lineString(seg.geometry.coordinates));
+      accumulated += segLength;
+      if (distance <= accumulated) {
+        return seg.transportMode;
+      }
+    }
+
+    return group.segments[group.segments.length - 1].transportMode;
   }
 
   hide() {

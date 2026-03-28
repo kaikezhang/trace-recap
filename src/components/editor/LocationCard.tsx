@@ -12,6 +12,7 @@ interface LocationCardProps {
   onRemove: (id: string) => void;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
+  onToggleWaypoint: (id: string) => void;
 }
 
 export default function LocationCard({
@@ -21,9 +22,17 @@ export default function LocationCard({
   onRemove,
   onMoveUp,
   onMoveDown,
+  onToggleWaypoint,
 }: LocationCardProps) {
+  const isFirstOrLast = index === 0 || index === total - 1;
+  const isWaypoint = location.isWaypoint;
+
   return (
-    <div className="rounded-lg border bg-card p-3 shadow-sm space-y-2">
+    <div
+      className={`rounded-lg border bg-card p-3 shadow-sm space-y-2 ${
+        isWaypoint ? "opacity-60" : ""
+      }`}
+    >
       <div className="flex items-center gap-2">
         <div className="flex flex-col items-center gap-0.5">
           <Button
@@ -50,12 +59,30 @@ export default function LocationCard({
           {index + 1}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{location.name}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium truncate">{location.name}</p>
+            {isWaypoint && (
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                fly-through
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
             {location.coordinates[1].toFixed(2)},{" "}
             {location.coordinates[0].toFixed(2)}
           </p>
         </div>
+        {!isFirstOrLast && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            title={isWaypoint ? "Switch to destination" : "Switch to fly-through"}
+            onClick={() => onToggleWaypoint(location.id)}
+          >
+            <span className="text-sm">{isWaypoint ? "\u2708\uFE0F" : "\uD83C\uDFE0"}</span>
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"

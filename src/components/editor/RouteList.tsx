@@ -9,6 +9,7 @@ export default function RouteList() {
   const segments = useProjectStore((s) => s.segments);
   const removeLocation = useProjectStore((s) => s.removeLocation);
   const reorderLocations = useProjectStore((s) => s.reorderLocations);
+  const toggleWaypoint = useProjectStore((s) => s.toggleWaypoint);
 
   if (locations.length === 0) {
     return (
@@ -31,6 +32,7 @@ export default function RouteList() {
             onRemove={removeLocation}
             onMoveUp={(idx) => reorderLocations(idx, idx - 1)}
             onMoveDown={(idx) => reorderLocations(idx, idx + 1)}
+            onToggleWaypoint={toggleWaypoint}
           />
           {i < segments.length && (
             <TransportSelector segment={segments[i]} />
