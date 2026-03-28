@@ -38,6 +38,17 @@ export default function ExportDialog() {
 
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [resolution, setResolution] = useState("720");
+
+  // Re-validate support when export settings change
+  const [exportSupported, setExportSupported] = useState<boolean | null>(null);
+  useEffect(() => {
+    const height = parseInt(resolution);
+    const width = aspectRatio === "16:9"
+      ? Math.round(height * (16 / 9))
+      : Math.round(height * (9 / 16));
+    VideoExporter.isConfigSupported({ width, height, fps: FPS })
+      .then(setExportSupported);
+  }, [aspectRatio, resolution]);
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -141,6 +152,15 @@ export default function ExportDialog() {
             </div>
           )}
 
+          {isSupported === true && exportSupported === false && (
+            <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                Your browser doesn&apos;t support this resolution. Try 720p instead.
+              </span>
+            </div>
+          )}
+
           {isExporting && progress && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
@@ -189,7 +209,7 @@ export default function ExportDialog() {
               <Button
                 className="flex-1"
                 onClick={handleExport}
-                disabled={segments.length === 0 || isSupported !== true}
+                disabled={segments.length === 0 || isSupported !== true || exportSupported === false}
               >
                 <Loader2 className="h-4 w-4 mr-2 animate-spin hidden" />
                 Start Export
