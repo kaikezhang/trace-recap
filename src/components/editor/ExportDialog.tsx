@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Download, X, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,31 +31,9 @@ export default function ExportDialog() {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
 
-  const [isSupported, setIsSupported] = useState<boolean | null>(null);
-  useEffect(() => {
-    console.log("[ExportDialog] checking codec support...");
-    VideoExporter.isConfigSupported().then((result) => {
-      console.log("[ExportDialog] isConfigSupported result:", result);
-      setIsSupported(result);
-    }).catch((e) => {
-      console.error("[ExportDialog] isConfigSupported error:", e);
-      setIsSupported(false);
-    });
-  }, []);
-
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [resolution, setResolution] = useState("720");
 
-  // Re-validate support when export settings change
-  const [exportSupported, setExportSupported] = useState<boolean | null>(null);
-  useEffect(() => {
-    const height = parseInt(resolution);
-    const width = aspectRatio === "16:9"
-      ? Math.round(height * (16 / 9))
-      : Math.round(height * (9 / 16));
-    VideoExporter.isConfigSupported({ width, height, fps: FPS })
-      .then(setExportSupported);
-  }, [aspectRatio, resolution]);
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -88,6 +66,11 @@ export default function ExportDialog() {
         setDownloadUrl(url);
       }
     } catch (error) {
+      // Don't show error when user cancelled
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setProgress(null);
+        return;
+      }
       setExportError(
         error instanceof Error
           ? error.message
@@ -120,6 +103,19 @@ export default function ExportDialog() {
     progress && progress.total > 0
       ? Math.round((progress.current / progress.total) * 100)
       : 0;
+
+  const phaseLabel = (phase: ExportProgress["phase"]) => {
+    switch (phase) {
+      case "capturing":
+        return "Capturing frames...";
+      case "uploading":
+        return "Uploading to server...";
+      case "encoding":
+        return "Encoding video...";
+      case "done":
+        return "Done!";
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -163,24 +159,6 @@ export default function ExportDialog() {
             </Select>
           </div>
 
-          {isSupported === false && (
-            <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>
-                Your browser doesn&apos;t support video encoding. Please use Chrome or Edge.
-              </span>
-            </div>
-          )}
-
-          {isSupported === true && exportSupported === false && (
-            <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>
-                Your browser doesn&apos;t support this resolution. Try 720p instead.
-              </span>
-            </div>
-          )}
-
           {exportError && (
             <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -192,11 +170,7 @@ export default function ExportDialog() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
-                  {progress.phase === "capturing"
-                    ? "Capturing & encoding frames..."
-                    : progress.phase === "finalizing"
-                    ? "Finalizing video..."
-                    : "Done!"}
+                  {phaseLabel(progress.phase)}
                 </span>
                 {progress.phase === "capturing" && (
                   <span className="font-medium">{progressPercent}%</span>
@@ -236,7 +210,7 @@ export default function ExportDialog() {
               <Button
                 className="flex-1"
                 onClick={handleExport}
-                disabled={segments.length === 0 || isSupported !== true || exportSupported === false}
+                disabled={segments.length === 0}
               >
                 <Loader2 className="h-4 w-4 mr-2 animate-spin hidden" />
                 Start Export
