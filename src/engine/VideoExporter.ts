@@ -1,6 +1,6 @@
 import * as turf from "@turf/turf";
 import type mapboxgl from "mapbox-gl";
-import type { ExportSettings, TransportMode } from "@/types";
+import type { ExportSettings, Photo, TransportMode } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 import type { AnimationEvent } from "./AnimationEngine";
 import {
@@ -18,6 +18,12 @@ export type ExportProgress = {
 
 type ProgressCallback = (progress: ExportProgress) => void;
 
+interface PreloadedPhoto {
+  img: HTMLImageElement;
+  aspect: number; // naturalWidth / naturalHeight
+  failed?: boolean; // true if the original image failed to load (placeholder)
+}
+
 const TRANSPORT_MODES: TransportMode[] = [
   "flight", "car", "train", "bus", "ferry", "walk", "bicycle",
 ];
@@ -30,6 +36,7 @@ export class VideoExporter {
   private cancelled = false;
   private abortController: AbortController | null = null;
   private iconImages: Map<string, HTMLImageElement> = new Map();
+  private photoImages: Map<string, PreloadedPhoto> = new Map();
 
   constructor(
     engine: AnimationEngine,
@@ -76,6 +83,83 @@ export class VideoExporter {
       }
     }
     await Promise.all(promises);
+  }
+
+  /** Pre-load all photo images so they're ready for canvas compositing */
+  private async preloadPhotos(): Promise<void> {
+    const locations = this.engine.getLocations();
+    const urls = new Set<string>();
+    for (const loc of locations) {
+      for (const photo of loc.photos) {
+        urls.add(photo.url);
+      }
+    }
+
+    const promises: Promise<void>[] = [];
+    for (const url of urls) {
+      if (this.photoImages.has(url)) continue;
+      promises.push(
+        new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            this.photoImages.set(url, {
+              img,
+              aspect: img.naturalWidth / img.naturalHeight,
+            });
+            resolve();
+          };
+          img.onerror = () => {
+            // Create a placeholder so layout stays stable
+            const placeholder = this.createPlaceholderImage(240, 180);
+            this.photoImages.set(url, {
+              img: placeholder,
+              aspect: 240 / 180,
+              failed: true,
+            });
+            resolve();
+          };
+          img.src = url;
+        })
+      );
+    }
+    await Promise.all(promises);
+  }
+
+  /** Create a placeholder HTMLImageElement for failed photo loads */
+  private createPlaceholderImage(w: number, h: number): HTMLImageElement {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const cx = c.getContext("2d")!;
+    // Gray background
+    cx.fillStyle = "#d1d5db";
+    cx.fillRect(0, 0, w, h);
+    // Draw an X
+    const m = 40;
+    cx.strokeStyle = "#9ca3af";
+    cx.lineWidth = 6;
+    cx.lineCap = "round";
+    cx.beginPath();
+    cx.moveTo(m, m);
+    cx.lineTo(w - m, h - m);
+    cx.moveTo(w - m, m);
+    cx.lineTo(m, h - m);
+    cx.stroke();
+    // Camera icon (simple rectangle + circle)
+    const iconW = 50;
+    const iconH = 36;
+    const ix = (w - iconW) / 2;
+    const iy = (h - iconH) / 2;
+    cx.strokeStyle = "#6b7280";
+    cx.lineWidth = 3;
+    cx.strokeRect(ix, iy, iconW, iconH);
+    cx.beginPath();
+    cx.arc(w / 2, h / 2, 10, 0, Math.PI * 2);
+    cx.stroke();
+
+    const img = new Image();
+    img.src = c.toDataURL();
+    return img;
   }
 
   /** Hide all segment layers and reset source data before export starts */
@@ -292,6 +376,232 @@ export class VideoExporter {
     }
   }
 
+  /** Draw photo overlays onto the offscreen canvas during ARRIVE phases */
+  private drawPhotos(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    scaleX: number,
+    captured: { progress: AnimationEvent | null }
+  ): void {
+    const progress = captured.progress;
+    if (!progress || !progress.showPhotos) return;
+
+    // Find the destination location's photos
+    const groups = this.engine.getGroups();
+    const group = groups[progress.groupIndex];
+    if (!group) return;
+
+    const photos: Photo[] = group.toLoc.photos;
+    if (photos.length === 0) return;
+
+    // Collect preloaded images for these photos
+    const loaded: { photo: Photo; preloaded: PreloadedPhoto }[] = [];
+    for (const photo of photos) {
+      const preloaded = this.photoImages.get(photo.url);
+      if (preloaded) {
+        loaded.push({ photo, preloaded });
+      }
+    }
+    if (loaded.length === 0) return;
+
+    const pad = 6 * scaleX; // white frame padding
+    const radius = 12 * scaleX; // rounded corner radius
+    const shadowOffX = 2 * scaleX;
+    const shadowOffY = 2 * scaleX;
+    const captionFontSize = 14 * scaleX;
+    const captionGap = 4 * scaleX;
+    const captionExtra = captionFontSize + captionGap + pad; // extra height when caption present
+
+    // Determine layout based on photo count
+    const count = loaded.length;
+    let rows: { photo: Photo; preloaded: PreloadedPhoto }[][];
+    let maxWFrac: number; // max width fraction per photo
+    let maxHFrac: number; // max height fraction per photo
+
+    if (count === 1) {
+      rows = [loaded];
+      maxWFrac = 0.6;
+      maxHFrac = 0.65;
+    } else if (count === 2) {
+      rows = [loaded];
+      maxWFrac = 0.4;
+      maxHFrac = 0.6;
+    } else if (count === 3) {
+      rows = [loaded];
+      maxWFrac = 0.28;
+      maxHFrac = 0.55;
+    } else {
+      // Split into 2 rows
+      const half = Math.ceil(count / 2);
+      rows = [loaded.slice(0, half), loaded.slice(half)];
+      maxWFrac = 0.8 / Math.max(rows[0].length, rows[1].length);
+      maxHFrac = 0.3;
+    }
+
+    const gap = 16 * scaleX;
+
+    // Compute each photo's rendered size
+    type PhotoRect = {
+      photo: Photo;
+      preloaded: PreloadedPhoto;
+      w: number;
+      h: number;
+    };
+
+    const rowRects: PhotoRect[][] = rows.map((row) =>
+      row.map(({ photo, preloaded }) => {
+        const maxW = canvasWidth * maxWFrac;
+        const maxH = canvasHeight * maxHFrac;
+        const aspect = preloaded.aspect;
+
+        let w: number;
+        let h: number;
+        if (aspect > 1) {
+          // Landscape
+          w = Math.min(maxW, maxH * aspect);
+          h = w / aspect;
+        } else {
+          // Portrait or square
+          h = Math.min(maxH, maxW / aspect);
+          w = h * aspect;
+        }
+        // Clamp to max
+        if (w > maxW) {
+          w = maxW;
+          h = w / aspect;
+        }
+        if (h > maxH) {
+          h = maxH;
+          w = h * aspect;
+        }
+
+        return { photo, preloaded, w, h };
+      })
+    );
+
+    // Compute total height of all rows (include caption height in card size)
+    const rowHeights = rowRects.map((row) =>
+      Math.max(...row.map((r) => {
+        const cardH = r.h + pad * 2 + (r.photo.caption ? captionExtra : 0);
+        return cardH;
+      }))
+    );
+    const totalHeight =
+      rowHeights.reduce((s, h) => s + h, 0) + gap * (rows.length - 1);
+
+    // Vertical starting position — center in canvas
+    let currentY = (canvasHeight - totalHeight) / 2;
+
+    for (let ri = 0; ri < rowRects.length; ri++) {
+      const row = rowRects[ri];
+      const rowH = rowHeights[ri];
+
+      // Compute total row width
+      const totalRowWidth =
+        row.reduce((s, r) => s + r.w + pad * 2, 0) +
+        gap * (row.length - 1);
+
+      let currentX = (canvasWidth - totalRowWidth) / 2;
+
+      for (let ci = 0; ci < row.length; ci++) {
+        const { photo, preloaded, w, h } = row[ci];
+        const hasCaption = !!photo.caption;
+        const frameW = w + pad * 2;
+        const frameH = h + pad * 2 + (hasCaption ? captionExtra : 0);
+
+        // Determine rotation
+        let rotation = 0;
+        if (count <= 3 && count > 1) {
+          if (ci === 0 && ri === 0) rotation = -2;
+          else if (ci === row.length - 1 && ri === rowRects.length - 1)
+            rotation = 2;
+        }
+
+        const centerX = currentX + frameW / 2;
+        const centerY = currentY + (rowH - frameH) / 2 + frameH / 2;
+
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        if (rotation !== 0) {
+          ctx.rotate((rotation * Math.PI) / 180);
+        }
+
+        // Shadow rect
+        this.drawRoundedRect(
+          ctx,
+          -frameW / 2 + shadowOffX,
+          -frameH / 2 + shadowOffY,
+          frameW,
+          frameH,
+          radius,
+          "rgba(0,0,0,0.25)"
+        );
+
+        // White frame
+        this.drawRoundedRect(
+          ctx,
+          -frameW / 2,
+          -frameH / 2,
+          frameW,
+          frameH,
+          radius,
+          "#ffffff"
+        );
+
+        // Clip and draw photo
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(
+          -frameW / 2 + pad,
+          -frameH / 2 + pad,
+          w,
+          h,
+          Math.max(0, radius - pad / 2)
+        );
+        ctx.clip();
+        ctx.drawImage(preloaded.img, -frameW / 2 + pad, -frameH / 2 + pad, w, h);
+        ctx.restore();
+
+        // Caption (drawn inside the white card, below the photo)
+        if (hasCaption) {
+          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = "#374151";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText(
+            photo.caption!,
+            0,
+            -frameH / 2 + pad + h + captionGap,
+            w
+          );
+        }
+
+        ctx.restore();
+
+        currentX += frameW + gap;
+      }
+
+      currentY += rowH + gap;
+    }
+  }
+
+  /** Draw a filled rounded rectangle */
+  private drawRoundedRect(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number,
+    fill: string
+  ): void {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
   async export(onProgress: ProgressCallback): Promise<Blob | null> {
     const { fps } = this.settings;
     this.cancelled = false;
@@ -302,8 +612,9 @@ export class VideoExporter {
     const totalFrames = Math.ceil(totalDuration * fps);
     const canvas = this.map.getCanvas();
 
-    // Pre-load icon images for canvas compositing
+    // Pre-load icon and photo images for canvas compositing
     await this.preloadIcons();
+    await this.preloadPhotos();
 
     // Pre-warm: render key positions to load tiles
     this.engine.renderFrame(0);
@@ -377,6 +688,7 @@ export class VideoExporter {
         offCtx.drawImage(canvas, 0, 0);
         this.drawVehicleIcon(offCtx, scaleX, scaleY);
         this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
+        this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured);
 
         const blob = await new Promise<Blob>((resolve, reject) => {
           offscreen.toBlob(
