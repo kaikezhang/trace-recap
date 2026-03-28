@@ -224,11 +224,11 @@ export default function MapCanvas() {
     const map = mapInstanceRef.current;
     if (!map || !map.isStyleLoaded()) return;
 
+    // ALWAYS log for debugging
+    console.log(`[visibility] state=${playbackState} segIdx=${currentSegmentIndex} segs=${segments.length}`);
+
     if (playbackState === "playing" || playbackState === "paused") {
       const segmentChanged = currentSegmentIndex !== prevSegmentIndexRef.current;
-      if (segmentChanged) {
-        console.log(`[visibility] segment changed: ${prevSegmentIndexRef.current} → ${currentSegmentIndex}, total segments: ${segments.length}`);
-      }
 
       segments.forEach((seg, i) => {
         const layerId = SEGMENT_LAYER_PREFIX + seg.id;
@@ -251,6 +251,7 @@ export default function MapCanvas() {
           }
         } else {
           // Future: hidden
+          console.log(`[visibility] HIDE future seg ${i} (${seg.id}), layer=${layerId}, exists=${!!map.getLayer(layerId)}`);
           if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "none");
           if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "none");
         }
