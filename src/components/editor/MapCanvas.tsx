@@ -159,8 +159,8 @@ export default function MapCanvas() {
         const lineStyle = MODE_LINE_STYLES[seg.transportMode];
 
         if (map.getSource(srcId)) {
-          // Source exists — only update paint properties, NOT geometry data
-          // Geometry data is managed by the playback visibility effect
+          // Source exists — update geometry + paint properties
+          setSegmentSourceData(map, seg.id, seg.geometry);
           if (map.getLayer(layerId)) {
             map.setPaintProperty(layerId, "line-color", lineStyle.color);
             map.setPaintProperty(
@@ -203,10 +203,26 @@ export default function MapCanvas() {
       }
     };
 
-    if (map.isStyleLoaded()) {
+    const runSyncAndVis = () => {
       ensureStyleLoaded();
+      const ps = useAnimationStore.getState().playbackState;
+      const csi = useAnimationStore.getState().currentSegmentIndex;
+      if (ps === "playing" || ps === "paused") {
+        segments.forEach((seg, idx) => {
+          const lid = SEGMENT_LAYER_PREFIX + seg.id;
+          const glid = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+          const vis = idx <= csi ? "visible" : "none";
+          if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", vis);
+          if (map.getLayer(glid)) map.setLayoutProperty(glid, "visibility", vis);
+          if (idx > csi) setSegmentSourceData(map, seg.id, seg.geometry, 0);
+        });
+      }
+    };
+
+    if (map.isStyleLoaded()) {
+      runSyncAndVis();
     } else {
-      map.once("style.load", ensureStyleLoaded);
+      map.once("style.load", runSyncAndVis);
     }
 
   }, [segments]);
