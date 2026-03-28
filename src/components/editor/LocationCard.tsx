@@ -4,7 +4,7 @@ import { X, GripVertical } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
-import PhotoManager from "./PhotoManager";
+import PhotoManager, { usePhotoDropZone } from "./PhotoManager";
 import type { Location } from "@/types";
 
 interface LocationCardProps {
@@ -34,6 +34,8 @@ export default function LocationCard({
     isDragging,
   } = useSortable({ id: location.id });
 
+  const { isDragOver, dropProps } = usePhotoDropZone(location.id);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -45,9 +47,12 @@ export default function LocationCard({
     <div
       ref={setNodeRef}
       style={style}
+      {...dropProps}
       className={`rounded-lg border bg-card p-3 shadow-sm space-y-2 ${
         isWaypoint ? "opacity-60" : ""
-      } ${isDragging ? "shadow-lg" : ""}`}
+      } ${isDragging ? "shadow-lg" : ""} ${
+        isDragOver ? "ring-2 ring-primary ring-offset-1 bg-primary/5" : ""
+      }`}
     >
       <div className="flex items-center gap-2">
         <div

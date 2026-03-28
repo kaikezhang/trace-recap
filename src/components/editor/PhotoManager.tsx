@@ -1,12 +1,55 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useCallback } from "react";
 import { ImagePlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useProjectStore } from "@/stores/projectStore";
 
 interface PhotoManagerProps {
   locationId: string;
+}
+
+export function usePhotoDropZone(locationId: string) {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const addPhoto = useProjectStore((s) => s.addPhoto);
+  const location = useProjectStore((s) =>
+    s.locations.find((l) => l.id === locationId)
+  );
+
+  const handleFiles = useCallback(
+    (files: FileList | null) => {
+      if (!files || !location) return;
+      const remaining = 5 - location.photos.length;
+      const toAdd = Array.from(files).slice(0, remaining);
+      for (const file of toAdd) {
+        if (file.type.startsWith("image/")) {
+          const url = URL.createObjectURL(file);
+          addPhoto(locationId, { url });
+        }
+      }
+    },
+    [locationId, location, addPhoto]
+  );
+
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(true);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+      handleFiles(e.dataTransfer.files);
+    },
+  };
+
+  return { isDragOver, dropProps, handleFiles };
 }
 
 export default function PhotoManager({ locationId }: PhotoManagerProps) {
@@ -24,14 +67,11 @@ export default function PhotoManager({ locationId }: PhotoManagerProps) {
     const remaining = 5 - location.photos.length;
     const toAdd = Array.from(files).slice(0, remaining);
     for (const file of toAdd) {
-      const url = URL.createObjectURL(file);
-      addPhoto(locationId, { url });
+      if (file.type.startsWith("image/")) {
+        const url = URL.createObjectURL(file);
+        addPhoto(locationId, { url });
+      }
     }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    handleFiles(e.dataTransfer.files);
   };
 
   return (
@@ -56,10 +96,7 @@ export default function PhotoManager({ locationId }: PhotoManagerProps) {
         </div>
       )}
       {location.photos.length < 5 && (
-        <div
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-        >
+        <div>
           <Button
             variant="outline"
             size="sm"
