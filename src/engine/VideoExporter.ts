@@ -167,7 +167,7 @@ export class VideoExporter {
     if (encoder.state === "closed" || encoderError) {
       console.error("[export] encoder closed after configure", encoderError);
       throw new Error(
-        `Video encoder closed unexpectedly after configure. Codec: ${codec}. ${encoderError?.message || ""}`
+        `Video encoder closed unexpectedly after configure. Codec: ${codec}. ${String(encoderError || "") || ""}`
       );
     }
     console.log("[export] encoder ready, state:", encoder.state);
