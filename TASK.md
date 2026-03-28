@@ -1,102 +1,68 @@
-# TASK.md — Waypoint (Fly-through) Feature
+# TASK.md — Route Editing UX Overhaul
 
 ## ⚠️ DO NOT MERGE THE PR. Create PR and stop. DO NOT MERGE.
 
-## Feature
-Allow locations to be marked as "waypoints" (fly-through points) vs "destinations" (full stops). Waypoints are transit/transfer points where the camera should fly through continuously without stopping.
+## Changes
 
-Example: Philadelphia → Seattle(waypoint) → Honolulu — the animation should fly continuously from PHL through SEA to HNL as one smooth motion, not two separate segments.
+### 1. Drag-and-Drop Reorder (Major)
+Replace the up/down arrow buttons with proper drag-and-drop sorting.
 
-## Data Model Changes
+**Install**: `npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities`
 
-### types/index.ts
-Add `isWaypoint` to Location:
+**RouteList.tsx** — Wrap with DndContext + SortableContext:
+- Each LocationCard becomes a sortable item
+- Drag handle: the existing GripVertical icon (⠿) becomes the drag handle
+- On drag end: call `reorderLocations(oldIndex, newIndex)`
+- Visual feedback: lifted card with shadow, insertion indicator line
+
+**LocationCard.tsx** — Make sortable:
+- Wrap with `useSortable()` hook from @dnd-kit/sortable
+- Apply transform/transition styles
+- GripVertical becomes the drag handle (via `listeners` and `attributes`)
+- Remove ChevronUp/ChevronDown buttons entirely
+
+### 2. Fix Transport Mode Reset Bug (Critical)
+**projectStore.ts `rebuildSegments()`**:
+Current: only matches `fromId-toId` key → misses reversed segments after reorder.
+Fix: Also check `toId-fromId` (reversed). If reversed match found, use the old segment's transportMode but set geometry to null (needs re-fetch for new direction).
+
 ```typescript
-interface Location {
-  id: string;
-  name: string;
-  coordinates: [number, number];
-  photos: Photo[];
-  isWaypoint: boolean;  // NEW — default false
+const existing = segmentMap.get(`${fromId}-${toId}`) 
+  || segmentMap.get(`${toId}-${fromId}`);
+if (existing) {
+  segments.push({
+    ...existing,
+    id: generateId(),
+    fromId,
+    toId,
+    geometry: segmentMap.has(`${fromId}-${toId}`) ? existing.geometry : null,
+  });
+} else {
+  // genuinely new pair — default to flight
 }
 ```
 
-### stores/projectStore.ts
-- Update `addLocation` to include `isWaypoint: false` by default
-- Add `toggleWaypoint(locationId: string)` action
-- Update `importRoute` to support optional `isWaypoint` field in import JSON
-- First and last locations can NEVER be waypoints (they're always destinations)
+### 3. Rename "fly-through" to "Stop by"
+- LocationCard.tsx: change "fly-through" label to "stop by"
+- BottomSheet.tsx: if it shows "fly-through" anywhere, change to "stop by"
+- Tooltip: "Switch to stop by" / "Switch to destination"
 
-## Animation Engine Changes
+### 4. Transport Selector Between Cards
+**TransportSelector.tsx** — Restyle to appear between location cards:
+- Show as a compact pill between two cards with a vertical connecting line
+- Display the selected transport icon prominently
+- Click to expand icon row for selection
+- Show distance between the two cities if geometry exists (use turf.length)
 
-### AnimationEngine.ts — Segment Merging
-The engine needs to merge consecutive segments that are connected by waypoints into "animation groups":
-
-```
-Locations: PHL → SEA(waypoint) → HNL
-Segments:  [PHL→SEA, SEA→HNL]
-Animation groups: [{segments: [PHL→SEA, SEA→HNL], fromLoc: PHL, toLoc: HNL}]
-
-Locations: HK → TPE → Jiufen → Taichung(waypoint) → Tainan
-Segments:  [HK→TPE, TPE→Jiufen, Jiufen→Taichung, Taichung→Tainan]
-Animation groups: [
-  {segments: [HK→TPE], fromLoc: HK, toLoc: TPE},
-  {segments: [TPE→Jiufen], fromLoc: TPE, toLoc: Jiufen},
-  {segments: [Jiufen→Taichung, Taichung→Tainan], fromLoc: Jiufen, toLoc: Tainan},
-]
-```
-
-For each animation group:
-- Merge all segment geometries into ONE continuous LineString (concatenate coordinates)
-- Use the first location's coordinates as fromCenter
-- Use the last location's coordinates as toCenter
-- HOVER/ARRIVE only at the group's from/to locations (skip waypoints)
-- FLY phase covers the entire merged route continuously
-- Camera zoom is based on the bbox of ALL locations in the group
-
-### CameraController.ts
-- Accept animation groups instead of raw segments
-- flyZoom computed from the bounding box of all locations in the group
-- arriveZoom uses look-ahead to the NEXT group (not next segment)
-
-### Timeline computation
-- Each animation group gets ONE set of phases: HOVER → ZOOM_OUT → FLY → ZOOM_IN → ARRIVE
-- HOVER/ARRIVE durations based on the group's from/to destinations (same look-ahead logic)
-- FLY duration proportional to the merged route's total length
-
-## UI Changes
-
-### LocationCard.tsx
-Add a small toggle button on each location card:
-- Icon: 🏠 for destination, ✈️ for waypoint
-- Click to toggle
-- First and last locations: no toggle (always destination)
-- When toggled to waypoint: slightly dim the card, show "fly-through" label
-- When toggled to destination: normal appearance
-
-### City Labels during animation
-- Destination: show full city label with pin icon (existing behavior)
-- Waypoint: do NOT show city label
-
-## Import JSON Format
-Support optional `isWaypoint` on locations:
-```json
-{
-  "locations": [
-    { "name": "Philadelphia", "coordinates": [-75.16, 39.95] },
-    { "name": "Seattle", "coordinates": [-122.33, 47.60], "isWaypoint": true },
-    { "name": "Honolulu", "coordinates": [-157.85, 21.30] }
-  ],
-  "segments": [...]
-}
-```
+### 5. Auto-regenerate Geometry After Reorder
+When segments are rebuilt after reorder, any segment with `geometry: null` needs geometry re-fetched. In EditorLayout or RouteList, detect segments with null geometry and trigger `generateRouteGeometry()` for them.
 
 ## Branch
-Create branch: `feat/waypoint-flythrough`
+Create branch: `feat/route-editing-ux`
 
 ## Verification
 1. `npx tsc --noEmit` passes
-2. `npm run build` passes
-3. Import a trip with waypoints → waypoint locations show toggle
-4. Play animation → waypoints are flown through without stopping
-5. Toggle a destination to waypoint → animation changes accordingly
+2. Drag reorder works on desktop and mobile
+3. Reordering preserves transport modes (not reset to flight)
+4. "stop by" label instead of "fly-through"
+5. Transport selector shows icons between cards with distance
