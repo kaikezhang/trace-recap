@@ -73,6 +73,7 @@ export interface ExportSettings {
   aspectRatio: AspectRatio;
   resolution: number; // height in pixels (720 or 1080)
   fps: number;
+  cityLabelSize?: number; // CSS font size in px (default 18)
 }
 
 export type MapStyle = "light" | "dark" | "satellite";

@@ -20,6 +20,7 @@ import * as turf from "@turf/turf";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
+import { useUIStore } from "@/stores/uiStore";
 
 function EditorContent() {
   const { map } = useMap();
@@ -40,6 +41,7 @@ function EditorContent() {
   const currentCityLabel = useAnimationStore((s) => s.currentCityLabel);
   const visiblePhotos = useAnimationStore((s) => s.visiblePhotos);
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
+  const cityLabelSize = useUIStore((s) => s.cityLabelSize);
 
   // Rebuild engine when project changes
   useEffect(() => {
@@ -237,7 +239,7 @@ function EditorContent() {
                     "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)",
                 }}
               >
-                <p className="text-lg font-semibold flex items-center gap-2">
+                <p className="font-semibold flex items-center gap-2" style={{ fontSize: `${cityLabelSize}px` }}>
                   <svg
                     className="w-4 h-4 text-indigo-500 flex-shrink-0"
                     viewBox="0 0 20 20"

@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { useMap } from "./MapContext";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -31,6 +32,8 @@ export default function ExportDialog() {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
 
+  const cityLabelSize = useUIStore((s) => s.cityLabelSize);
+  const setCityLabelSize = useUIStore((s) => s.setCityLabelSize);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [resolution, setResolution] = useState("720");
 
@@ -52,6 +55,7 @@ export default function ExportDialog() {
       aspectRatio,
       resolution: parseInt(resolution),
       fps: FPS,
+      cityLabelSize,
     };
 
     const engine = new AnimationEngine(map, locations, segments);
@@ -157,6 +161,23 @@ export default function ExportDialog() {
                 <SelectItem value="1080">1080p</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              City Label Size: {cityLabelSize}px
+            </label>
+            <Slider
+              value={[cityLabelSize]}
+              min={12}
+              max={48}
+              step={1}
+              onValueChange={(v) => {
+                const val = Array.isArray(v) ? v[0] : v;
+                setCityLabelSize(val);
+              }}
+              disabled={isExporting}
+            />
           </div>
 
           {exportError && (

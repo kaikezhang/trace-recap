@@ -216,10 +216,11 @@ export class VideoExporter {
     ctx: CanvasRenderingContext2D,
     canvasWidth: number,
     scaleX: number,
-    label: string
+    label: string,
+    baseFontSize: number = 18
   ): void {
     // Scale all dimensions from CSS to physical pixels
-    const fontSize = 18 * scaleX;
+    const fontSize = baseFontSize * scaleX;
     const font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
     ctx.font = font;
     const metrics = ctx.measureText(label);
@@ -279,11 +280,12 @@ export class VideoExporter {
     ctx: CanvasRenderingContext2D,
     canvasWidth: number,
     scaleX: number,
-    captured: { progress: AnimationEvent | null }
+    captured: { progress: AnimationEvent | null },
+    baseFontSize: number = 18
   ): void {
     const label = captured.progress?.cityLabel;
     if (label) {
-      this.drawCityLabel(ctx, canvasWidth, scaleX, label);
+      this.drawCityLabel(ctx, canvasWidth, scaleX, label, baseFontSize);
     }
   }
 
@@ -371,7 +373,7 @@ export class VideoExporter {
         offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
         offCtx.drawImage(canvas, 0, 0);
         this.drawVehicleIcon(offCtx, scaleX, scaleY);
-        this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured);
+        this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18);
 
         const blob = await new Promise<Blob>((resolve, reject) => {
           offscreen.toBlob(
