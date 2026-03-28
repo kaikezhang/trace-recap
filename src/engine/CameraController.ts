@@ -6,8 +6,8 @@ import type { AnimationGroup, AnimationPhase, CameraState } from "@/types";
 const PHASE_EASINGS: Record<AnimationPhase, (t: number) => number> = {
   HOVER: (t: number) => t, // linear
   ZOOM_OUT: BezierEasing(0.0, 0.0, 0.2, 1.0), // ease-out
-  FLY: BezierEasing(0.42, 0.0, 0.58, 1.0), // ease-in-out
-  ZOOM_IN: BezierEasing(0.4, 0.0, 1.0, 1.0), // ease-in
+  FLY: (t: number) => t, // LINEAR — constant speed, no slowdown at end
+  ZOOM_IN: BezierEasing(0.25, 0.1, 0.25, 1.0), // ease-in-out for smooth settle
   ARRIVE: (t: number) => t, // linear
 };
 
@@ -177,22 +177,9 @@ export class CameraController {
       }
 
       case "FLY": {
-        // Camera follows the ROUTE geometry (same as icon) to stay in sync
-        let center: [number, number];
-        if (gc.routeLine && gc.routeLine.coordinates.length > 1) {
-          try {
-            const line = turf.lineString(gc.routeLine.coordinates);
-            const along = turf.along(line, eased * gc.routeLength);
-            center = along.geometry.coordinates as [number, number];
-          } catch {
-            center = lerp2d(gc.fromCenter, gc.toCenter, eased);
-          }
-        } else {
-          center = lerp2d(gc.fromCenter, gc.toCenter, eased);
-        }
-
-        // Keep constant zoom during FLY — no zoom change while flying
-        // All zoom changes happen in ZOOM_OUT and ZOOM_IN phases
+        // Camera uses smooth straight-line lerp for stable motion
+        // Icon follows actual route — at flyZoom level this difference is invisible
+        const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
         const zoom = gc.flyZoom;
         return { center, zoom, bearing: 0, pitch: 0 };
       }
