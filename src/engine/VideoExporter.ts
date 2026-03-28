@@ -15,6 +15,7 @@ export class VideoExporter {
   private map: mapboxgl.Map;
   private settings: ExportSettings;
   private cancelled = false;
+  private abortController: AbortController | null = null;
 
   constructor(
     engine: AnimationEngine,
@@ -28,11 +29,15 @@ export class VideoExporter {
 
   cancel() {
     this.cancelled = true;
+    this.abortController?.abort();
   }
 
   async export(onProgress: ProgressCallback): Promise<Blob | null> {
     const { fps } = this.settings;
     this.cancelled = false;
+    this.abortController = new AbortController();
+    const { signal } = this.abortController;
+
     const totalDuration = this.engine.getTotalDuration();
     const totalFrames = Math.ceil(totalDuration * fps);
     const canvas = this.map.getCanvas();
@@ -43,9 +48,17 @@ export class VideoExporter {
     this.engine.renderFrame(totalDuration);
     await this.waitForMapIdle();
 
-    // Phase 1: Capture frames as JPEG blobs
-    const frames: Blob[] = [];
+    // Start a server session
+    const startRes = await fetch("/api/encode-video/start", {
+      method: "POST",
+      signal,
+    });
+    if (!startRes.ok) {
+      throw new Error("Failed to start encoding session");
+    }
+    const { sessionId } = (await startRes.json()) as { sessionId: string };
 
+    // Phase 1 & 2: Capture each frame and immediately upload it
     for (let i = 0; i < totalFrames; i++) {
       if (this.cancelled) return null;
 
@@ -63,7 +76,21 @@ export class VideoExporter {
         );
       });
 
-      frames.push(blob);
+      // Upload this frame immediately — no buffering
+      const formData = new FormData();
+      formData.append("sessionId", sessionId);
+      formData.append("frameIndex", String(i + 1));
+      formData.append("frame", blob, `frame${String(i + 1).padStart(5, "0")}.jpg`);
+
+      const uploadRes = await fetch("/api/encode-video/frame", {
+        method: "POST",
+        body: formData,
+        signal,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error(`Failed to upload frame ${i + 1}`);
+      }
 
       onProgress({
         phase: "capturing",
@@ -74,27 +101,14 @@ export class VideoExporter {
 
     if (this.cancelled) return null;
 
-    // Phase 2: Upload frames to server
-    onProgress({ phase: "uploading", current: 0, total: 1 });
-
-    const formData = new FormData();
-    formData.append("fps", String(fps));
-    formData.append("width", String(canvas.width));
-    formData.append("height", String(canvas.height));
-
-    for (let i = 0; i < frames.length; i++) {
-      const padded = String(i + 1).padStart(5, "0");
-      formData.append(`frame_${padded}`, frames[i], `frame${padded}.jpg`);
-    }
-
-    onProgress({ phase: "uploading", current: 1, total: 2 });
-
-    // Phase 3: Send to server for encoding
+    // Phase 3: Trigger server-side encoding
     onProgress({ phase: "encoding", current: 0, total: 1 });
 
     const response = await fetch("/api/encode-video", {
       method: "POST",
-      body: formData,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, fps: String(fps) }),
+      signal,
     });
 
     if (!response.ok) {

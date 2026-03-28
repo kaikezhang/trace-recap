@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { writeFile, mkdir, readFile, rm } from "fs/promises";
-import { execFile } from "child_process";
-import { randomUUID } from "crypto";
+import { readFile, rm, readdir, stat } from "fs/promises";
+import { execFile, type ChildProcess } from "child_process";
 import path from "path";
 
 export const maxDuration = 300; // 5 minutes for long videos
@@ -9,60 +8,101 @@ export const maxDuration = 300; // 5 minutes for long videos
 const FFMPEG_PATH = "/usr/bin/ffmpeg";
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const tmpDir = path.join("/tmp", `trace-recap-${randomUUID()}`);
+  let tmpDir = "";
+  let ffmpegProcess: ChildProcess | null = null;
 
   try {
-    const formData = await request.formData();
-    const fps = formData.get("fps");
+    const body = (await request.json()) as {
+      sessionId?: string;
+      fps?: string;
+    };
+    const { sessionId, fps } = body;
 
-    if (!fps || typeof fps !== "string") {
-      return NextResponse.json({ error: "Missing fps field" }, { status: 400 });
-    }
-
-    await mkdir(tmpDir, { recursive: true });
-
-    // Write frame files to temp directory
-    const entries = Array.from(formData.entries()).filter(([key]) =>
-      key.startsWith("frame_")
-    );
-
-    if (entries.length === 0) {
+    if (!sessionId || typeof sessionId !== "string") {
       return NextResponse.json(
-        { error: "No frames provided" },
+        { error: "Missing sessionId" },
         { status: 400 }
       );
     }
 
-    // Sort by frame number to ensure correct order
-    entries.sort(([a], [b]) => a.localeCompare(b));
-
-    for (let i = 0; i < entries.length; i++) {
-      const file = entries[i][1] as File;
-      const frameNum = String(i + 1).padStart(5, "0");
-      const framePath = path.join(tmpDir, `frame${frameNum}.jpg`);
-      const buffer = Buffer.from(await file.arrayBuffer());
-      await writeFile(framePath, buffer);
+    if (!fps || typeof fps !== "string") {
+      return NextResponse.json({ error: "Missing fps" }, { status: 400 });
     }
 
-    // Run ffmpeg
+    // Validate sessionId is a UUID to prevent path traversal
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        sessionId
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Invalid sessionId" },
+        { status: 400 }
+      );
+    }
+
+    tmpDir = path.join("/tmp", `trace-recap-${sessionId}`);
+
+    // Verify session directory exists and has frames
+    try {
+      await stat(tmpDir);
+    } catch {
+      return NextResponse.json(
+        { error: "Session not found" },
+        { status: 404 }
+      );
+    }
+
+    const files = await readdir(tmpDir);
+    const frameFiles = files.filter(
+      (f) => f.startsWith("frame") && f.endsWith(".jpg")
+    );
+
+    if (frameFiles.length === 0) {
+      return NextResponse.json(
+        { error: "No frames found in session" },
+        { status: 400 }
+      );
+    }
+
+    // Kill ffmpeg if the client disconnects
+    request.signal.addEventListener("abort", () => {
+      if (ffmpegProcess) {
+        ffmpegProcess.kill("SIGTERM");
+        console.log("[encode-video] Client disconnected, killed ffmpeg");
+      }
+    });
+
     const outputPath = path.join(tmpDir, "output.mp4");
     const inputPattern = path.join(tmpDir, "frame%05d.jpg");
 
-    await runFFmpeg([
-      "-framerate",
-      fps,
-      "-i",
-      inputPattern,
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-preset",
-      "fast",
-      "-crf",
-      "23",
-      outputPath,
-    ]);
+    ffmpegProcess = await runFFmpeg(
+      [
+        "-framerate",
+        fps,
+        "-i",
+        inputPattern,
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        outputPath,
+      ],
+      request.signal
+    );
+    ffmpegProcess = null;
+
+    // Check if request was aborted during encoding
+    if (request.signal.aborted) {
+      return NextResponse.json(
+        { error: "Export cancelled" },
+        { status: 499 }
+      );
+    }
 
     const mp4Buffer = await readFile(outputPath);
 
@@ -74,25 +114,44 @@ export async function POST(request: Request): Promise<NextResponse> {
       },
     });
   } catch (error) {
+    if (request.signal.aborted) {
+      return NextResponse.json(
+        { error: "Export cancelled" },
+        { status: 499 }
+      );
+    }
     console.error("[encode-video] error:", error);
     const message =
       error instanceof Error ? error.message : "Unknown encoding error";
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
     // Clean up temp directory
-    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    if (tmpDir) {
+      await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 
-function runFFmpeg(args: string[]): Promise<void> {
+function runFFmpeg(
+  args: string[],
+  signal: AbortSignal
+): Promise<ChildProcess> {
   return new Promise((resolve, reject) => {
-    execFile(FFMPEG_PATH, args, (error, _stdout, stderr) => {
+    const proc = execFile(FFMPEG_PATH, args, (error, _stdout, stderr) => {
+      if (signal.aborted) {
+        reject(new Error("Export cancelled"));
+        return;
+      }
       if (error) {
         console.error("[ffmpeg] stderr:", stderr);
         reject(new Error(`FFmpeg failed: ${stderr || error.message}`));
         return;
       }
-      resolve();
+      resolve(proc);
+    });
+
+    signal.addEventListener("abort", () => {
+      proc.kill("SIGTERM");
     });
   });
 }

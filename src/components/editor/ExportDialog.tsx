@@ -66,6 +66,11 @@ export default function ExportDialog() {
         setDownloadUrl(url);
       }
     } catch (error) {
+      // Don't show error when user cancelled
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setProgress(null);
+        return;
+      }
       setExportError(
         error instanceof Error
           ? error.message
