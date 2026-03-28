@@ -159,7 +159,8 @@ export default function MapCanvas() {
         const lineStyle = MODE_LINE_STYLES[seg.transportMode];
 
         if (map.getSource(srcId)) {
-          setSegmentSourceData(map, seg.id, seg.geometry);
+          // Source exists — only update paint properties, NOT geometry data
+          // Geometry data is managed by the playback visibility effect
           if (map.getLayer(layerId)) {
             map.setPaintProperty(layerId, "line-color", lineStyle.color);
             map.setPaintProperty(
@@ -173,7 +174,6 @@ export default function MapCanvas() {
             type: "geojson",
             data: getEmptyRouteData(),
           });
-          setSegmentSourceData(map, seg.id, seg.geometry);
           // Glow layer (wider, blurred underneath)
           map.addLayer({
             id: glowLayerId,
@@ -209,18 +209,6 @@ export default function MapCanvas() {
       map.once("style.load", ensureStyleLoaded);
     }
 
-    // After syncing layers, re-apply visibility if currently playing
-    const ps = useAnimationStore.getState().playbackState;
-    const csi = useAnimationStore.getState().currentSegmentIndex;
-    if (ps === "playing" || ps === "paused") {
-      segments.forEach((seg, i) => {
-        const layerId = SEGMENT_LAYER_PREFIX + seg.id;
-        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
-        const vis = i <= csi ? "visible" : "none";
-        if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", vis);
-        if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", vis);
-      });
-    }
   }, [segments]);
 
   // Track previous segment index to detect transitions and clear source data
