@@ -185,6 +185,48 @@ function EditorContent() {
     []
   );
 
+  const handleLocationClick = useCallback(
+    (index: number) => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const totalDuration = engine.getTotalDuration();
+      if (totalDuration <= 0) return;
+
+      const timeline = engine.getTimeline();
+      const groups = engine.getGroups();
+
+      let seekTime = 0;
+
+      if (index === 0) {
+        // First location: seek to HOVER phase start of first group
+        if (timeline.length > 0) {
+          const hoverPhase = timeline[0].phases.find((p) => p.phase === "HOVER");
+          seekTime = hoverPhase ? hoverPhase.startTime : timeline[0].startTime;
+        }
+      } else {
+        // Find the group whose toLoc matches this location
+        const targetLoc = locations[index];
+        if (targetLoc) {
+          for (let gi = 0; gi < groups.length; gi++) {
+            if (groups[gi].toLoc.id === targetLoc.id) {
+              const arrivePhase = timeline[gi]?.phases.find((p) => p.phase === "ARRIVE");
+              if (arrivePhase) {
+                seekTime = arrivePhase.startTime;
+              } else if (timeline[gi]) {
+                seekTime = timeline[gi].startTime + timeline[gi].duration;
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      engine.seekTo(seekTime / totalDuration);
+      setPlaybackState("paused");
+    },
+    [locations, setPlaybackState]
+  );
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -208,7 +250,7 @@ function EditorContent() {
     <div className="flex h-screen flex-col">
       <TopToolbar />
       <div className="flex flex-1 overflow-hidden">
-        <LeftPanel />
+        <LeftPanel onLocationClick={handleLocationClick} />
         {/* Map area: full width on mobile, flex-1 on desktop */}
         <div className="flex-1 relative">
           <MapCanvas />
@@ -278,7 +320,7 @@ function EditorContent() {
       </div>
       {/* Mobile bottom sheet */}
       <div className="md:hidden">
-        <BottomSheet />
+        <BottomSheet onLocationClick={handleLocationClick} />
       </div>
     </div>
   );

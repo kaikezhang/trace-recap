@@ -16,6 +16,7 @@ interface LocationCardProps {
   total: number;
   onRemove: (id: string) => void;
   onToggleWaypoint: (id: string) => void;
+  onClick?: (index: number) => void;
 }
 
 function EditableName({
@@ -85,6 +86,7 @@ export default function LocationCard({
   total,
   onRemove,
   onToggleWaypoint,
+  onClick,
 }: LocationCardProps) {
   const isFirst = index === 0;
   const isWaypoint = location.isWaypoint;
@@ -117,7 +119,13 @@ export default function LocationCard({
         isWaypoint ? "opacity-60" : ""
       } ${isDragging ? "shadow-lg" : ""} ${
         isDragOver ? "ring-2 ring-primary ring-offset-1 bg-primary/5" : ""
-      }`}
+      } ${onClick ? "cursor-pointer" : ""}`}
+      onClick={(e) => {
+        // Don't trigger if clicking on buttons or interactive elements
+        const target = e.target as HTMLElement;
+        if (target.closest("button") || target.closest("input")) return;
+        onClick?.(index);
+      }}
     >
       <div className="flex items-center gap-2">
         <div

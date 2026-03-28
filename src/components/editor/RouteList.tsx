@@ -19,7 +19,11 @@ import { useProjectStore } from "@/stores/projectStore";
 import LocationCard from "./LocationCard";
 import TransportSelector from "./TransportSelector";
 
-export default function RouteList() {
+interface RouteListProps {
+  onLocationClick?: (index: number) => void;
+}
+
+export default function RouteList({ onLocationClick }: RouteListProps) {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
   const removeLocation = useProjectStore((s) => s.removeLocation);
@@ -78,6 +82,7 @@ export default function RouteList() {
                 total={locations.length}
                 onRemove={removeLocation}
                 onToggleWaypoint={toggleWaypoint}
+                onClick={onLocationClick}
               />
               {i < segments.length && (
                 <TransportSelector segment={segments[i]} />
