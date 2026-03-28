@@ -49,9 +49,10 @@ function layoutRows(photos: PhotoMeta[]): PhotoMeta[][] {
 
   // If all same orientation, split evenly into rows
   if (portraits.length === 0) {
-    // All landscape — stack vertically so each can be wider
-    if (n === 1) return [photos];
-    return photos.map(p => [p]); // Each photo its own row
+    // All landscape
+    if (n <= 2) return photos.map(p => [p]); // 1-2: each own row, max width
+    // 3+: split into 2 rows
+    return [photos.slice(0, Math.ceil(n / 2)), photos.slice(Math.ceil(n / 2))];
   }
   if (landscapes.length === 0) {
     // All portrait — fit more per row since they're narrow
