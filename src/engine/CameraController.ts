@@ -78,11 +78,13 @@ export class CameraController {
       const isLast = i === basicData.length - 1;
 
       if (isLast) {
-        cam.arriveZoom = clamp(cam.flyZoom + 5, 12, 13);
+        // Final destination: moderate zoom, not street level
+        cam.arriveZoom = clamp(cam.flyZoom + 3, 8, 10);
       } else {
         const nextDist = basicData[i + 1].distanceKm;
 
-        if (nextDist < 100) {
+        if (nextDist < 50) {
+          // Very close next stop: fit both in view
           const nextCam = basicData[i + 1];
           const bbox = turf.bbox(
             turf.featureCollection([
@@ -94,11 +96,16 @@ export class CameraController {
           const bboxHeight = Math.abs(bbox[3] - bbox[1]);
           const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
           const fitZoom = Math.log2(360 / maxSpan) - 1;
-          cam.arriveZoom = clamp(fitZoom, 9, 13);
+          cam.arriveZoom = clamp(fitZoom, 7, 10);
+        } else if (nextDist < 200) {
+          // Provincial scale (e.g. cities within Yunnan/Taiwan)
+          cam.arriveZoom = clamp(cam.flyZoom + 2, 7, 9);
         } else if (nextDist >= 1000) {
-          cam.arriveZoom = clamp(cam.flyZoom + 2, 6, 7);
+          // Very long next leg: barely zoom in
+          cam.arriveZoom = clamp(cam.flyZoom + 1, 5, 7);
         } else {
-          cam.arriveZoom = clamp(cam.flyZoom + 3, 9, 10);
+          // Medium distance (200-1000km)
+          cam.arriveZoom = clamp(cam.flyZoom + 2, 6, 8);
         }
       }
 
@@ -139,7 +146,7 @@ export class CameraController {
     const prevArriveZoom =
       groupIndex > 0
         ? this.groupCameras[groupIndex - 1].arriveZoom
-        : clamp(gc.flyZoom + 4, 10, 13);
+        : clamp(gc.flyZoom + 3, 8, 10);
 
     switch (phase) {
       case "HOVER": {
