@@ -6,7 +6,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
-import AIRouteGenerator from "./AIRouteGenerator";
 import CitySearch from "./CitySearch";
 import RouteList from "./RouteList";
 
@@ -57,7 +56,6 @@ export default function LeftPanel() {
       <div className="border-b px-3 py-2">
         <h2 className="text-sm font-semibold">Route</h2>
       </div>
-      <AIRouteGenerator />
       <CitySearch />
       <div className="px-3 py-2">
         <Button
