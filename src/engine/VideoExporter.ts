@@ -413,12 +413,18 @@ export class VideoExporter {
     const captionFontSize = 14 * scaleX;
     const captionH = 28 * scaleX; // fixed height matching preview (PhotoOverlay)
 
-    const containerAspect = canvasWidth / canvasHeight;
+    // Match preview's inset container (95vw × 88vh centered)
+    const insetW = canvasWidth * 0.95;
+    const insetH = canvasHeight * 0.88;
+    const insetX = (canvasWidth - insetW) / 2;
+    const insetY = (canvasHeight - insetH) / 2;
+
+    const containerAspect = insetW / insetH;
     const layoutMetas = loaded.map(({ photo, preloaded }) => ({
       id: photo.id,
       aspect: preloaded.aspect,
     }));
-    const rects = computeAutoLayout(layoutMetas, containerAspect, 8, canvasWidth / scaleX);
+    const rects = computeAutoLayout(layoutMetas, containerAspect, 8, insetW / scaleX);
     const count = loaded.length;
 
     for (let i = 0; i < rects.length; i++) {
@@ -426,11 +432,11 @@ export class VideoExporter {
       const { photo, preloaded } = loaded[i];
       const hasCaption = !!photo.caption;
 
-      // Convert fractional rects to canvas pixel coordinates
-      const rx = rect.x * canvasWidth;
-      const ry = rect.y * canvasHeight;
-      const rw = rect.width * canvasWidth;
-      const rh = rect.height * canvasHeight;
+      // Convert fractional rects to canvas pixel coordinates (within the inset)
+      const rx = insetX + rect.x * insetW;
+      const ry = insetY + rect.y * insetH;
+      const rw = rect.width * insetW;
+      const rh = rect.height * insetH;
 
       const frameW = rw;
       const frameH = rh;
