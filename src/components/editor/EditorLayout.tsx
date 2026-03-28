@@ -91,9 +91,20 @@ function EditorContent() {
   }, [map, locations, segments]);
 
   const handlePlay = useCallback(() => {
+    // Immediately hide all future segment layers on the map
+    if (map) {
+      const style = map.getStyle();
+      if (style?.layers) {
+        style.layers.forEach((layer: { id: string }) => {
+          if (layer.id.startsWith("segment-") || layer.id.startsWith("segment-glow-")) {
+            map.setLayoutProperty(layer.id, "visibility", "none");
+          }
+        });
+      }
+    }
     engineRef.current?.play();
     setPlaybackState("playing");
-  }, [setPlaybackState]);
+  }, [map, setPlaybackState]);
 
   const handlePause = useCallback(() => {
     engineRef.current?.pause();
