@@ -128,6 +128,31 @@ export default function MapCanvas() {
     });
   }, [locations]);
 
+  // Marker visibility during playback:
+  // Playing: only show markers for locations already visited (index <= currentSegmentIndex)
+  // Idle: show all markers
+  useEffect(() => {
+    if (playbackState === "playing" || playbackState === "paused") {
+      locations.forEach((loc, index) => {
+        const marker = markersRef.current.get(loc.id);
+        if (marker) {
+          // Show first location + locations up to current segment's destination
+          // currentSegmentIndex N means we've reached location N+1
+          const visible = index <= currentSegmentIndex;
+          marker.getElement().style.display = visible ? "flex" : "none";
+        }
+      });
+    } else {
+      // Idle: show all
+      locations.forEach((loc) => {
+        const marker = markersRef.current.get(loc.id);
+        if (marker) {
+          marker.getElement().style.display = "flex";
+        }
+      });
+    }
+  }, [playbackState, currentSegmentIndex, locations]);
+
   // Sync segment route layers
   useEffect(() => {
     const map = mapInstanceRef.current;
