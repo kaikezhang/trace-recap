@@ -162,6 +162,16 @@ export class VideoExporter {
       );
     }
 
+    // Wait a tick for async configure errors to surface
+    await new Promise((r) => setTimeout(r, 100));
+    if (encoder.state === "closed" || encoderError) {
+      console.error("[export] encoder closed after configure", encoderError);
+      throw new Error(
+        `Video encoder closed unexpectedly after configure. Codec: ${codec}. ${encoderError?.message || ""}`
+      );
+    }
+    console.log("[export] encoder ready, state:", encoder.state);
+
     await Promise.resolve();
     if (encoderError) {
       VideoExporter.safeCloseEncoder(encoder);
