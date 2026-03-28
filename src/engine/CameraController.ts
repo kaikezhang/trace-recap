@@ -178,12 +178,14 @@ export class CameraController {
         // Camera follows smooth straight-line path
         const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
 
-        // Start zooming in during the last 40% of FLY
-        // so we arrive already mostly zoomed in
+        // Gradual zoom during FLY — start zooming in the last 25%
+        // This gives a smooth arrival without a sudden ZOOM_IN phase
         let zoom: number;
-        if (eased > 0.6) {
-          const zoomProgress = (eased - 0.6) / 0.4; // 0→1 over last 40%
-          zoom = lerp(gc.flyZoom, gc.arriveZoom, zoomProgress * 0.8); // reach 80% of target
+        const zoomStartAt = 0.75;
+        if (eased > zoomStartAt) {
+          const zoomProgress = (eased - zoomStartAt) / (1 - zoomStartAt);
+          // Only reach 70% of target zoom during FLY — ZOOM_IN does the rest
+          zoom = lerp(gc.flyZoom, gc.arriveZoom, zoomProgress * 0.7);
         } else {
           zoom = gc.flyZoom;
         }
@@ -191,8 +193,8 @@ export class CameraController {
       }
 
       case "ZOOM_IN": {
-        // Just finish the last 20% of zoom — should be quick
-        const startZoom = lerp(gc.flyZoom, gc.arriveZoom, 0.8);
+        // Finish the remaining 30% of zoom
+        const startZoom = lerp(gc.flyZoom, gc.arriveZoom, 0.7);
         const zoom = lerp(startZoom, gc.arriveZoom, eased);
         return { center: gc.toCenter, zoom, bearing: 0, pitch: 0 };
       }
