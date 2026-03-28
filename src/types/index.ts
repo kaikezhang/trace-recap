@@ -18,6 +18,7 @@ export interface Location {
   id: string;
   name: string;
   coordinates: [number, number]; // [lng, lat]
+  isWaypoint?: boolean;
   photos: Photo[];
 }
 

@@ -9,7 +9,7 @@ import type {
 
 export interface ImportRouteData {
   name: string;
-  locations: { name: string; coordinates: [number, number] }[];
+  locations: { name: string; coordinates: [number, number]; isWaypoint?: boolean }[];
   segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
 }
 
@@ -69,7 +69,7 @@ function rebuildSegments(
   return segments;
 }
 
-export const useProjectStore = create<ProjectState>((set) => ({
+export const useProjectStore = create<ProjectState>((set, get) => ({
   locations: [],
   segments: [],
   mapStyle: "light",
@@ -80,6 +80,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
         id: generateId(),
         name: loc.name,
         coordinates: loc.coordinates,
+        isWaypoint: false,
         photos: [],
       };
       const locations = [...state.locations, newLocation];
@@ -161,12 +162,13 @@ export const useProjectStore = create<ProjectState>((set) => ({
   clearRoute: () => set({ locations: [], segments: [] }),
 
   exportRoute: () => {
-    const { locations, segments } = useProjectStore.getState();
+    const { locations, segments } = get();
     return {
       name: "My Trip",
       locations: locations.map((loc) => ({
         name: loc.name,
         coordinates: loc.coordinates as [number, number],
+        isWaypoint: loc.isWaypoint ?? false,
       })),
       segments: segments.map((seg) => ({
         fromIndex: locations.findIndex((l) => l.id === seg.fromId),
@@ -182,6 +184,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
         id: generateId(),
         name: loc.name,
         coordinates: loc.coordinates,
+        isWaypoint: loc.isWaypoint ?? false,
         photos: [],
       }));
 
