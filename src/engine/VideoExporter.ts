@@ -39,8 +39,8 @@ export class VideoExporter {
     const totalFrames = Math.ceil(totalDuration * fps);
 
     // Pre-warm tile cache by quickly scrubbing through the animation
-    for (let i = 0; i <= 10; i++) {
-      this.engine.renderFrame((i / 10) * totalDuration);
+    for (let i = 0; i <= 5; i++) {
+      this.engine.renderFrame((i / 5) * totalDuration);
       await this.waitForMapIdle();
     }
 
@@ -119,9 +119,18 @@ export class VideoExporter {
     return new Promise((resolve) => {
       if (!this.map.isMoving() && this.map.areTilesLoaded()) {
         resolve();
-      } else {
-        this.map.once("idle", () => resolve());
+        return;
       }
+      // Timeout after 2s to prevent infinite hang
+      const timeout = setTimeout(() => {
+        this.map.off("idle", onIdle);
+        resolve();
+      }, 2000);
+      const onIdle = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+      this.map.once("idle", onIdle);
     });
   }
 }
