@@ -38,11 +38,22 @@ function generateGreatCircle(
   });
 
   // greatCircle returns MultiLineString when crossing the antimeridian (date line)
-  // Merge all segments into a single LineString
+  // Merge segments and unwrap longitudes so Mapbox doesn't draw a line around the globe
   if (gc.geometry.type === "MultiLineString") {
     const allCoords: number[][] = [];
     for (const segment of gc.geometry.coordinates) {
-      allCoords.push(...segment);
+      for (const coord of segment) {
+        if (allCoords.length > 0) {
+          const prevLng = allCoords[allCoords.length - 1][0];
+          let lng = coord[0];
+          // Unwrap: if the jump is > 180°, shift by 360°
+          while (lng - prevLng > 180) lng -= 360;
+          while (lng - prevLng < -180) lng += 360;
+          allCoords.push([lng, coord[1]]);
+        } else {
+          allCoords.push([...coord]);
+        }
+      }
     }
     return { type: "LineString", coordinates: allCoords };
   }
