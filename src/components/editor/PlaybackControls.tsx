@@ -4,6 +4,7 @@ import { Play, Pause, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useAnimationStore } from "@/stores/animationStore";
+import { useUIStore } from "@/stores/uiStore";
 
 interface PlaybackControlsProps {
   onPlay: () => void;
@@ -28,6 +29,7 @@ export default function PlaybackControls({
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentTime = useAnimationStore((s) => s.currentTime);
   const totalDuration = useAnimationStore((s) => s.totalDuration);
+  const bottomSheetExpanded = useUIStore((s) => s.bottomSheetExpanded);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
@@ -37,8 +39,10 @@ export default function PlaybackControls({
       className={[
         "z-10 flex items-center gap-2 md:gap-3 bg-background/90 backdrop-blur-sm border shadow-lg px-3 md:px-4 py-2",
         // Mobile: full-width bar above the collapsed bottom sheet (56px)
-        "absolute bottom-14 left-0 right-0 rounded-none",
-        // Desktop: floating centered pill
+        // When bottom sheet is expanded, slide up above the 60vh sheet
+        "absolute left-0 right-0 rounded-none transition-all duration-300",
+        bottomSheetExpanded ? "bottom-[60vh]" : "bottom-14",
+        // Desktop: floating centered pill (bottom sheet state irrelevant)
         "md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:rounded-xl md:w-auto",
       ].join(" ")}
     >
