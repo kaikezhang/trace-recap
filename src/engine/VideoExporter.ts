@@ -9,6 +9,7 @@ import {
   SEGMENT_GLOW_LAYER_PREFIX,
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
+import { computeAutoLayout } from "@/lib/photoLayout";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -410,179 +411,123 @@ export class VideoExporter {
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
     const captionFontSize = 14 * scaleX;
-    const captionGap = 4 * scaleX;
-    const captionExtra = captionFontSize + captionGap + pad; // extra height when caption present
+    const captionH = 28 * scaleX; // fixed height matching preview (PhotoOverlay)
 
-    // Determine layout based on photo count
+    const containerAspect = canvasWidth / canvasHeight;
+    const layoutMetas = loaded.map(({ photo, preloaded }) => ({
+      id: photo.id,
+      aspect: preloaded.aspect,
+    }));
+    const rects = computeAutoLayout(layoutMetas, containerAspect, 8, canvasWidth / scaleX);
     const count = loaded.length;
-    let rows: { photo: Photo; preloaded: PreloadedPhoto }[][];
-    let maxWFrac: number; // max width fraction per photo
-    let maxHFrac: number; // max height fraction per photo
 
-    if (count === 1) {
-      rows = [loaded];
-      maxWFrac = 0.6;
-      maxHFrac = 0.65;
-    } else if (count === 2) {
-      rows = [loaded];
-      maxWFrac = 0.4;
-      maxHFrac = 0.6;
-    } else if (count === 3) {
-      rows = [loaded];
-      maxWFrac = 0.28;
-      maxHFrac = 0.55;
-    } else {
-      // Split into 2 rows
-      const half = Math.ceil(count / 2);
-      rows = [loaded.slice(0, half), loaded.slice(half)];
-      maxWFrac = 0.8 / Math.max(rows[0].length, rows[1].length);
-      maxHFrac = 0.3;
-    }
+    for (let i = 0; i < rects.length; i++) {
+      const rect = rects[i];
+      const { photo, preloaded } = loaded[i];
+      const hasCaption = !!photo.caption;
 
-    const gap = 16 * scaleX;
+      // Convert fractional rects to canvas pixel coordinates
+      const rx = rect.x * canvasWidth;
+      const ry = rect.y * canvasHeight;
+      const rw = rect.width * canvasWidth;
+      const rh = rect.height * canvasHeight;
 
-    // Compute each photo's rendered size
-    type PhotoRect = {
-      photo: Photo;
-      preloaded: PreloadedPhoto;
-      w: number;
-      h: number;
-    };
+      const frameW = rw;
+      const frameH = rh;
+      const imgW = frameW - pad * 2;
+      const imgH = frameH - pad * 2 - (hasCaption ? captionH : 0);
 
-    const rowRects: PhotoRect[][] = rows.map((row) =>
-      row.map(({ photo, preloaded }) => {
-        const maxW = canvasWidth * maxWFrac;
-        const maxH = canvasHeight * maxHFrac;
-        const aspect = preloaded.aspect;
-
-        let w: number;
-        let h: number;
-        if (aspect > 1) {
-          // Landscape
-          w = Math.min(maxW, maxH * aspect);
-          h = w / aspect;
-        } else {
-          // Portrait or square
-          h = Math.min(maxH, maxW / aspect);
-          w = h * aspect;
-        }
-        // Clamp to max
-        if (w > maxW) {
-          w = maxW;
-          h = w / aspect;
-        }
-        if (h > maxH) {
-          h = maxH;
-          w = h * aspect;
-        }
-
-        return { photo, preloaded, w, h };
-      })
-    );
-
-    // Compute total height of all rows (include caption height in card size)
-    const rowHeights = rowRects.map((row) =>
-      Math.max(...row.map((r) => {
-        const cardH = r.h + pad * 2 + (r.photo.caption ? captionExtra : 0);
-        return cardH;
-      }))
-    );
-    const totalHeight =
-      rowHeights.reduce((s, h) => s + h, 0) + gap * (rows.length - 1);
-
-    // Vertical starting position — center in canvas
-    let currentY = (canvasHeight - totalHeight) / 2;
-
-    for (let ri = 0; ri < rowRects.length; ri++) {
-      const row = rowRects[ri];
-      const rowH = rowHeights[ri];
-
-      // Compute total row width
-      const totalRowWidth =
-        row.reduce((s, r) => s + r.w + pad * 2, 0) +
-        gap * (row.length - 1);
-
-      let currentX = (canvasWidth - totalRowWidth) / 2;
-
-      for (let ci = 0; ci < row.length; ci++) {
-        const { photo, preloaded, w, h } = row[ci];
-        const hasCaption = !!photo.caption;
-        const frameW = w + pad * 2;
-        const frameH = h + pad * 2 + (hasCaption ? captionExtra : 0);
-
-        // Determine rotation
-        let rotation = 0;
-        if (count <= 3 && count > 1) {
-          if (ci === 0 && ri === 0) rotation = -2;
-          else if (ci === row.length - 1 && ri === rowRects.length - 1)
-            rotation = 2;
-        }
-
-        const centerX = currentX + frameW / 2;
-        const centerY = currentY + (rowH - frameH) / 2 + frameH / 2;
-
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        if (rotation !== 0) {
-          ctx.rotate((rotation * Math.PI) / 180);
-        }
-
-        // Shadow rect
-        this.drawRoundedRect(
-          ctx,
-          -frameW / 2 + shadowOffX,
-          -frameH / 2 + shadowOffY,
-          frameW,
-          frameH,
-          radius,
-          "rgba(0,0,0,0.25)"
-        );
-
-        // White frame
-        this.drawRoundedRect(
-          ctx,
-          -frameW / 2,
-          -frameH / 2,
-          frameW,
-          frameH,
-          radius,
-          "#ffffff"
-        );
-
-        // Clip and draw photo
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(
-          -frameW / 2 + pad,
-          -frameH / 2 + pad,
-          w,
-          h,
-          Math.max(0, radius - pad / 2)
-        );
-        ctx.clip();
-        ctx.drawImage(preloaded.img, -frameW / 2 + pad, -frameH / 2 + pad, w, h);
-        ctx.restore();
-
-        // Caption (drawn inside the white card, below the photo)
-        if (hasCaption) {
-          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
-          ctx.fillStyle = "#374151";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.fillText(
-            photo.caption!,
-            0,
-            -frameH / 2 + pad + h + captionGap,
-            w
-          );
-        }
-
-        ctx.restore();
-
-        currentX += frameW + gap;
+      // Determine rotation — must match preview (PhotoOverlay)
+      let rotation = 0;
+      if (count <= 3) {
+        if (i === 0) rotation = -2;
+        else if (i === count - 1) rotation = 2;
+      } else {
+        rotation = i % 2 === 0 ? -1.5 : 1.5;
       }
 
-      currentY += rowH + gap;
+      const centerX = rx + frameW / 2;
+      const centerY = ry + frameH / 2;
+
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      if (rotation !== 0) {
+        ctx.rotate((rotation * Math.PI) / 180);
+      }
+
+      // Shadow rect
+      this.drawRoundedRect(
+        ctx,
+        -frameW / 2 + shadowOffX,
+        -frameH / 2 + shadowOffY,
+        frameW,
+        frameH,
+        radius,
+        "rgba(0,0,0,0.25)"
+      );
+
+      // White frame
+      this.drawRoundedRect(
+        ctx,
+        -frameW / 2,
+        -frameH / 2,
+        frameW,
+        frameH,
+        radius,
+        "#ffffff"
+      );
+
+      // Clip and draw photo with object-fit: cover
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(
+        -frameW / 2 + pad,
+        -frameH / 2 + pad,
+        imgW,
+        imgH,
+        Math.max(0, radius - pad / 2)
+      );
+      ctx.clip();
+
+      // Compute cover dimensions
+      const imgAspect = preloaded.aspect;
+      const targetAspect = imgW / imgH;
+      let sx: number, sy: number, sw: number, sh: number;
+      if (imgAspect > targetAspect) {
+        // Image wider than target — crop sides
+        sh = preloaded.img.naturalHeight;
+        sw = sh * targetAspect;
+        sx = (preloaded.img.naturalWidth - sw) / 2;
+        sy = 0;
+      } else {
+        // Image taller than target — crop top/bottom
+        sw = preloaded.img.naturalWidth;
+        sh = sw / targetAspect;
+        sx = 0;
+        sy = (preloaded.img.naturalHeight - sh) / 2;
+      }
+      ctx.drawImage(
+        preloaded.img,
+        sx, sy, sw, sh,
+        -frameW / 2 + pad, -frameH / 2 + pad, imgW, imgH
+      );
+      ctx.restore();
+
+      // Caption
+      if (hasCaption) {
+        ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.fillStyle = "#374151";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          photo.caption!,
+          0,
+          -frameH / 2 + pad + imgH + captionH / 2,
+          imgW
+        );
+      }
+
+      ctx.restore();
     }
   }
 

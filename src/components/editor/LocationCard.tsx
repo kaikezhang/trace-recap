@@ -16,6 +16,7 @@ interface LocationCardProps {
   total: number;
   onRemove: (id: string) => void;
   onToggleWaypoint: (id: string) => void;
+  onClick?: (index: number) => void;
 }
 
 function EditableName({
@@ -67,6 +68,7 @@ function EditableName({
 
   return (
     <span
+      data-no-seek
       className={`cursor-pointer hover:underline decoration-dotted underline-offset-2 ${className ?? ""}`}
       onClick={() => {
         setDraft(value);
@@ -85,6 +87,7 @@ export default function LocationCard({
   total,
   onRemove,
   onToggleWaypoint,
+  onClick,
 }: LocationCardProps) {
   const isFirst = index === 0;
   const isWaypoint = location.isWaypoint;
@@ -117,7 +120,13 @@ export default function LocationCard({
         isWaypoint ? "opacity-60" : ""
       } ${isDragging ? "shadow-lg" : ""} ${
         isDragOver ? "ring-2 ring-primary ring-offset-1 bg-primary/5" : ""
-      }`}
+      } ${onClick ? "cursor-pointer" : ""}`}
+      onClick={(e) => {
+        // Don't trigger if clicking on buttons, inputs, or editable name spans
+        const target = e.target as HTMLElement;
+        if (target.closest("button") || target.closest("input") || target.closest("[data-no-seek]") || target.closest("[contenteditable]")) return;
+        onClick?.(index);
+      }}
     >
       <div className="flex items-center gap-2">
         <div

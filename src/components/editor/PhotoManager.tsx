@@ -19,7 +19,7 @@ export function usePhotoDropZone(locationId: string) {
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || !location) return;
-      const remaining = 5 - location.photos.length;
+      const remaining = 9 - location.photos.length;
       const toAdd = Array.from(files).slice(0, remaining);
       for (const file of toAdd) {
         if (file.type.startsWith("image/")) {
@@ -64,7 +64,7 @@ export default function PhotoManager({ locationId }: PhotoManagerProps) {
 
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
-    const remaining = 5 - location.photos.length;
+    const remaining = 9 - location.photos.length;
     const toAdd = Array.from(files).slice(0, remaining);
     for (const file of toAdd) {
       if (file.type.startsWith("image/")) {
@@ -95,7 +95,7 @@ export default function PhotoManager({ locationId }: PhotoManagerProps) {
           ))}
         </div>
       )}
-      {location.photos.length < 5 && (
+      {location.photos.length < 9 && (
         <div>
           <Button
             variant="outline"

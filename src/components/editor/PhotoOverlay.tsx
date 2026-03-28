@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { computeAutoLayout } from "@/lib/photoLayout";
+import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo } from "@/types";
 
 interface PhotoOverlayProps {
@@ -45,115 +47,104 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
   return dims;
 }
 
-// Split photos into rows for optimal space usage
-// Core idea: group portraits together and landscapes together into separate rows
-function layoutRows(photos: PhotoMeta[]): PhotoMeta[][] {
-  const n = photos.length;
-  if (n <= 1) return [photos];
-
-  const portraits = photos.filter(p => p.aspect < 0.9);
-  const landscapes = photos.filter(p => p.aspect >= 0.9);
-
-  // If all same orientation, split evenly into rows
-  if (portraits.length === 0) {
-    // All landscape
-    if (n <= 2) return photos.map(p => [p]); // 1-2: each own row, max width
-    // 3+: split into 2 rows
-    return [photos.slice(0, Math.ceil(n / 2)), photos.slice(Math.ceil(n / 2))];
-  }
-  if (landscapes.length === 0) {
-    // All portrait — fit more per row since they're narrow
-    if (n <= 4) return [photos];
-    return [photos.slice(0, Math.ceil(n / 2)), photos.slice(Math.ceil(n / 2))];
-  }
-
-  // Mixed: always split by orientation — portraits in one row, landscapes in another
-  // Put the larger group on top
-  if (portraits.length >= landscapes.length) {
-    return [portraits, landscapes];
-  }
-  return [landscapes, portraits];
-}
-
-// Size for a photo based on its row context
-function getSize(photo: PhotoMeta, rowLen: number, totalRows: number): { maxW: string; maxH: string } {
-  const isP = photo.aspect < 0.9;
-  const isL = photo.aspect >= 0.9;
-  const heightBudget = totalRows === 1 ? "70vh" : totalRows === 2 ? "42vh" : totalRows === 3 ? "28vh" : totalRows === 4 ? "21vh" : "18vh";
-
-  if (rowLen === 1) {
-    if (isP) return { maxW: "40vw", maxH: heightBudget };
-    return { maxW: "80vw", maxH: heightBudget };
-  }
-  if (rowLen === 2) {
-    if (isP) return { maxW: "30vw", maxH: heightBudget };
-    return { maxW: "44vw", maxH: heightBudget };
-  }
-  if (rowLen === 3) {
-    if (isP) return { maxW: "22vw", maxH: heightBudget };
-    return { maxW: "30vw", maxH: heightBudget };
-  }
-  return { maxW: "22vw", maxH: heightBudget };
-}
-
 export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
   const metas = usePhotoDimensions(photos);
   const ready = metas.length === photos.length && photos.length > 0;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
 
-  const rows = ready ? layoutRows(metas) : [];
-  let globalIndex = 0;
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const containerAspect = containerSize.h > 0 ? containerSize.w / containerSize.h : 16 / 9;
+
+  const layoutMetas: LayoutPhotoMeta[] = ready
+    ? metas.map((m) => ({ id: m.id, aspect: m.aspect }))
+    : [];
+  const rects = ready
+    ? computeAutoLayout(layoutMetas, containerAspect, 8, containerSize.w || 1000)
+    : [];
+
+  // Caption sizing: match export constants (captionFontSize ~14px at 1000px width, plus gap)
+  const captionH = 28; // space for caption text + gap below image
 
   return (
-    <AnimatePresence>
-      {visible && ready && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
-        >
-          <div className="flex flex-col gap-3 items-center max-w-[95vw] max-h-[88vh]">
-            {rows.map((row, rowIdx) => (
-              <div key={rowIdx} className="flex gap-3 justify-center items-center">
-                {row.map((photo) => {
-                  const i = globalIndex++;
-                  const n = metas.length;
-                  const size = getSize(photo, row.length, rows.length);
-                  return (
-                    <motion.div
-                      key={photo.id}
-                      initial={{ opacity: 0, scale: 0.8, y: 40 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9, y: -20 }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 300,
-                        damping: 25,
-                        delay: i * 0.08,
-                      }}
-                      className="rounded-xl bg-white shadow-2xl overflow-hidden"
-                      style={{
-                        rotate: n <= 3 ? (i === 0 ? -2 : i === n - 1 ? 2 : 0) : (i % 2 === 0 ? -1.5 : 1.5),
-                      }}
-                    >
-                      <img
-                        src={photo.url}
-                        alt={photo.caption || ""}
-                        className="object-contain"
-                        style={{ maxWidth: size.maxW, maxHeight: size.maxH }}
-                      />
-                      {photo.caption && (
-                        <p className="px-3 py-2 text-sm text-gray-700">{photo.caption}</p>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-20 pointer-events-none"
+      style={{
+        width: "95vw",
+        height: "88vh",
+        margin: "auto",
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        visibility: visible && ready ? "visible" : "hidden",
+      }}
+    >
+      <AnimatePresence>
+        {visible && ready &&
+          rects.map((rect, i) => {
+            const photo = metas[i];
+            if (!photo) return null;
+            const n = metas.length;
+            const hasCaption = !!photo.caption;
+            const pad = 6; // px padding inside frame
+            return (
+              <motion.div
+                key={photo.id}
+                initial={{ opacity: 0, scale: 0.8, y: 40 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: -20 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 25,
+                  delay: i * 0.08,
+                }}
+                className="absolute rounded-xl bg-white shadow-2xl overflow-hidden"
+                style={{
+                  left: `${rect.x * 100}%`,
+                  top: `${rect.y * 100}%`,
+                  width: `${rect.width * 100}%`,
+                  height: `${rect.height * 100}%`,
+                  rotate: n <= 3 ? (i === 0 ? -2 : i === n - 1 ? 2 : 0) : (i % 2 === 0 ? -1.5 : 1.5),
+                  padding: `${pad}px`,
+                  display: "flex",
+                  flexDirection: "column" as const,
+                }}
+              >
+                <div
+                  className="w-full rounded-lg overflow-hidden"
+                  style={{ flex: 1, minHeight: 0 }}
+                >
+                  <img
+                    src={photo.url}
+                    alt={photo.caption || ""}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                {hasCaption && (
+                  <p
+                    className="text-sm text-gray-700 text-center truncate px-1"
+                    style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, flexShrink: 0 }}
+                  >
+                    {photo.caption}
+                  </p>
+                )}
+              </motion.div>
+            );
+          })}
+      </AnimatePresence>
+    </div>
   );
 }
