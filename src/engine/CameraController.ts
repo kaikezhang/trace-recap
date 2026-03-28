@@ -69,13 +69,32 @@ export class CameraController {
         }
       }
 
+      // Compute midpoint along the actual route (not naive average)
+      // Naive lng average fails for cross-Pacific routes (Seoul→Atlanta: mid=21°E instead of Pacific)
+      let midpoint: [number, number];
+      if (routeLine && routeLine.coordinates && routeLine.coordinates.length >= 2) {
+        try {
+          const line = turf.lineString(routeLine.coordinates);
+          const len = turf.length(line);
+          const midPt = turf.along(line, len / 2);
+          midpoint = midPt.geometry.coordinates as [number, number];
+        } catch {
+          midpoint = [
+            (fromCoords[0] + toCoords[0]) / 2,
+            (fromCoords[1] + toCoords[1]) / 2,
+          ];
+        }
+      } else {
+        midpoint = [
+          (fromCoords[0] + toCoords[0]) / 2,
+          (fromCoords[1] + toCoords[1]) / 2,
+        ];
+      }
+
       return {
         fromCenter: fromCoords,
         toCenter: toCoords,
-        midpoint: [
-          (fromCoords[0] + toCoords[0]) / 2,
-          (fromCoords[1] + toCoords[1]) / 2,
-        ] as [number, number],
+        midpoint,
         flyZoom,
         arriveZoom: 12, // placeholder, computed in second pass
         routeLine,
