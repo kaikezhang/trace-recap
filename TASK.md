@@ -1,138 +1,39 @@
-# TASK.md — WebCodecs Video Encoding (Replace FFmpeg.wasm)
+# TASK.md — Fix: Video Export "Cannot call close on a closed codec" Error
 
 ## ⚠️ DO NOT MERGE THE PR. Create PR and stop. DO NOT MERGE.
 
-## Goal
-Replace FFmpeg.wasm with the browser-native WebCodecs API for GPU-accelerated video encoding. Much faster, no WASM download, no SharedArrayBuffer/COOP/COEP requirements.
-
-## How WebCodecs Video Encoding Works
-
+## Bug
+When clicking "Start Export" in the Export Video dialog, the app crashes with:
 ```
-For each frame:
-  1. Draw frame to canvas (existing logic)
-  2. Create VideoFrame from canvas
-  3. Feed VideoFrame to VideoEncoder
-  4. VideoEncoder outputs EncodedVideoChunk
-
-After all frames:
-  5. Mux all EncodedVideoChunks into MP4 using mp4-muxer library
-  6. Download the MP4
+Runtime InvalidStateError: Cannot call 'close' on a closed codec
 ```
 
-## Implementation
+The error happens at `encoder.close()` in `VideoExporter.ts`. No `[export]` console logs appear, meaning the code crashes before reaching the frame capture loop.
 
-### 1. Install mp4-muxer
-```bash
-npm install mp4-muxer
-```
-This small library (~15KB) handles MP4 container muxing. WebCodecs only encodes raw H.264 chunks — we need a muxer to wrap them in an MP4 container.
+## Root Cause Analysis
+The `VideoEncoder.configure()` call is failing silently — the encoder's `error` callback fires, setting the encoder state to "closed". Then when the code tries to call `encoder.close()`, it throws because the encoder is already closed.
 
-### 2. Rewrite `VideoExporter.ts`
-Replace FFmpeg.wasm with WebCodecs:
+The codec `avc1.640028` (H.264 High Profile) may not be supported. There is auto-detection code in `findSupportedCodec()` but the detected codec may not be correctly flowing to `encoder.configure()`.
 
-```typescript
-import { Muxer, ArrayBufferTarget } from "mp4-muxer";
+## What to Do
 
-export class VideoExporter {
-  async export(onProgress): Promise<Blob | null> {
-    const { fps, resolution } = this.settings;
-    const totalDuration = this.engine.getTotalDuration();
-    const totalFrames = Math.ceil(totalDuration * fps);
+1. **Read the entire `src/engine/VideoExporter.ts` file carefully**
+2. **Trace the codec flow**: `findSupportedCodec()` → `detectedCodec` → `encoder.configure()`
+3. **Find where the hardcoded `avc1.640028` might still be used** instead of the detected codec
+4. **Verify `isConfigSupported` is called with actual canvas dimensions** (not just defaults)
+5. **Add proper error handling**: wrap `encoder.configure()` in try/catch, log the codec being used, log any errors
+6. **Test by running `npm run dev` and trying to export** — if VideoEncoder is not supported at all, show a clear error message instead of crashing
 
-    // Get canvas dimensions
-    const canvas = this.map.getCanvas();
-    const width = canvas.width;
-    const height = canvas.height;
+## Key Files
+- `src/engine/VideoExporter.ts` — the export logic
+- `src/components/editor/ExportDialog.tsx` — the UI that calls export
 
-    // Setup MP4 muxer
-    const muxer = new Muxer({
-      target: new ArrayBufferTarget(),
-      video: {
-        codec: "avc",  // H.264
-        width,
-        height,
-      },
-      fastStart: "in-memory",
-    });
-
-    // Setup VideoEncoder
-    const encoder = new VideoEncoder({
-      output: (chunk, meta) => {
-        muxer.addVideoChunk(chunk, meta);
-      },
-      error: (e) => console.error("Encoder error:", e),
-    });
-
-    await encoder.configure({
-      codec: "avc1.640028", // H.264 High Profile Level 4.0
-      width,
-      height,
-      bitrate: 5_000_000, // 5 Mbps
-      framerate: fps,
-    });
-
-    // Pre-warm tiles
-    for (let i = 0; i <= 5; i++) {
-      this.engine.renderFrame((i / 5) * totalDuration);
-      await this.waitForMapIdle();
-    }
-
-    // Capture and encode frames
-    for (let i = 0; i < totalFrames; i++) {
-      if (this.cancelled) { encoder.close(); return null; }
-
-      const time = i / fps;
-      this.engine.seekTo(Math.min(time / totalDuration, 1));
-      await this.waitForMapIdle();
-
-      // Create VideoFrame directly from canvas
-      const frame = new VideoFrame(canvas, {
-        timestamp: i * (1_000_000 / fps), // microseconds
-      });
-
-      encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 }); // keyframe every 2s
-      frame.close();
-
-      onProgress({ phase: "capturing", current: i + 1, total: totalFrames });
-    }
-
-    // Flush encoder
-    await encoder.flush();
-    encoder.close();
-    muxer.finalize();
-
-    const buffer = muxer.target.buffer;
-    onProgress({ phase: "done", current: 1, total: 1 });
-
-    return new Blob([buffer], { type: "video/mp4" });
-  }
-}
-```
-
-### 3. Remove FFmpeg dependencies
-- `npm uninstall @ffmpeg/ffmpeg @ffmpeg/util`
-- Remove COOP/COEP headers from next.config.ts (no longer needed)
-- Remove the `isDev` variable if no longer used
-
-### 4. Update ExportDialog.tsx
-- Remove "encoding" phase from progress display (encoding happens in real-time during capture)
-- Just show "Capturing & encoding frames..." with frame count progress
-
-### 5. Feature detection
-Add a check at the top of export:
-```typescript
-if (typeof VideoEncoder === "undefined") {
-  // Show error: "Your browser doesn't support video encoding. Please use Chrome or Edge."
-  return null;
-}
-```
-
-## Browser Support
-- ✅ Chrome 94+ (Sept 2021)
-- ✅ Edge 94+
-- ✅ Opera 80+
-- ❌ Firefox (behind flag)
-- ❌ Safari (partial, unreliable)
+## Expected Fix
+- `encoder.configure()` uses the auto-detected codec from `findSupportedCodec()`
+- If no codec is supported, show user-friendly error
+- If configure fails, catch the error gracefully — no "close on closed codec" crash
+- All `encoder.close()` calls check `encoder.state !== "closed"` first
+- Console logs show which codec is being used
 
 ## Branch
-Create branch: `feat/webcodecs-export`
+Create branch: `fix/video-export-codec`
