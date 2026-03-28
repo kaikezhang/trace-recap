@@ -1,66 +1,92 @@
-# TASK.md — Audit & Fix Route Visibility During Animation
+# TASK.md — Mobile-First Responsive UI Redesign
 
 ## ⚠️ DO NOT MERGE THE PR. Create PR and stop. DO NOT MERGE.
 
-## Current Behavior (WRONG)
-When animation plays:
-- ALL route lines are visible from the start (including future segments that haven't been traveled yet)
-- The current segment's line gets HIDDEN then progressively redrawn as it's traveled
-- This looks like the line disappears then reappears
+## Goal
+Redesign the editor UI to work great on mobile phones in portrait mode while keeping desktop usable.
 
-## Expected Behavior (CORRECT)
-When animation plays:
-- **Past segments** (already completed): full route line visible
-- **Current segment**: line progressively drawn from 0% to 100% as the icon travels
-- **Future segments**: HIDDEN (not visible at all until their turn)
-- When animation stops/resets: ALL lines visible
+## Current Layout (Desktop Only)
+- TopToolbar: fixed 48px height bar at top
+- Left sidebar: fixed 320px wide panel with search, import, route list
+- Map: fills remaining space to the right
+- Playback controls: floating at bottom-center of map
+- Problem: On mobile, 320px sidebar leaves almost no space for the map
 
-## What to Audit & Fix
+## New Layout — Mobile First
 
-### 1. Read and understand the current code flow:
-- `src/components/editor/MapCanvas.tsx` — has a `useEffect` that manages layer visibility based on `playbackState` and `currentSegmentIndex`
-- `src/components/editor/routeSegmentSources.ts` — has `updateSegmentProgress()` that updates a segment's GeoJSON source with sliced geometry
-- `src/components/editor/EditorLayout.tsx` — handles `routeDrawProgress` events from the engine and calls the update functions
-- `src/stores/animationStore.ts` — has `currentSegmentIndex` state
-
-### 2. The visibility logic in MapCanvas.tsx should work like this:
-
-When `playbackState === "playing"` or `"paused"`:
+### Mobile (< 768px / md breakpoint):
 ```
-for each segment at index i:
-  if i < currentSegmentIndex:
-    // Past: show full line
-    set layer visibility = "visible"
-    restore full geometry to source (in case it was sliced)
-  
-  if i === currentSegmentIndex:
-    // Current: show layer, geometry is being updated by routeDrawProgress
-    set layer visibility = "visible"
-  
-  if i > currentSegmentIndex:
-    // Future: hide
-    set layer visibility = "none"
+┌─────────────────────┐
+│  TopToolbar (compact)│  ← logo + export + map style (condensed)
+├─────────────────────┤
+│                     │
+│                     │
+│     MAP (full)      │  ← map takes full width and most of the height
+│                     │
+│                     │
+├─────────────────────┤
+│  Playback Controls  │  ← full width bar at bottom of map area
+├─────────────────────┤
+│  Bottom Sheet       │  ← draggable bottom sheet with route list
+│  (collapsible)      │     collapsed: shows "N stops · Import" bar
+│  ┌─ drag handle ──┐ │     expanded: shows search + route list + import
+│  │ Search cities   │ │
+│  │ Route list...   │ │
+│  │ Import button   │ │
+│  └─────────────────┘ │
+└─────────────────────┘
 ```
 
-When `playbackState === "idle"`:
-```
-for each segment:
-  set layer visibility = "visible"
-  restore full geometry to source
-```
+### Desktop (>= 768px):
+Keep current layout but make sidebar collapsible (toggle button).
 
-### 3. Key issue to check:
-- Is `currentSegmentIndex` being updated correctly in the store? (It should be set in EditorLayout's `progress` event handler)
-- Is the visibility `useEffect` in MapCanvas reacting to `currentSegmentIndex` changes?
-- When currentSegmentIndex changes from N to N+1, segment N needs its full geometry restored
-- The `routeSegmentSources.ts` `updateSegmentProgress()` modifies the segment source data — when a segment completes, its source needs to be reset to the FULL geometry
+## Implementation
 
-### 4. Critical: Store and restore original geometries
-When the animation modifies a segment's GeoJSON source (slicing it for progressive draw), the ORIGINAL full geometry must be stored somewhere so it can be restored when:
-- The segment is "completed" (currentSegmentIndex moves past it)
-- The animation stops/resets
+### 1. EditorLayout.tsx — Responsive structure
+- Mobile: flex-col layout (toolbar → map → controls → bottom sheet)
+- Desktop: keep current flex-row (toolbar on top, sidebar + map side by side)
+- Use Tailwind responsive classes: `md:flex-row`, `md:w-80`, etc.
 
-Check if `routeSegmentSources.ts` or MapCanvas stores the original geometries. If not, add a mechanism for this.
+### 2. LeftPanel.tsx → RoutePanel.tsx (rename for clarity)
+- On mobile: render as a bottom sheet (absolute positioned at bottom, draggable)
+  - Collapsed state: 56px bar showing "N stops" count + Import button
+  - Expanded state: slides up to ~60% of screen height, shows search + route list
+  - Tap the collapsed bar or drag handle to expand/collapse
+- On desktop: render as the existing left sidebar (w-80, border-r)
+- Use a state variable or Zustand store for panel open/closed state
+
+### 3. TopToolbar.tsx — Compact on mobile
+- Mobile: smaller height (h-10), smaller font, icon-only buttons (no text labels)
+- Desktop: keep current
+
+### 4. PlaybackControls.tsx — Full width on mobile
+- Mobile: w-full bar (not floating centered), larger touch targets (44px min)
+- Desktop: keep floating centered style
+- Slider should be wider on mobile for easier thumb control
+
+### 5. MapCanvas — Full screen on mobile
+- Mobile: the map should take all available height between toolbar and playback controls
+- No fixed height — use flex-1
+
+### 6. CitySearch.tsx — Inside bottom sheet on mobile
+- The search input should be at the top of the expanded bottom sheet
+- On desktop: stays in sidebar as-is
+
+## Bottom Sheet Component
+Create a simple bottom sheet without external dependencies:
+- A div with `position: fixed; bottom: 0; left: 0; right: 0;`
+- Has a drag handle bar at top (small gray bar, 40px wide, centered)
+- Two states: collapsed (showing peek bar) and expanded (showing content)
+- Click/tap on collapsed bar toggles expanded
+- Content area has overflow-y: auto for scrolling
+- Backdrop overlay when expanded (optional, tap to close)
+- Smooth transition with CSS transform translateY
+
+## Technical Notes
+- Use Tailwind `md:` prefix for desktop overrides
+- Use `useMediaQuery` or just CSS to handle responsive behavior
+- Don't break the existing animation engine or store logic
+- Keep the Export dialog as a modal (works on both mobile and desktop)
 
 ## Branch
-Create branch: `fix/route-visibility-v2`
+Create branch: `feat/mobile-responsive-ui`
