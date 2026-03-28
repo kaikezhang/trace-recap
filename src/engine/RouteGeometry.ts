@@ -36,6 +36,17 @@ function generateGreatCircle(
   const gc = turf.greatCircle(turf.point(from), turf.point(to), {
     npoints: 100,
   });
+
+  // greatCircle returns MultiLineString when crossing the antimeridian (date line)
+  // Merge all segments into a single LineString
+  if (gc.geometry.type === "MultiLineString") {
+    const allCoords: number[][] = [];
+    for (const segment of gc.geometry.coordinates) {
+      allCoords.push(...segment);
+    }
+    return { type: "LineString", coordinates: allCoords };
+  }
+
   return gc.geometry as GeoJSON.LineString;
 }
 
