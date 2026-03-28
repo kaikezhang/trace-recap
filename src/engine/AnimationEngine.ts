@@ -90,11 +90,19 @@ function finalizeGroup(
     const mergedCoords: number[][] = [];
     for (let i = 0; i < allGeometries.length; i++) {
       const coords = allGeometries[i].coordinates;
-      if (i === 0) {
-        mergedCoords.push(...coords);
-      } else {
-        // Skip the first coordinate to avoid duplication at join points
-        mergedCoords.push(...coords.slice(1));
+      const startIdx = i === 0 ? 0 : 1; // Skip first coord on subsequent segments
+      for (let j = startIdx; j < coords.length; j++) {
+        const coord = coords[j];
+        if (mergedCoords.length > 0) {
+          const prevLng = mergedCoords[mergedCoords.length - 1][0];
+          let lng = coord[0];
+          // Unwrap longitude to keep continuous with previous point
+          while (lng - prevLng > 180) lng -= 360;
+          while (lng - prevLng < -180) lng += 360;
+          mergedCoords.push([lng, coord[1]]);
+        } else {
+          mergedCoords.push([...coord]);
+        }
       }
     }
     if (mergedCoords.length >= 2) {
