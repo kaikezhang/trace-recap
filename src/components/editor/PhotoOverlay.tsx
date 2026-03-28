@@ -9,109 +9,92 @@ interface PhotoOverlayProps {
   visible: boolean;
 }
 
-interface PhotoWithDimensions extends Photo {
-  width: number;
-  height: number;
-  aspect: number; // width / height — >1 = landscape, <1 = portrait
+interface PhotoMeta extends Photo {
+  aspect: number; // w/h, >1 landscape, <1 portrait
 }
 
-function usePhotoDimensions(photos: Photo[]): PhotoWithDimensions[] {
-  const [dims, setDims] = useState<PhotoWithDimensions[]>([]);
+function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
+  const [dims, setDims] = useState<PhotoMeta[]>([]);
 
   useEffect(() => {
-    if (photos.length === 0) {
-      setDims([]);
-      return;
-    }
-
-    const results: PhotoWithDimensions[] = [];
+    if (photos.length === 0) { setDims([]); return; }
+    const results: PhotoMeta[] = [];
     let loaded = 0;
-
     photos.forEach((photo, i) => {
       const img = new Image();
       img.onload = () => {
-        results[i] = {
-          ...photo,
-          width: img.naturalWidth,
-          height: img.naturalHeight,
-          aspect: img.naturalWidth / img.naturalHeight,
-        };
+        results[i] = { ...photo, aspect: img.naturalWidth / img.naturalHeight };
         loaded++;
-        if (loaded === photos.length) {
-          setDims([...results]);
-        }
+        if (loaded === photos.length) setDims([...results]);
       };
       img.onerror = () => {
-        results[i] = { ...photo, width: 400, height: 300, aspect: 4 / 3 };
+        results[i] = { ...photo, aspect: 4 / 3 };
         loaded++;
-        if (loaded === photos.length) {
-          setDims([...results]);
-        }
+        if (loaded === photos.length) setDims([...results]);
       };
       img.src = photo.url;
     });
   }, [photos]);
-
   return dims;
 }
 
-function getLayoutStyle(
-  photo: PhotoWithDimensions,
-  index: number,
-  total: number,
-  allPhotos: PhotoWithDimensions[]
-): { maxWidth: string; maxHeight: string } {
-  const isPortrait = photo.aspect < 0.85;
-  const isLandscape = photo.aspect > 1.2;
+// Split photos into rows for optimal space usage
+function layoutRows(photos: PhotoMeta[]): PhotoMeta[][] {
+  const n = photos.length;
+  if (n <= 2) return [photos];
 
-  if (total === 1) {
-    // Single photo: fill most of the screen
-    if (isPortrait) return { maxWidth: "45vw", maxHeight: "70vh" };
-    if (isLandscape) return { maxWidth: "75vw", maxHeight: "55vh" };
-    return { maxWidth: "60vw", maxHeight: "60vh" };
+  const portraits = photos.filter(p => p.aspect < 0.9);
+  const landscapes = photos.filter(p => p.aspect >= 0.9);
+
+  if (n === 3) {
+    // 2 portraits + 1 landscape → portraits top, landscape bottom
+    if (portraits.length === 2) return [portraits, landscapes];
+    // 2 landscapes + 1 portrait → landscapes top, portrait bottom
+    if (landscapes.length >= 2) return [landscapes, portraits];
+    // All similar → one row
+    return [photos];
   }
 
-  if (total === 2) {
-    const otherAspect = allPhotos[1 - index]?.aspect ?? 1;
-    const bothPortrait = isPortrait && otherAspect < 0.85;
-    const bothLandscape = isLandscape && otherAspect > 1.2;
-
-    if (bothPortrait) {
-      // Two portraits side by side
-      return { maxWidth: "30vw", maxHeight: "65vh" };
-    }
-    if (bothLandscape) {
-      // Two landscapes stacked
-      return { maxWidth: "55vw", maxHeight: "35vh" };
-    }
-    // Mixed: each gets moderate space
-    if (isPortrait) return { maxWidth: "28vw", maxHeight: "60vh" };
-    return { maxWidth: "45vw", maxHeight: "45vh" };
+  if (n === 4) {
+    // Split 2+2
+    return [photos.slice(0, 2), photos.slice(2)];
   }
 
-  if (total === 3) {
-    if (isPortrait) return { maxWidth: "22vw", maxHeight: "55vh" };
-    if (isLandscape) return { maxWidth: "30vw", maxHeight: "40vh" };
-    return { maxWidth: "28vw", maxHeight: "45vh" };
+  if (n === 5) {
+    // Split 3+2
+    return [photos.slice(0, 3), photos.slice(3)];
   }
 
-  if (total === 4) {
-    if (isPortrait) return { maxWidth: "24vw", maxHeight: "42vh" };
-    if (isLandscape) return { maxWidth: "40vw", maxHeight: "36vh" };
-    return { maxWidth: "32vw", maxHeight: "38vh" };
-  }
+  return [photos];
+}
 
-  // 5 photos
-  if (isPortrait) return { maxWidth: "20vw", maxHeight: "40vh" };
-  if (isLandscape) return { maxWidth: "35vw", maxHeight: "32vh" };
-  return { maxWidth: "28vw", maxHeight: "35vh" };
+// Size for a photo based on its row context
+function getSize(photo: PhotoMeta, rowLen: number, totalRows: number): { maxW: string; maxH: string } {
+  const isP = photo.aspect < 0.9;
+  const isL = photo.aspect >= 0.9;
+  const heightBudget = totalRows === 1 ? "70vh" : totalRows === 2 ? "42vh" : "35vh";
+
+  if (rowLen === 1) {
+    if (isP) return { maxW: "40vw", maxH: heightBudget };
+    return { maxW: "80vw", maxH: heightBudget };
+  }
+  if (rowLen === 2) {
+    if (isP) return { maxW: "30vw", maxH: heightBudget };
+    return { maxW: "44vw", maxH: heightBudget };
+  }
+  if (rowLen === 3) {
+    if (isP) return { maxW: "22vw", maxH: heightBudget };
+    return { maxW: "30vw", maxH: heightBudget };
+  }
+  return { maxW: "22vw", maxH: heightBudget };
 }
 
 export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
-  const photosWithDims = usePhotoDimensions(photos);
+  const metas = usePhotoDimensions(photos);
+  const ready = metas.length === photos.length && photos.length > 0;
 
-  // Don't render until dimensions are loaded
-  const ready = photosWithDims.length === photos.length && photos.length > 0;
+  const rows = ready ? layoutRows(metas) : [];
+  let globalIndex = 0;
 
   return (
     <AnimatePresence>
@@ -123,54 +106,44 @@ export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
           transition={{ duration: 0.3 }}
           className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
         >
-          <div className="flex flex-wrap gap-3 px-4 justify-center items-center max-w-[95vw] max-h-[85vh]">
-            {photosWithDims.map((photo, i) => {
-              const n = photosWithDims.length;
-              const style = getLayoutStyle(photo, i, n, photosWithDims);
-
-              return (
-                <motion.div
-                  key={photo.id}
-                  initial={{ opacity: 0, scale: 0.8, y: 40 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: -20 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 25,
-                    delay: i * 0.08,
-                  }}
-                  className="rounded-xl bg-white shadow-2xl overflow-hidden"
-                  style={{
-                    rotate:
-                      n <= 3
-                        ? i === 0
-                          ? -3
-                          : i === n - 1
-                          ? 3
-                          : 0
-                        : i % 2 === 0
-                        ? -2
-                        : 2,
-                  }}
-                >
-                  <img
-                    src={photo.url}
-                    alt={photo.caption || ""}
-                    className="object-contain"
-                    style={{
-                      maxWidth: style.maxWidth,
-                      maxHeight: style.maxHeight,
-                    }}
-                  />
-                  {photo.caption && (
-                    <p className="px-3 py-2 text-sm text-gray-700">
-                      {photo.caption}
-                    </p>
-                  )}
-                </motion.div>
-              );
-            })}
+          <div className="flex flex-col gap-3 items-center max-w-[95vw] max-h-[88vh]">
+            {rows.map((row, rowIdx) => (
+              <div key={rowIdx} className="flex gap-3 justify-center items-center">
+                {row.map((photo) => {
+                  const i = globalIndex++;
+                  const n = metas.length;
+                  const size = getSize(photo, row.length, rows.length);
+                  return (
+                    <motion.div
+                      key={photo.id}
+                      initial={{ opacity: 0, scale: 0.8, y: 40 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9, y: -20 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 25,
+                        delay: i * 0.08,
+                      }}
+                      className="rounded-xl bg-white shadow-2xl overflow-hidden"
+                      style={{
+                        rotate: n <= 3 ? (i === 0 ? -2 : i === n - 1 ? 2 : 0) : (i % 2 === 0 ? -1.5 : 1.5),
+                      }}
+                    >
+                      <img
+                        src={photo.url}
+                        alt={photo.caption || ""}
+                        className="object-contain"
+                        style={{ maxWidth: size.maxW, maxHeight: size.maxH }}
+                      />
+                      {photo.caption && (
+                        <p className="px-3 py-2 text-sm text-gray-700">{photo.caption}</p>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </motion.div>
       )}
