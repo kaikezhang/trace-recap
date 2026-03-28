@@ -166,6 +166,14 @@ export class AnimationEngine {
     return this.groups;
   }
 
+  getIconAnimator(): IconAnimator {
+    return this.iconAnimator;
+  }
+
+  getSegments(): Segment[] {
+    return this.segments;
+  }
+
   private computeTimeline(): SegmentTiming[] {
     const n = this.groups.length;
     if (n === 0) return [];
