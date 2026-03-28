@@ -66,8 +66,8 @@ export default function BottomSheet() {
 
       {/* Bottom sheet */}
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-background border-t rounded-t-2xl shadow-2xl transition-transform duration-300 ease-out ${
-          expanded ? "translate-y-0" : "translate-y-[calc(100%-56px)]"
+        className={`fixed left-0 right-0 z-50 bg-background border-t rounded-t-2xl shadow-2xl transition-[bottom] duration-300 ease-out ${
+          expanded ? "bottom-0" : "bottom-[calc(-60vh+56px)]"
         }`}
         style={{ height: "60vh" }}
       >
