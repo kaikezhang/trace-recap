@@ -59,6 +59,11 @@ export class VideoExporter {
             const img = new Image();
             img.onload = () => {
               this.iconImages.set(key, img);
+              // Also store under the browser-resolved absolute URL so
+              // lookups via IconAnimator.getState().iconSrc (absolute) hit the cache.
+              if (img.src !== key) {
+                this.iconImages.set(img.src, img);
+              }
               resolve();
             };
             img.onerror = () => {
@@ -180,8 +185,12 @@ export class VideoExporter {
     }
   }
 
-  /** Composite the vehicle icon onto the canvas using 2D context */
-  private drawVehicleIcon(canvas: HTMLCanvasElement): void {
+  /** Composite the vehicle icon onto the offscreen 2D canvas */
+  private drawVehicleIcon(
+    ctx: CanvasRenderingContext2D,
+    scaleX: number,
+    scaleY: number
+  ): void {
     const iconAnimator = this.engine.getIconAnimator();
     const state = iconAnimator.getState();
 
@@ -190,47 +199,47 @@ export class VideoExporter {
     const img = this.iconImages.get(state.iconSrc);
     if (!img) return;
 
+    // map.project() returns CSS pixels; scale to physical pixels
     const point = this.map.project(state.position);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const px = point.x * scaleX;
+    const py = point.y * scaleY;
+    const sz = state.size * scaleX; // uniform scale (scaleX ≈ scaleY)
 
     const prevAlpha = ctx.globalAlpha;
     ctx.globalAlpha = state.opacity;
-    ctx.drawImage(
-      img,
-      point.x - state.size / 2,
-      point.y - state.size / 2,
-      state.size,
-      state.size
-    );
+    ctx.drawImage(img, px - sz / 2, py - sz / 2, sz, sz);
     ctx.globalAlpha = prevAlpha;
   }
 
-  /** Draw city name label on canvas, matching the preview style */
-  private drawCityLabel(canvas: HTMLCanvasElement, label: string): void {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const font = "600 18px system-ui, -apple-system, sans-serif";
+  /** Draw city name label on the offscreen 2D canvas, matching the preview style */
+  private drawCityLabel(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    scaleX: number,
+    label: string
+  ): void {
+    // Scale all dimensions from CSS to physical pixels
+    const fontSize = 18 * scaleX;
+    const font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
     ctx.font = font;
     const metrics = ctx.measureText(label);
 
-    const padH = 20;
-    const padV = 10;
-    const dotRadius = 4;
-    const dotGap = 8;
+    const padH = 20 * scaleX;
+    const padV = 10 * scaleX;
+    const dotRadius = 4 * scaleX;
+    const dotGap = 8 * scaleX;
     const textWidth = metrics.width;
     const boxWidth = padH + dotRadius * 2 + dotGap + textWidth + padH;
-    const boxHeight = padV + 22 + padV; // 22px for line height
-    const x = (canvas.width - boxWidth) / 2;
-    const y = 24;
-    const radius = 8;
+    const boxHeight = padV + 22 * scaleX + padV;
+    const x = (canvasWidth - boxWidth) / 2;
+    const y = 24 * scaleX;
+    const radius = 8 * scaleX;
 
     // Shadow
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.12)";
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 2;
+    ctx.shadowBlur = 8 * scaleX;
+    ctx.shadowOffsetY = 2 * scaleX;
 
     // Background rounded rect
     ctx.beginPath();
@@ -241,7 +250,7 @@ export class VideoExporter {
     // Border
     ctx.shadowColor = "transparent";
     ctx.strokeStyle = "rgba(0,0,0,0.1)";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1 * scaleX;
     ctx.stroke();
     ctx.restore();
 
@@ -267,12 +276,14 @@ export class VideoExporter {
   }
 
   private drawCityLabelFromCapture(
-    canvas: HTMLCanvasElement,
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    scaleX: number,
     captured: { progress: AnimationEvent | null }
   ): void {
     const label = captured.progress?.cityLabel;
     if (label) {
-      this.drawCityLabel(canvas, label);
+      this.drawCityLabel(ctx, canvasWidth, scaleX, label);
     }
   }
 
@@ -310,8 +321,21 @@ export class VideoExporter {
     // Capture route draw events from the engine during export.
     // Events are populated synchronously by seekTo → renderFrame → emit.
     const captured = { routeDraw: null as AnimationEvent | null, progress: null as AnimationEvent | null };
-    this.engine.on("routeDrawProgress", (e) => { captured.routeDraw = e; });
-    this.engine.on("progress", (e) => { captured.progress = e; });
+    const onRouteDrawEvent = (e: AnimationEvent) => { captured.routeDraw = e; };
+    const onProgressEvent = (e: AnimationEvent) => { captured.progress = e; };
+    this.engine.on("routeDrawProgress", onRouteDrawEvent);
+    this.engine.on("progress", onProgressEvent);
+
+    // Create an offscreen 2D canvas for compositing (WebGL canvas cannot getContext('2d'))
+    const offscreen = document.createElement("canvas");
+    offscreen.width = canvas.width;
+    offscreen.height = canvas.height;
+    const offCtx = offscreen.getContext("2d");
+    if (!offCtx) throw new Error("Failed to create offscreen 2D context");
+
+    // HiDPI scaling: map.project() returns CSS pixels, canvas dimensions are physical
+    const scaleX = canvas.width / canvas.clientWidth;
+    const scaleY = canvas.height / canvas.clientHeight;
 
     try {
       // Start a server session
@@ -343,12 +367,14 @@ export class VideoExporter {
 
         await this.waitForMapIdle();
 
-        // Composite overlays onto canvas, then capture
-        this.drawVehicleIcon(canvas);
-        this.drawCityLabelFromCapture(canvas, captured);
+        // Copy the WebGL map frame to the offscreen 2D canvas, then draw overlays
+        offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
+        offCtx.drawImage(canvas, 0, 0);
+        this.drawVehicleIcon(offCtx, scaleX, scaleY);
+        this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured);
 
         const blob = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob(
+          offscreen.toBlob(
             (b) =>
               b ? resolve(b) : reject(new Error("Frame capture failed")),
             "image/jpeg",
@@ -411,11 +437,9 @@ export class VideoExporter {
       this.restoreAllSegments();
       this.engine.getIconAnimator().hide();
 
-      // Remove our listeners (rebuild without them)
-      // AnimationEngine doesn't have removeListener, so we use a no-op approach:
-      // The listeners will be garbage collected when the engine is destroyed.
-      // For now, the engine's listener arrays will include our refs but they're
-      // harmless after export since they only write to local variables.
+      // Remove our listeners to prevent leaks across repeated exports
+      this.engine.off("routeDrawProgress", onRouteDrawEvent);
+      this.engine.off("progress", onProgressEvent);
     }
   }
 

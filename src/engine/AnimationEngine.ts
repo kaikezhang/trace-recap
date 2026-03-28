@@ -296,6 +296,13 @@ export class AnimationEngine {
     this.listeners.set(event, list);
   }
 
+  off(event: AnimationEventType, listener: AnimationListener) {
+    const list = this.listeners.get(event);
+    if (!list) return;
+    const idx = list.indexOf(listener);
+    if (idx !== -1) list.splice(idx, 1);
+  }
+
   private emit(event: AnimationEvent) {
     const list = this.listeners.get(event.type) || [];
     for (const fn of list) fn(event);
