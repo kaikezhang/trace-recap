@@ -286,8 +286,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const updates = await Promise.all(
       needsZh.map(async (loc) => {
         try {
-          const [lng, lat] = loc.coordinates;
-          const res = await fetch(`/api/geocode?lng=${lng}&lat=${lat}&language=zh`);
+          // Forward geocode English name → Chinese: more reliable than reverse geocode
+          // which returns the nearest place at a finer granularity (e.g. district instead of city)
+          const res = await fetch(`/api/geocode?q=${encodeURIComponent(loc.name)}&language=zh`);
           const data = await res.json();
           const nameZh = data.features?.[0]?.text || data.features?.[0]?.place_name || undefined;
           return { id: loc.id, nameZh };

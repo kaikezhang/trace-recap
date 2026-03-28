@@ -77,20 +77,20 @@ export default function MapCanvas() {
     const handleClick = async (e: mapboxgl.MapMouseEvent) => {
       const { lng, lat } = e.lngLat;
       try {
-        // Fetch English and Chinese names in parallel
-        const [resEn, resZh] = await Promise.all([
-          fetch(`/api/geocode?lng=${lng}&lat=${lat}`),
-          fetch(`/api/geocode?lng=${lng}&lat=${lat}&language=zh`),
-        ]);
-        const [dataEn, dataZh] = await Promise.all([resEn.json(), resZh.json()]);
+        // Reverse geocode for English name, then forward geocode that name → Chinese
+        const resEn = await fetch(`/api/geocode?lng=${lng}&lat=${lat}`);
+        const dataEn = await resEn.json();
         const name =
           dataEn.features?.[0]?.text ||
           dataEn.features?.[0]?.place_name ||
           `${lat.toFixed(2)}, ${lng.toFixed(2)}`;
-        const nameZh =
-          dataZh.features?.[0]?.text ||
-          dataZh.features?.[0]?.place_name ||
-          undefined;
+        // Forward geocode English name → Chinese (avoids granularity mismatch)
+        let nameZh: string | undefined;
+        try {
+          const resZh = await fetch(`/api/geocode?q=${encodeURIComponent(name)}&language=zh`);
+          const dataZh = await resZh.json();
+          nameZh = dataZh.features?.[0]?.text || dataZh.features?.[0]?.place_name || undefined;
+        } catch { /* non-critical */ }
         addLocation({ name, nameZh, coordinates: [lng, lat] });
       } catch {
         addLocation({
