@@ -4,7 +4,7 @@ import type { ExportSettings } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 
 export type ExportProgress = {
-  phase: "capturing" | "done";
+  phase: "capturing" | "finalizing" | "done";
   current: number;
   total: number;
 };
@@ -31,12 +31,24 @@ export class VideoExporter {
     this.cancelled = true;
   }
 
-  static isSupported(): boolean {
-    return typeof VideoEncoder !== "undefined";
+  static async isConfigSupported(): Promise<boolean> {
+    if (typeof VideoEncoder === "undefined") return false;
+    try {
+      const result = await VideoEncoder.isConfigSupported({
+        codec: "avc1.640028",
+        width: 1280,
+        height: 720,
+        bitrate: 5_000_000,
+        framerate: 30,
+      });
+      return result.supported === true;
+    } catch {
+      return false;
+    }
   }
 
   async export(onProgress: ProgressCallback): Promise<Blob | null> {
-    if (!VideoExporter.isSupported()) {
+    if (!(await VideoExporter.isConfigSupported())) {
       throw new Error(
         "Your browser doesn't support video encoding. Please use Chrome or Edge."
       );
@@ -112,6 +124,21 @@ export class VideoExporter {
       encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
 
+      // Backpressure: wait for encoder queue to drain if too large
+      if (encoder.encodeQueueSize > 5) {
+        await new Promise<void>((resolve) => {
+          const check = () => {
+            if (encoder.encodeQueueSize <= 2) {
+              encoder.removeEventListener("dequeue", check);
+              resolve();
+            }
+          };
+          encoder.addEventListener("dequeue", check);
+          // Check immediately in case it already drained
+          check();
+        });
+      }
+
       onProgress({
         phase: "capturing",
         current: i + 1,
@@ -124,7 +151,8 @@ export class VideoExporter {
       return null;
     }
 
-    // Flush encoder and finalize
+    // Finalizing phase: flush encoder and mux remaining data
+    onProgress({ phase: "finalizing", current: 1, total: 1 });
     await encoder.flush();
     encoder.close();
     muxer.finalize();

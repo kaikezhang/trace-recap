@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Download, X, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +31,10 @@ export default function ExportDialog() {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
 
-  const isSupported = useMemo(() => VideoExporter.isSupported(), []);
+  const [isSupported, setIsSupported] = useState<boolean | null>(null);
+  useEffect(() => {
+    VideoExporter.isConfigSupported().then(setIsSupported);
+  }, []);
 
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [resolution, setResolution] = useState("720");
@@ -129,7 +132,7 @@ export default function ExportDialog() {
             </Select>
           </div>
 
-          {!isSupported && (
+          {isSupported === false && (
             <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>
@@ -144,6 +147,8 @@ export default function ExportDialog() {
                 <span className="text-muted-foreground">
                   {progress.phase === "capturing"
                     ? "Capturing & encoding frames..."
+                    : progress.phase === "finalizing"
+                    ? "Finalizing video..."
                     : "Done!"}
                 </span>
                 {progress.phase === "capturing" && (
@@ -184,7 +189,7 @@ export default function ExportDialog() {
               <Button
                 className="flex-1"
                 onClick={handleExport}
-                disabled={segments.length === 0 || !isSupported}
+                disabled={segments.length === 0 || isSupported !== true}
               >
                 <Loader2 className="h-4 w-4 mr-2 animate-spin hidden" />
                 Start Export
