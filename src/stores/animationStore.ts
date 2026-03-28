@@ -6,6 +6,7 @@ interface AnimationState {
   currentTime: number;
   totalDuration: number;
   currentSegmentIndex: number;
+  currentGroupSegmentIndices: number[];
   currentPhase: string | null;
   currentCityLabel: string | null;
   visiblePhotos: Photo[];
@@ -16,6 +17,7 @@ interface AnimationState {
   setCurrentTime: (time: number) => void;
   setTotalDuration: (duration: number) => void;
   setCurrentSegmentIndex: (index: number) => void;
+  setCurrentGroupSegmentIndices: (indices: number[]) => void;
   setCurrentPhase: (phase: string | null) => void;
   setCurrentCityLabel: (label: string | null) => void;
   setVisiblePhotos: (photos: Photo[]) => void;
@@ -29,6 +31,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   currentTime: 0,
   totalDuration: 0,
   currentSegmentIndex: 0,
+  currentGroupSegmentIndices: [],
   currentPhase: null,
   currentCityLabel: null,
   visiblePhotos: [],
@@ -39,6 +42,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setCurrentTime: (currentTime) => set({ currentTime }),
   setTotalDuration: (totalDuration) => set({ totalDuration }),
   setCurrentSegmentIndex: (currentSegmentIndex) => set({ currentSegmentIndex }),
+  setCurrentGroupSegmentIndices: (currentGroupSegmentIndices) => set({ currentGroupSegmentIndices }),
   setCurrentPhase: (currentPhase) => set({ currentPhase }),
   setCurrentCityLabel: (currentCityLabel) => set({ currentCityLabel }),
   setVisiblePhotos: (visiblePhotos) => set({ visiblePhotos }),
@@ -49,6 +53,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       playbackState: "idle",
       currentTime: 0,
       currentSegmentIndex: 0,
+      currentGroupSegmentIndices: [],
       currentPhase: null,
       currentCityLabel: null,
       visiblePhotos: [],

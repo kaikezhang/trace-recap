@@ -93,6 +93,11 @@ export const useProjectStore = create<ProjectState>((set) => ({
   removeLocation: (id) =>
     set((state) => {
       const locations = state.locations.filter((l) => l.id !== id);
+      // Ensure first and last locations are never waypoints
+      if (locations.length > 0) {
+        locations[0] = { ...locations[0], isWaypoint: false };
+        locations[locations.length - 1] = { ...locations[locations.length - 1], isWaypoint: false };
+      }
       return {
         locations,
         segments: rebuildSegments(locations, state.segments),
@@ -104,6 +109,11 @@ export const useProjectStore = create<ProjectState>((set) => ({
       const locations = [...state.locations];
       const [moved] = locations.splice(fromIndex, 1);
       locations.splice(toIndex, 0, moved);
+      // Ensure first and last locations are never waypoints
+      if (locations.length > 0) {
+        locations[0] = { ...locations[0], isWaypoint: false };
+        locations[locations.length - 1] = { ...locations[locations.length - 1], isWaypoint: false };
+      }
       return {
         locations,
         segments: rebuildSegments(locations, state.segments),

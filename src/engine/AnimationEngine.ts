@@ -184,16 +184,30 @@ export class AnimationEngine {
     }
 
     const totalVariable = Math.max(totalTarget - totalFixed, n * 1.5);
-    const variablePerGroup = totalVariable / n;
+
+    // Compute each group's merged route length for proportional FLY timing
+    const groupLengths = this.groups.map((g) => {
+      if (g.mergedGeometry && g.mergedGeometry.coordinates.length >= 2) {
+        return turf.length(turf.lineString(g.mergedGeometry.coordinates));
+      }
+      return 0;
+    });
+    const totalRouteLength = groupLengths.reduce((sum, l) => sum + l, 0);
 
     for (let i = 0; i < n; i++) {
       const group = this.groups[i];
       const hasPhotos = group.toLoc.photos.length > 0;
 
+      // Distribute variable time proportionally to route length
+      const proportion = totalRouteLength > 0
+        ? groupLengths[i] / totalRouteLength
+        : 1 / n;
+      const variableForGroup = totalVariable * proportion;
+
       const hoverTime = this.camera.getHoverDuration(i);
-      const zoomOutDur = variablePerGroup * 0.25;
-      const flyDur = variablePerGroup * 0.45;
-      const zoomInDur = variablePerGroup * 0.3;
+      const zoomOutDur = variableForGroup * 0.25;
+      const flyDur = variableForGroup * 0.45;
+      const zoomInDur = variableForGroup * 0.3;
       const arriveDur = arriveTime + (hasPhotos ? photoTime : 0);
 
       const phases: SegmentTiming["phases"] = [

@@ -44,6 +44,7 @@ export default function MapCanvas() {
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
+  const currentGroupSegmentIndices = useAnimationStore((s) => s.currentGroupSegmentIndices);
 
   // Initialize map
   useEffect(() => {
@@ -210,13 +211,25 @@ export default function MapCanvas() {
       const ps = useAnimationStore.getState().playbackState;
       const csi = useAnimationStore.getState().currentSegmentIndex;
       if (ps === "playing" || ps === "paused") {
+        const gsIndices = new Set(useAnimationStore.getState().currentGroupSegmentIndices);
+        const firstGIdx = gsIndices.size > 0
+          ? Math.min(...gsIndices)
+          : csi;
         segments.forEach((seg, idx) => {
           const lid = SEGMENT_LAYER_PREFIX + seg.id;
           const glid = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
-          const vis = idx <= csi ? "visible" : "none";
-          if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", vis);
-          if (map.getLayer(glid)) map.setLayoutProperty(glid, "visibility", vis);
-          if (idx > csi) setSegmentSourceData(map, seg.id, seg.geometry, 0);
+          if (gsIndices.has(idx)) {
+            // Current group: visible but source managed by routeDrawProgress
+            if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", "visible");
+            if (map.getLayer(glid)) map.setLayoutProperty(glid, "visibility", "visible");
+          } else if (idx < firstGIdx) {
+            if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", "visible");
+            if (map.getLayer(glid)) map.setLayoutProperty(glid, "visibility", "visible");
+          } else {
+            if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", "none");
+            if (map.getLayer(glid)) map.setLayoutProperty(glid, "visibility", "none");
+            setSegmentSourceData(map, seg.id, seg.geometry, 0);
+          }
         });
       } else {
         // Idle (or exporting): show all segments with full geometry.
@@ -259,22 +272,30 @@ export default function MapCanvas() {
 
       if (playbackState === "playing" || playbackState === "paused") {
         const segmentChanged = currentSegmentIndex !== prevSegmentIndexRef.current;
+        const groupIndicesSet = new Set(currentGroupSegmentIndices);
+        const firstGroupIdx = currentGroupSegmentIndices.length > 0
+          ? currentGroupSegmentIndices[0]
+          : currentSegmentIndex;
 
         segments.forEach((seg, i) => {
           const layerId = SEGMENT_LAYER_PREFIX + seg.id;
           const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
 
-          if (i < currentSegmentIndex) {
-            if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
-            if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
-            setSegmentSourceData(map, seg.id, seg.geometry);
-          } else if (i === currentSegmentIndex) {
+          if (groupIndicesSet.has(i)) {
+            // Segments in the current group: visibility managed by routeDrawProgress handler
+            // Just ensure layers are visible; source data is set by routeDrawProgress
             if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
             if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
             if (segmentChanged) {
               setSegmentSourceData(map, seg.id, seg.geometry, 0);
             }
+          } else if (i < firstGroupIdx) {
+            // Past segments (before the current group): fully drawn
+            if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
+            if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
+            setSegmentSourceData(map, seg.id, seg.geometry);
           } else {
+            // Future segments (after the current group): hidden
             if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "none");
             if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "none");
           }
@@ -304,7 +325,7 @@ export default function MapCanvas() {
         map.off("style.load", applyVisibility);
       };
     }
-  }, [playbackState, currentSegmentIndex, segments]);
+  }, [playbackState, currentSegmentIndex, currentGroupSegmentIndices, segments]);
 
   // Sync map style — re-add layers after style change
   useEffect(() => {

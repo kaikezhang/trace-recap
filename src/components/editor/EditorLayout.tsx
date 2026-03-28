@@ -34,6 +34,7 @@ function EditorContent() {
   const setVisiblePhotos = useAnimationStore((s) => s.setVisiblePhotos);
   const setShowPhotoOverlay = useAnimationStore((s) => s.setShowPhotoOverlay);
   const setCurrentSegmentIndex = useAnimationStore((s) => s.setCurrentSegmentIndex);
+  const setCurrentGroupSegmentIndices = useAnimationStore((s) => s.setCurrentGroupSegmentIndices);
   const reset = useAnimationStore((s) => s.reset);
 
   const currentCityLabel = useAnimationStore((s) => s.currentCityLabel);
@@ -60,6 +61,7 @@ function EditorContent() {
     engine.on("progress", (e) => {
       setCurrentTime(e.time);
       setCurrentSegmentIndex(e.segmentIndex);
+      setCurrentGroupSegmentIndices(e.groupSegmentIndices);
       setCurrentCityLabel(e.cityLabel);
       setShowPhotoOverlay(e.showPhotos);
       if (e.showPhotos) {

@@ -98,8 +98,8 @@ export class IconAnimator {
     const bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
     const direction = bearingToDirection(bearing);
 
-    // Use the first segment's transport mode for the icon
-    const mode = group.segments[0].transportMode;
+    // Determine which sub-segment the current position is on for the correct icon
+    const mode = this.getTransportModeAtProgress(group, totalLength, phase, progress);
     this.setIcon(mode, direction);
 
     let position: [number, number];
@@ -149,6 +149,39 @@ export class IconAnimator {
     this.iconEl.style.height = `${size}px`;
     this.iconEl.style.opacity = showIcon ? String(opacity) : "0";
     this.iconEl.style.display = showIcon ? "block" : "none";
+  }
+
+  private getTransportModeAtProgress(
+    group: AnimationGroup,
+    totalLength: number,
+    phase: AnimationPhase,
+    progress: number
+  ): TransportMode {
+    // For single-segment groups or non-FLY phases, use the first/last segment
+    if (group.segments.length <= 1) return group.segments[0].transportMode;
+    if (phase === "ARRIVE" || phase === "ZOOM_IN") {
+      return group.segments[group.segments.length - 1].transportMode;
+    }
+    if (phase === "HOVER") {
+      return group.segments[0].transportMode;
+    }
+
+    // For FLY and ZOOM_OUT, determine position along the merged route
+    const distance = phase === "ZOOM_OUT"
+      ? progress * 0.05 * totalLength
+      : progress * totalLength;
+
+    let accumulated = 0;
+    for (const seg of group.segments) {
+      if (!seg.geometry || seg.geometry.coordinates.length < 2) continue;
+      const segLength = turf.length(turf.lineString(seg.geometry.coordinates));
+      accumulated += segLength;
+      if (distance <= accumulated) {
+        return seg.transportMode;
+      }
+    }
+
+    return group.segments[group.segments.length - 1].transportMode;
   }
 
   hide() {
