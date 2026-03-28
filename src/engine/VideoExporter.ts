@@ -60,11 +60,15 @@ export class VideoExporter {
           bitrate: VideoExporter.BITRATE,
           framerate: f,
         });
+        console.log('[codec]', codec, w + 'x' + h, '→', result.supported);
         if (result.supported) {
           return codec;
         }
-      } catch { /* skip */ }
+      } catch (e) {
+        console.log('[codec] ' + codec + ' error:', e);
+      }
     }
+    console.log('[codec] No supported codec found for', w, 'x', h, '@', f, 'fps');
     return null;
   }
 
