@@ -11,6 +11,7 @@ export interface ImportRouteData {
   name: string;
   locations: {
     name: string;
+    nameZh?: string;
     coordinates: [number, number];
     isWaypoint?: boolean;
     photos?: { url: string; caption?: string }[];
@@ -38,6 +39,7 @@ interface ProjectState {
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
   importRoute: (data: ImportRouteData) => void;
+  enrichChineseNames: () => Promise<void>;
   exportRoute: () => Promise<ImportRouteData>;
 }
 
@@ -94,6 +96,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const newLocation: Location = {
         id: generateId(),
         name: loc.name,
+        nameZh: loc.nameZh,
         coordinates: loc.coordinates,
         isWaypoint: false,
         photos: [],
@@ -225,6 +228,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         );
         return {
           name: loc.name,
+          nameZh: loc.nameZh,
           coordinates: loc.coordinates as [number, number],
           isWaypoint: loc.isWaypoint ?? false,
           ...(photos.length > 0 ? { photos } : {}),
@@ -256,6 +260,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         return {
           id: locId,
           name: loc.name,
+          nameZh: loc.nameZh,
           coordinates: loc.coordinates,
           photos,
           isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
@@ -272,4 +277,32 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
       return { locations, segments };
     }),
+
+  enrichChineseNames: async () => {
+    const { locations } = get();
+    const needsZh = locations.filter((l) => !l.nameZh && !l.isWaypoint);
+    if (needsZh.length === 0) return;
+
+    const updates = await Promise.all(
+      needsZh.map(async (loc) => {
+        try {
+          // Forward geocode English name → Chinese: more reliable than reverse geocode
+          // which returns the nearest place at a finer granularity (e.g. district instead of city)
+          const res = await fetch(`/api/geocode?q=${encodeURIComponent(loc.name)}&language=zh`);
+          const data = await res.json();
+          const nameZh = data.features?.[0]?.text || data.features?.[0]?.place_name || undefined;
+          return { id: loc.id, nameZh };
+        } catch {
+          return { id: loc.id, nameZh: undefined };
+        }
+      })
+    );
+
+    set((state) => ({
+      locations: state.locations.map((loc) => {
+        const update = updates.find((u) => u.id === loc.id);
+        return update?.nameZh ? { ...loc, nameZh: update.nameZh } : loc;
+      }),
+    }));
+  },
 }));

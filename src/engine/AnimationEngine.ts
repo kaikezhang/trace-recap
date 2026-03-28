@@ -25,6 +25,7 @@ export interface AnimationEvent {
   segmentIndex: number;
   phase: AnimationPhase;
   cityLabel: string | null;
+  cityLabelZh: string | null;
   showPhotos: boolean;
   /** For routeDrawProgress: fraction of route drawn (0-1) */
   routeDrawFraction?: number;
@@ -365,6 +366,7 @@ export class AnimationEngine {
         segmentIndex: this.segments.length - 1,
         phase: "ARRIVE",
         cityLabel: null,
+        cityLabelZh: null,
         showPhotos: false,
         groupIndex: lastGroupIdx,
         groupSegmentIndices: this.groupSegmentIndices[lastGroupIdx] ?? [],
@@ -406,8 +408,14 @@ export class AnimationEngine {
 
     // City label — only for destinations (group endpoints), not waypoints
     let cityLabel: string | null = null;
-    if (phase === "HOVER") cityLabel = group.fromLoc.name;
-    else if (phase === "ARRIVE") cityLabel = group.toLoc.name;
+    let cityLabelZh: string | null = null;
+    if (phase === "HOVER") {
+      cityLabel = group.fromLoc.name;
+      cityLabelZh = group.fromLoc.nameZh ?? null;
+    } else if (phase === "ARRIVE") {
+      cityLabel = group.toLoc.name;
+      cityLabelZh = group.toLoc.nameZh ?? null;
+    }
 
     // Photos
     const showPhotos = phase === "ARRIVE" && group.toLoc.photos.length > 0;
@@ -420,6 +428,7 @@ export class AnimationEngine {
       segmentIndex,
       phase,
       cityLabel,
+      cityLabelZh,
       showPhotos,
       groupIndex,
       groupSegmentIndices: segIndices,
@@ -434,6 +443,7 @@ export class AnimationEngine {
         segmentIndex,
         phase,
         cityLabel: null,
+        cityLabelZh: null,
         showPhotos: false,
         routeDrawFraction: 0,
         groupIndex,
@@ -450,6 +460,7 @@ export class AnimationEngine {
         segmentIndex,
         phase,
         cityLabel: null,
+        cityLabelZh: null,
         showPhotos: false,
         routeDrawFraction: easing(phaseProgress),
         groupIndex,
@@ -463,6 +474,7 @@ export class AnimationEngine {
         segmentIndex,
         phase,
         cityLabel: null,
+        cityLabelZh: null,
         showPhotos: false,
         routeDrawFraction: 1,
         groupIndex,

@@ -17,6 +17,7 @@ export interface Photo {
 export interface Location {
   id: string;
   name: string;
+  nameZh?: string; // Chinese name from geocoding
   coordinates: [number, number]; // [lng, lat]
   photos: Photo[];
   isWaypoint: boolean;
@@ -73,6 +74,8 @@ export interface ExportSettings {
   aspectRatio: AspectRatio;
   resolution: number; // height in pixels (720 or 1080)
   fps: number;
+  cityLabelSize?: number; // CSS font size in px (default 18)
+  cityLabelLang?: "en" | "zh";
 }
 
 export type MapStyle = "light" | "dark" | "satellite";

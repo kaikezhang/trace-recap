@@ -13,6 +13,7 @@ import RouteList from "./RouteList";
 export default function BottomSheet() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importRoute = useProjectStore((s) => s.importRoute);
+  const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
   const exportRoute = useProjectStore((s) => s.exportRoute);
   const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
   const locations = useProjectStore((s) => s.locations);
@@ -39,6 +40,8 @@ export default function BottomSheet() {
       const text = await file.text();
       const data: ImportRouteData = JSON.parse(text);
       importRoute(data);
+      // Fetch Chinese names for imported locations (non-blocking)
+      enrichChineseNames();
 
       const state = useProjectStore.getState();
       for (const seg of state.segments) {

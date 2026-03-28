@@ -9,6 +9,7 @@ interface AnimationState {
   currentGroupSegmentIndices: number[];
   currentPhase: string | null;
   currentCityLabel: string | null;
+  currentCityLabelZh: string | null;
   visiblePhotos: Photo[];
   showPhotoOverlay: boolean;
   timeline: SegmentTiming[];
@@ -20,6 +21,7 @@ interface AnimationState {
   setCurrentGroupSegmentIndices: (indices: number[]) => void;
   setCurrentPhase: (phase: string | null) => void;
   setCurrentCityLabel: (label: string | null) => void;
+  setCurrentCityLabelZh: (label: string | null) => void;
   setVisiblePhotos: (photos: Photo[]) => void;
   setShowPhotoOverlay: (show: boolean) => void;
   setTimeline: (timeline: SegmentTiming[]) => void;
@@ -34,6 +36,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   currentGroupSegmentIndices: [],
   currentPhase: null,
   currentCityLabel: null,
+  currentCityLabelZh: null,
   visiblePhotos: [],
   showPhotoOverlay: false,
   timeline: [],
@@ -45,6 +48,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setCurrentGroupSegmentIndices: (currentGroupSegmentIndices) => set({ currentGroupSegmentIndices }),
   setCurrentPhase: (currentPhase) => set({ currentPhase }),
   setCurrentCityLabel: (currentCityLabel) => set({ currentCityLabel }),
+  setCurrentCityLabelZh: (currentCityLabelZh) => set({ currentCityLabelZh }),
   setVisiblePhotos: (visiblePhotos) => set({ visiblePhotos }),
   setShowPhotoOverlay: (showPhotoOverlay) => set({ showPhotoOverlay }),
   setTimeline: (timeline) => set({ timeline }),
@@ -56,6 +60,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       currentGroupSegmentIndices: [],
       currentPhase: null,
       currentCityLabel: null,
+      currentCityLabelZh: null,
       visiblePhotos: [],
       showPhotoOverlay: false,
     }),
