@@ -222,9 +222,33 @@ function EditorContent() {
             // Check if this is an intermediate waypoint within the group
             const locIdx = group.allLocations.findIndex((l) => l.id === targetLoc.id);
             if (locIdx > 0 && locIdx < group.allLocations.length - 1) {
-              // Waypoint found — seek proportionally within the FLY phase
+              // Waypoint found — seek proportionally by accumulated route distance within FLY phase
               const flyPhase = timeline[gi]?.phases.find((p) => p.phase === "FLY");
-              if (flyPhase) {
+              if (flyPhase && group.mergedGeometry && group.mergedGeometry.coordinates.length >= 2) {
+                // Compute accumulated segment lengths to find distance-based fraction
+                let accumulatedDist = 0;
+                let totalDist = 0;
+                try {
+                  const mergedLine = turf.lineString(group.mergedGeometry.coordinates);
+                  totalDist = turf.length(mergedLine);
+                  // Sum segment distances up to the waypoint (locIdx segments from start)
+                  for (let si = 0; si < group.segments.length; si++) {
+                    const seg = group.segments[si];
+                    if (seg.geometry && seg.geometry.coordinates.length >= 2) {
+                      const segLen = turf.length(turf.lineString(seg.geometry.coordinates));
+                      if (si < locIdx) {
+                        accumulatedDist += segLen;
+                      }
+                    }
+                  }
+                } catch {
+                  // Fallback to ordinal fraction
+                  totalDist = 1;
+                  accumulatedDist = locIdx / (group.allLocations.length - 1);
+                }
+                const fraction = totalDist > 0 ? accumulatedDist / totalDist : locIdx / (group.allLocations.length - 1);
+                seekTime = flyPhase.startTime + flyPhase.duration * fraction;
+              } else if (flyPhase) {
                 const fraction = locIdx / (group.allLocations.length - 1);
                 seekTime = flyPhase.startTime + flyPhase.duration * fraction;
               }
@@ -235,6 +259,7 @@ function EditorContent() {
       }
 
       engine.seekTo(seekTime / totalDuration);
+      engine.pause();
       setPlaybackState("paused");
     },
     [locations, setPlaybackState]

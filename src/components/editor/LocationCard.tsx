@@ -68,6 +68,7 @@ function EditableName({
 
   return (
     <span
+      data-no-seek
       className={`cursor-pointer hover:underline decoration-dotted underline-offset-2 ${className ?? ""}`}
       onClick={() => {
         setDraft(value);
@@ -121,9 +122,9 @@ export default function LocationCard({
         isDragOver ? "ring-2 ring-primary ring-offset-1 bg-primary/5" : ""
       } ${onClick ? "cursor-pointer" : ""}`}
       onClick={(e) => {
-        // Don't trigger if clicking on buttons or interactive elements
+        // Don't trigger if clicking on buttons, inputs, or editable name spans
         const target = e.target as HTMLElement;
-        if (target.closest("button") || target.closest("input")) return;
+        if (target.closest("button") || target.closest("input") || target.closest("[data-no-seek]") || target.closest("[contenteditable]")) return;
         onClick?.(index);
       }}
     >

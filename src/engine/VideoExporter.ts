@@ -411,7 +411,7 @@ export class VideoExporter {
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
     const captionFontSize = 14 * scaleX;
-    const captionGap = 4 * scaleX;
+    const captionH = 28 * scaleX; // fixed height matching preview (PhotoOverlay)
 
     const containerAspect = canvasWidth / canvasHeight;
     const layoutMetas = loaded.map(({ photo, preloaded }) => ({
@@ -435,13 +435,15 @@ export class VideoExporter {
       const frameW = rw;
       const frameH = rh;
       const imgW = frameW - pad * 2;
-      const imgH = frameH - pad * 2 - (hasCaption ? captionFontSize + captionGap + pad : 0);
+      const imgH = frameH - pad * 2 - (hasCaption ? captionH : 0);
 
-      // Determine rotation
+      // Determine rotation — must match preview (PhotoOverlay)
       let rotation = 0;
-      if (count <= 3 && count > 1) {
+      if (count <= 3) {
         if (i === 0) rotation = -2;
         else if (i === count - 1) rotation = 2;
+      } else {
+        rotation = i % 2 === 0 ? -1.5 : 1.5;
       }
 
       const centerX = rx + frameW / 2;
@@ -516,11 +518,11 @@ export class VideoExporter {
         ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
         ctx.fillStyle = "#374151";
         ctx.textAlign = "center";
-        ctx.textBaseline = "top";
+        ctx.textBaseline = "middle";
         ctx.fillText(
           photo.caption!,
           0,
-          -frameH / 2 + pad + imgH + captionGap,
+          -frameH / 2 + pad + imgH + captionH / 2,
           imgW
         );
       }

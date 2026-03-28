@@ -88,7 +88,7 @@ export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
         bottom: 0,
         left: 0,
         right: 0,
-        display: visible && ready ? undefined : "none",
+        visibility: visible && ready ? "visible" : "hidden",
       }}
     >
       <AnimatePresence>
