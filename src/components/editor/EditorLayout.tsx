@@ -204,16 +204,29 @@ function EditorContent() {
           seekTime = hoverPhase ? hoverPhase.startTime : timeline[0].startTime;
         }
       } else {
-        // Find the group whose toLoc matches this location
+        // Find the group whose toLoc or allLocations contains this location
         const targetLoc = locations[index];
         if (targetLoc) {
           for (let gi = 0; gi < groups.length; gi++) {
-            if (groups[gi].toLoc.id === targetLoc.id) {
+            const group = groups[gi];
+            if (group.toLoc.id === targetLoc.id) {
+              // Exact match on toLoc — seek to ARRIVE phase
               const arrivePhase = timeline[gi]?.phases.find((p) => p.phase === "ARRIVE");
               if (arrivePhase) {
                 seekTime = arrivePhase.startTime;
               } else if (timeline[gi]) {
                 seekTime = timeline[gi].startTime + timeline[gi].duration;
+              }
+              break;
+            }
+            // Check if this is an intermediate waypoint within the group
+            const locIdx = group.allLocations.findIndex((l) => l.id === targetLoc.id);
+            if (locIdx > 0 && locIdx < group.allLocations.length - 1) {
+              // Waypoint found — seek proportionally within the FLY phase
+              const flyPhase = timeline[gi]?.phases.find((p) => p.phase === "FLY");
+              if (flyPhase) {
+                const fraction = locIdx / (group.allLocations.length - 1);
+                seekTime = flyPhase.startTime + flyPhase.duration * fraction;
               }
               break;
             }

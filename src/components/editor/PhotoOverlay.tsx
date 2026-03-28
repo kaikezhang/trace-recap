@@ -73,22 +73,32 @@ export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
     ? computeAutoLayout(layoutMetas, containerAspect, 8, containerSize.w || 1000)
     : [];
 
+  // Caption sizing: match export constants (captionFontSize ~14px at 1000px width, plus gap)
+  const captionH = 28; // space for caption text + gap below image
+
   return (
-    <AnimatePresence>
-      {visible && ready && (
-        <motion.div
-          ref={containerRef}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="absolute inset-0 z-20 pointer-events-none"
-          style={{ width: "95vw", height: "88vh", margin: "auto", top: 0, bottom: 0, left: 0, right: 0 }}
-        >
-          {rects.map((rect, i) => {
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-20 pointer-events-none"
+      style={{
+        width: "95vw",
+        height: "88vh",
+        margin: "auto",
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        display: visible && ready ? undefined : "none",
+      }}
+    >
+      <AnimatePresence>
+        {visible && ready &&
+          rects.map((rect, i) => {
             const photo = metas[i];
             if (!photo) return null;
             const n = metas.length;
+            const hasCaption = !!photo.caption;
+            const pad = 6; // px padding inside frame
             return (
               <motion.div
                 key={photo.id}
@@ -108,21 +118,33 @@ export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
                   width: `${rect.width * 100}%`,
                   height: `${rect.height * 100}%`,
                   rotate: n <= 3 ? (i === 0 ? -2 : i === n - 1 ? 2 : 0) : (i % 2 === 0 ? -1.5 : 1.5),
+                  padding: `${pad}px`,
+                  display: "flex",
+                  flexDirection: "column" as const,
                 }}
               >
-                <img
-                  src={photo.url}
-                  alt={photo.caption || ""}
-                  className="w-full h-full object-cover"
-                />
-                {photo.caption && (
-                  <p className="absolute bottom-0 left-0 right-0 px-3 py-2 text-sm text-gray-700 bg-white/90">{photo.caption}</p>
+                <div
+                  className="w-full rounded-lg overflow-hidden"
+                  style={{ flex: 1, minHeight: 0 }}
+                >
+                  <img
+                    src={photo.url}
+                    alt={photo.caption || ""}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                {hasCaption && (
+                  <p
+                    className="text-sm text-gray-700 text-center truncate px-1"
+                    style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, flexShrink: 0 }}
+                  >
+                    {photo.caption}
+                  </p>
                 )}
               </motion.div>
             );
           })}
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </AnimatePresence>
+    </div>
   );
 }
