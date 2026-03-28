@@ -106,7 +106,7 @@ export class VideoExporter {
     });
 
     encoder.configure({
-      codec: "avc1.640028", // H.264 High Profile Level 4.0
+      codec: VideoExporter.detectedCodec || "avc1.42001f",
       width,
       height,
       bitrate: 5_000_000,
