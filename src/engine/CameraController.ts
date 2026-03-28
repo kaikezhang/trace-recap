@@ -17,6 +17,7 @@ interface GroupCamera {
   midpoint: [number, number];
   flyZoom: number;
   arriveZoom: number;
+  segmentCount: number; // >1 means has waypoints
   routeLine: GeoJSON.LineString | null;
   routeLength: number;
   distanceKm: number;
@@ -80,6 +81,7 @@ export class CameraController {
         routeLine,
         routeLength,
         distanceKm: distKm,
+        segmentCount: group.segments.length,
       };
     });
 
@@ -175,16 +177,22 @@ export class CameraController {
       }
 
       case "FLY": {
-        // Camera follows smooth straight-line path
         const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
 
-        // Gradual zoom during FLY — start zooming in the last 25%
-        // This gives a smooth arrival without a sudden ZOOM_IN phase
+        // For waypoint groups: don't start zoom until past the last waypoint
+        // Last waypoint is at roughly (segmentCount-1)/segmentCount progress
+        // For single-segment groups: start zoom at 75%
+        let zoomStartAt: number;
+        if (gc.segmentCount > 1) {
+          // Start zoom after last waypoint + a small buffer
+          zoomStartAt = Math.min((gc.segmentCount - 1) / gc.segmentCount + 0.05, 0.95);
+        } else {
+          zoomStartAt = 0.75;
+        }
+
         let zoom: number;
-        const zoomStartAt = 0.75;
         if (eased > zoomStartAt) {
           const zoomProgress = (eased - zoomStartAt) / (1 - zoomStartAt);
-          // Only reach 70% of target zoom during FLY — ZOOM_IN does the rest
           zoom = lerp(gc.flyZoom, gc.arriveZoom, zoomProgress * 0.7);
         } else {
           zoom = gc.flyZoom;
