@@ -37,13 +37,12 @@ export default function PlaybackControls({
   return (
     <div
       className={[
-        "z-10 flex items-center gap-2 md:gap-3 bg-background/90 backdrop-blur-sm border shadow-lg px-3 md:px-4 py-2",
-        // Mobile: full-width bar above the collapsed bottom sheet (56px)
-        // When bottom sheet is expanded, slide up above the 60vh sheet
-        "absolute left-0 right-0 rounded-none transition-[bottom] duration-300 ease-out",
+        "flex items-center gap-2 md:gap-3 bg-background/90 backdrop-blur-sm border shadow-lg px-3 md:px-4 py-2",
+        // Mobile: fixed full-width bar, z above BottomSheet (z-50)
+        "fixed left-0 right-0 z-[60] rounded-none transition-[bottom] duration-300 ease-out",
         bottomSheetExpanded ? "bottom-[60vh]" : "bottom-14",
-        // Desktop: floating centered pill (bottom sheet state irrelevant)
-        "md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:rounded-xl md:w-auto",
+        // Desktop: override to absolute, centered floating pill
+        "md:absolute md:z-10 md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:rounded-xl md:w-auto",
       ].join(" ")}
     >
       <Button
