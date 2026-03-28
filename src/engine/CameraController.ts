@@ -175,21 +175,25 @@ export class CameraController {
       }
 
       case "FLY": {
-        let center: [number, number];
+        // Camera follows smooth straight-line path
+        const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
 
-        // Camera follows a smooth straight-line path (fromCenter → toCenter)
-        // NOT the road geometry — this prevents jitter on winding roads
-        // The icon still follows the actual road in IconAnimator
-        {
-          center = lerp2d(gc.fromCenter, gc.toCenter, eased);
+        // Start zooming in during the last 40% of FLY
+        // so we arrive already mostly zoomed in
+        let zoom: number;
+        if (eased > 0.6) {
+          const zoomProgress = (eased - 0.6) / 0.4; // 0→1 over last 40%
+          zoom = lerp(gc.flyZoom, gc.arriveZoom, zoomProgress * 0.8); // reach 80% of target
+        } else {
+          zoom = gc.flyZoom;
         }
-
-        const zoom = gc.flyZoom;
         return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "ZOOM_IN": {
-        const zoom = lerp(gc.flyZoom, gc.arriveZoom, eased);
+        // Just finish the last 20% of zoom — should be quick
+        const startZoom = lerp(gc.flyZoom, gc.arriveZoom, 0.8);
+        const zoom = lerp(startZoom, gc.arriveZoom, eased);
         return { center: gc.toCenter, zoom, bearing: 0, pitch: 0 };
       }
 

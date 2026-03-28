@@ -221,9 +221,9 @@ export class AnimationEngine {
       const hoverTime = this.camera.getHoverDuration(i);
       // Minimum 1.5s for variable portion so short legs aren't invisible
       const effectiveVariable = Math.max(variableForGroup, 1.5);
-      const zoomOutDur = effectiveVariable * 0.25;
-      const flyDur = effectiveVariable * 0.45;
-      const zoomInDur = effectiveVariable * 0.3;
+      const zoomOutDur = effectiveVariable * 0.2;
+      const flyDur = effectiveVariable * 0.65;  // longer fly, zoom happens during fly
+      const zoomInDur = effectiveVariable * 0.15; // shorter, just final settle
       const arriveDur = arriveTime + (hasPhotos ? photoTime : 0);
 
       const phases: SegmentTiming["phases"] = [
