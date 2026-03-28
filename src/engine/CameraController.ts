@@ -48,7 +48,7 @@ export class CameraController {
       );
 
       const routeLine = group.mergedGeometry;
-      const routeLength = routeLine
+      const routeLength = routeLine && routeLine.coordinates && routeLine.coordinates.length >= 2
         ? turf.length(turf.lineString(routeLine.coordinates))
         : distKm;
 
