@@ -39,33 +39,32 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
 }
 
 // Split photos into rows for optimal space usage
+// Core idea: group portraits together and landscapes together into separate rows
 function layoutRows(photos: PhotoMeta[]): PhotoMeta[][] {
   const n = photos.length;
-  if (n <= 2) return [photos];
+  if (n <= 1) return [photos];
 
   const portraits = photos.filter(p => p.aspect < 0.9);
   const landscapes = photos.filter(p => p.aspect >= 0.9);
 
-  if (n === 3) {
-    // 2 portraits + 1 landscape → portraits top, landscape bottom
-    if (portraits.length === 2) return [portraits, landscapes];
-    // 2 landscapes + 1 portrait → landscapes top, portrait bottom
-    if (landscapes.length >= 2) return [landscapes, portraits];
-    // All similar → one row
-    return [photos];
+  // If all same orientation, split evenly into rows
+  if (portraits.length === 0) {
+    // All landscape
+    if (n <= 3) return [photos];
+    return [photos.slice(0, Math.ceil(n / 2)), photos.slice(Math.ceil(n / 2))];
+  }
+  if (landscapes.length === 0) {
+    // All portrait — fit more per row since they're narrow
+    if (n <= 4) return [photos];
+    return [photos.slice(0, Math.ceil(n / 2)), photos.slice(Math.ceil(n / 2))];
   }
 
-  if (n === 4) {
-    // Split 2+2
-    return [photos.slice(0, 2), photos.slice(2)];
+  // Mixed: always split by orientation — portraits in one row, landscapes in another
+  // Put the larger group on top
+  if (portraits.length >= landscapes.length) {
+    return [portraits, landscapes];
   }
-
-  if (n === 5) {
-    // Split 3+2
-    return [photos.slice(0, 3), photos.slice(3)];
-  }
-
-  return [photos];
+  return [landscapes, portraits];
 }
 
 // Size for a photo based on its row context
