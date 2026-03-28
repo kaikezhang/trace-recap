@@ -31,22 +31,40 @@ export class VideoExporter {
     this.cancelled = true;
   }
 
+  private static readonly CODEC_CANDIDATES = [
+    "avc1.42001f", // H.264 Baseline Level 3.1
+    "avc1.4d0028", // H.264 Main Profile Level 4.0
+    "avc1.640028", // H.264 High Profile Level 4.0
+  ];
+
+  private static detectedCodec: string | null = null;
+
+  static async findSupportedCodec(
+    config?: { width?: number; height?: number; fps?: number }
+  ): Promise<string | null> {
+    if (typeof VideoEncoder === "undefined") return null;
+    const w = config?.width ?? 1280;
+    const h = config?.height ?? 720;
+    const f = config?.fps ?? 30;
+    for (const codec of VideoExporter.CODEC_CANDIDATES) {
+      try {
+        const result = await VideoEncoder.isConfigSupported({
+          codec, width: w, height: h, bitrate: 5_000_000, framerate: f,
+        });
+        if (result.supported) {
+          VideoExporter.detectedCodec = codec;
+          return codec;
+        }
+      } catch { /* skip */ }
+    }
+    return null;
+  }
+
   static async isConfigSupported(
     config?: { width?: number; height?: number; fps?: number }
   ): Promise<boolean> {
-    if (typeof VideoEncoder === "undefined") return false;
-    try {
-      const result = await VideoEncoder.isConfigSupported({
-        codec: "avc1.640028",
-        width: config?.width ?? 1280,
-        height: config?.height ?? 720,
-        bitrate: 5_000_000,
-        framerate: config?.fps ?? 30,
-      });
-      return result.supported === true;
-    } catch {
-      return false;
-    }
+    const codec = await VideoExporter.findSupportedCodec(config);
+    return codec !== null;
   }
 
   async export(onProgress: ProgressCallback): Promise<Blob | null> {
