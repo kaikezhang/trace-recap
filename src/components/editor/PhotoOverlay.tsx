@@ -49,9 +49,9 @@ function layoutRows(photos: PhotoMeta[]): PhotoMeta[][] {
 
   // If all same orientation, split evenly into rows
   if (portraits.length === 0) {
-    // All landscape
-    if (n <= 3) return [photos];
-    return [photos.slice(0, Math.ceil(n / 2)), photos.slice(Math.ceil(n / 2))];
+    // All landscape — stack vertically so each can be wider
+    if (n === 1) return [photos];
+    return photos.map(p => [p]); // Each photo its own row
   }
   if (landscapes.length === 0) {
     // All portrait — fit more per row since they're narrow
@@ -71,7 +71,7 @@ function layoutRows(photos: PhotoMeta[]): PhotoMeta[][] {
 function getSize(photo: PhotoMeta, rowLen: number, totalRows: number): { maxW: string; maxH: string } {
   const isP = photo.aspect < 0.9;
   const isL = photo.aspect >= 0.9;
-  const heightBudget = totalRows === 1 ? "70vh" : totalRows === 2 ? "42vh" : "35vh";
+  const heightBudget = totalRows === 1 ? "70vh" : totalRows === 2 ? "42vh" : totalRows === 3 ? "28vh" : totalRows === 4 ? "21vh" : "18vh";
 
   if (rowLen === 1) {
     if (isP) return { maxW: "40vw", maxH: heightBudget };
