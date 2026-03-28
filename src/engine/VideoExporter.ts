@@ -11,7 +11,14 @@ export type ExportProgress = {
 
 type ProgressCallback = (progress: ExportProgress) => void;
 
+type VideoEncoderProbeConfig = {
+  width: number;
+  height: number;
+  fps: number;
+};
+
 export class VideoExporter {
+  private static readonly BITRATE = 5_000_000;
   private engine: AnimationEngine;
   private map: mapboxgl.Map;
   private settings: ExportSettings;
@@ -37,8 +44,6 @@ export class VideoExporter {
     "avc1.640028", // H.264 High Profile Level 4.0
   ];
 
-  private static detectedCodec: string | null = null;
-
   static async findSupportedCodec(
     config?: { width?: number; height?: number; fps?: number }
   ): Promise<string | null> {
@@ -49,10 +54,13 @@ export class VideoExporter {
     for (const codec of VideoExporter.CODEC_CANDIDATES) {
       try {
         const result = await VideoEncoder.isConfigSupported({
-          codec, width: w, height: h, bitrate: 5_000_000, framerate: f,
+          codec,
+          width: w,
+          height: h,
+          bitrate: VideoExporter.BITRATE,
+          framerate: f,
         });
         if (result.supported) {
-          VideoExporter.detectedCodec = codec;
           return codec;
         }
       } catch { /* skip */ }
@@ -68,20 +76,19 @@ export class VideoExporter {
   }
 
   async export(onProgress: ProgressCallback): Promise<Blob | null> {
-    if (!(await VideoExporter.isConfigSupported())) {
+    const { width, height, fps } = this.getEncoderProbeConfig();
+    const codec = await VideoExporter.findSupportedCodec({ width, height, fps });
+
+    if (!codec) {
       throw new Error(
-        "Your browser doesn't support video encoding. Please use Chrome or Edge."
+        "Your browser doesn't support video encoding for this export. Try Chrome or Edge, or use a smaller export size."
       );
     }
 
     this.cancelled = false;
-    const { fps } = this.settings;
     const totalDuration = this.engine.getTotalDuration();
     const totalFrames = Math.ceil(totalDuration * fps);
-
     const canvas = this.map.getCanvas();
-    const width = canvas.width;
-    const height = canvas.height;
 
     // Setup MP4 muxer
     const muxer = new Muxer({
@@ -100,18 +107,58 @@ export class VideoExporter {
       output: (chunk, meta) => {
         muxer.addVideoChunk(chunk, meta);
       },
-      error: (e) => {
-        encoderError = e;
+      error: (error) => {
+        encoderError = VideoExporter.toError(
+          error,
+          `Video encoder failed while using codec ${codec}.`
+        );
+        console.error("[export] encoder error", {
+          codec,
+          width,
+          height,
+          fps,
+          error: encoderError,
+        });
       },
     });
 
-    encoder.configure({
-      codec: VideoExporter.detectedCodec || "avc1.42001f",
+    console.log("[export] configuring encoder", {
+      codec,
       width,
       height,
-      bitrate: 5_000_000,
-      framerate: fps,
+      fps,
     });
+    try {
+      encoder.configure({
+        codec,
+        width,
+        height,
+        bitrate: VideoExporter.BITRATE,
+        framerate: fps,
+      });
+    } catch (error) {
+      const configureError = VideoExporter.toError(
+        error,
+        `Failed to configure the video encoder with codec ${codec}.`
+      );
+      console.error("[export] encoder.configure failed", {
+        codec,
+        width,
+        height,
+        fps,
+        error: configureError,
+      });
+      VideoExporter.safeCloseEncoder(encoder);
+      throw new Error(
+        `Failed to configure video export with codec ${codec}. Try Chrome or Edge, or use a smaller export size.`
+      );
+    }
+
+    await Promise.resolve();
+    if (encoderError) {
+      VideoExporter.safeCloseEncoder(encoder);
+      throw encoderError;
+    }
 
     // Pre-warm: just render start and end to prime the cache
     console.log("[export] pre-warm start");
@@ -121,15 +168,20 @@ export class VideoExporter {
     await this.waitForMapIdle();
     console.log("[export] pre-warm done, starting capture of", totalFrames, "frames");
 
+    if (encoderError) {
+      VideoExporter.safeCloseEncoder(encoder);
+      throw encoderError;
+    }
+
     // Capture and encode frames
     for (let i = 0; i < totalFrames; i++) {
       if (this.cancelled) {
-        encoder.close();
+        VideoExporter.safeCloseEncoder(encoder);
         return null;
       }
 
       if (encoderError) {
-        encoder.close();
+        VideoExporter.safeCloseEncoder(encoder);
         throw encoderError;
       }
 
@@ -147,8 +199,25 @@ export class VideoExporter {
         timestamp: i * (1_000_000 / fps),
       });
 
-      encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
-      frame.close();
+      try {
+        encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
+      } catch (error) {
+        const encodeError =
+          encoderError ??
+          VideoExporter.toError(error, "Video encoder encode failed.");
+        console.error("[export] encoder.encode failed", {
+          codec,
+          width,
+          height,
+          fps,
+          frame: i,
+          error: encodeError,
+        });
+        VideoExporter.safeCloseEncoder(encoder);
+        throw encodeError;
+      } finally {
+        frame.close();
+      }
 
       // Backpressure: wait for encoder queue to drain if too large
       if (encoder.encodeQueueSize > 5) {
@@ -173,14 +242,34 @@ export class VideoExporter {
     }
 
     if (this.cancelled) {
-      encoder.close();
+      VideoExporter.safeCloseEncoder(encoder);
       return null;
     }
 
     // Finalizing phase: flush encoder and mux remaining data
     onProgress({ phase: "finalizing", current: 0, total: 1 });
-    await encoder.flush();
-    encoder.close();
+    try {
+      await encoder.flush();
+    } catch (error) {
+      const flushError =
+        encoderError ??
+        VideoExporter.toError(error, "Video encoder flush failed.");
+      console.error("[export] encoder.flush failed", {
+        codec,
+        width,
+        height,
+        fps,
+        error: flushError,
+      });
+      throw flushError;
+    } finally {
+      VideoExporter.safeCloseEncoder(encoder);
+    }
+
+    if (encoderError) {
+      throw encoderError;
+    }
+
     muxer.finalize();
     onProgress({ phase: "finalizing", current: 1, total: 1 });
 
@@ -207,5 +296,31 @@ export class VideoExporter {
       };
       this.map.once("idle", onIdle);
     });
+  }
+
+  private getEncoderProbeConfig(): VideoEncoderProbeConfig {
+    const canvas = this.map.getCanvas();
+
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      fps: this.settings.fps,
+    };
+  }
+
+  private static safeCloseEncoder(encoder: VideoEncoder) {
+    if (encoder.state === "closed") {
+      return;
+    }
+
+    try {
+      encoder.close();
+    } catch (error) {
+      console.error("[export] encoder.close failed", error);
+    }
+  }
+
+  private static toError(error: unknown, fallbackMessage: string): Error {
+    return error instanceof Error ? error : new Error(fallbackMessage);
   }
 }
