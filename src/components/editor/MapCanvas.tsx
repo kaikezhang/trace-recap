@@ -112,6 +112,14 @@ export default function MapCanvas() {
 
     locations.forEach((loc, index) => {
       let marker = markersRef.current.get(loc.id);
+      if (loc.isWaypoint) {
+        // Waypoints: no marker at all
+        if (marker) {
+          marker.remove();
+          markersRef.current.delete(loc.id);
+        }
+        return;
+      }
       if (marker) {
         marker.setLngLat(loc.coordinates);
       } else {
