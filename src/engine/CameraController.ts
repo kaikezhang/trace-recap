@@ -190,7 +190,11 @@ export class CameraController {
       }
 
       case "ZOOM_OUT": {
-        const center = lerp2d(gc.fromCenter, gc.midpoint, eased);
+        // Only drift slightly toward the midpoint during zoom-out (20% of the way).
+        // For long cross-Pacific flights the midpoint can be very far, and lerping
+        // all the way there causes the camera to fly to the wrong hemisphere first.
+        const driftTarget: [number, number] = lerp2d(gc.fromCenter, gc.midpoint, 0.2);
+        const center = lerp2d(gc.fromCenter, driftTarget, eased);
         const zoom = lerp(prevArriveZoom, gc.flyZoom, eased);
         return { center, zoom, bearing: 0, pitch: 0 };
       }
