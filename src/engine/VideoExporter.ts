@@ -94,10 +94,12 @@ export class VideoExporter {
     });
 
     // Pre-warm: just render start and end to prime the cache
+    console.log("[export] pre-warm start");
     this.engine.renderFrame(0);
     await this.waitForMapIdle();
     this.engine.renderFrame(totalDuration);
     await this.waitForMapIdle();
+    console.log("[export] pre-warm done, starting capture of", totalFrames, "frames");
 
     // Capture and encode frames
     for (let i = 0; i < totalFrames; i++) {
@@ -116,6 +118,10 @@ export class VideoExporter {
       this.engine.seekTo(Math.min(progress, 1));
 
       await this.waitForMapIdle();
+
+      if (i < 3 || i % 100 === 0) {
+        console.log(`[export] frame ${i}/${totalFrames}, canvas ${canvas.width}x${canvas.height}`);
+      }
 
       const frame = new VideoFrame(canvas, {
         timestamp: i * (1_000_000 / fps),
