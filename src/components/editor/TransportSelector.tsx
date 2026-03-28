@@ -10,10 +10,30 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Plane,
+  Car,
+  TrainFront,
+  Bus,
+  Ship,
+  Footprints,
+  Bike,
+  type LucideIcon,
+} from "lucide-react";
 
 interface TransportSelectorProps {
   segment: Segment;
 }
+
+const MODE_ICONS: Record<TransportMode, LucideIcon> = {
+  flight: Plane,
+  car: Car,
+  train: TrainFront,
+  bus: Bus,
+  ferry: Ship,
+  walk: Footprints,
+  bicycle: Bike,
+};
 
 const MODE_COLORS: Record<TransportMode, string> = {
   flight: "bg-indigo-100 text-indigo-700 border-indigo-300",
@@ -66,17 +86,18 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
     <div className="flex items-center justify-center gap-1 py-1">
       {TRANSPORT_MODES.map((mode) => {
         const isActive = segment.transportMode === mode.id;
+        const Icon = MODE_ICONS[mode.id];
         return (
           <Tooltip key={mode.id}>
             <TooltipTrigger
-              className={`flex h-7 w-7 items-center justify-center rounded-md border text-xs font-medium transition-colors ${
+              className={`flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
                 isActive
                   ? MODE_COLORS[mode.id]
                   : "border-transparent text-muted-foreground hover:bg-accent"
               }`}
               onClick={() => handleModeChange(mode.id)}
             >
-              {mode.label[0]}
+              <Icon className="h-4 w-4" />
             </TooltipTrigger>
             <TooltipContent side="bottom">
               <p>{mode.label}</p>
