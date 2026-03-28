@@ -177,14 +177,23 @@ export class CameraController {
       }
 
       case "FLY": {
-        const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
+        // Camera follows the ROUTE geometry (same as icon) to stay in sync
+        let center: [number, number];
+        if (gc.routeLine && gc.routeLine.coordinates.length > 1) {
+          try {
+            const line = turf.lineString(gc.routeLine.coordinates);
+            const along = turf.along(line, eased * gc.routeLength);
+            center = along.geometry.coordinates as [number, number];
+          } catch {
+            center = lerp2d(gc.fromCenter, gc.toCenter, eased);
+          }
+        } else {
+          center = lerp2d(gc.fromCenter, gc.toCenter, eased);
+        }
 
-        // For waypoint groups: don't start zoom until past the last waypoint
-        // Last waypoint is at roughly (segmentCount-1)/segmentCount progress
-        // For single-segment groups: start zoom at 75%
+        // Zoom: don't start until past last waypoint
         let zoomStartAt: number;
         if (gc.segmentCount > 1) {
-          // Start zoom after last waypoint + a small buffer
           zoomStartAt = Math.min((gc.segmentCount - 1) / gc.segmentCount + 0.05, 0.95);
         } else {
           zoomStartAt = 0.75;
