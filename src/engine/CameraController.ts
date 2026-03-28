@@ -28,11 +28,21 @@ export class CameraController {
   constructor(groups: AnimationGroup[]) {
     // First pass: compute basic group data
     const basicData = groups.map((group) => {
-      const fromCoords = group.fromLoc.coordinates;
-      const toCoords = group.toLoc.coordinates;
+      let fromCoords = group.fromLoc.coordinates;
+      let toCoords = group.toLoc.coordinates;
+
+      // If mergedGeometry exists, use its first/last coords for camera centers
+      // These are unwrapped (continuous longitude) which prevents globe flipping
+      // at the antimeridian
+      const mg = group.mergedGeometry;
+      if (mg && mg.coordinates && mg.coordinates.length >= 2) {
+        fromCoords = mg.coordinates[0] as [number, number];
+        toCoords = mg.coordinates[mg.coordinates.length - 1] as [number, number];
+      }
+
       const distKm = turf.distance(
-        turf.point(fromCoords),
-        turf.point(toCoords)
+        turf.point(group.fromLoc.coordinates),
+        turf.point(group.toLoc.coordinates)
       );
 
       // Fly zoom: fit ALL locations in the group using bbox
