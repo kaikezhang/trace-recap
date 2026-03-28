@@ -33,6 +33,7 @@ interface ProjectState {
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
   importRoute: (data: ImportRouteData) => void;
+  exportRoute: () => ImportRouteData;
 }
 
 let nextId = 1;
@@ -69,7 +70,7 @@ function rebuildSegments(
   return segments;
 }
 
-export const useProjectStore = create<ProjectState>((set) => ({
+export const useProjectStore = create<ProjectState>((set, get) => ({
   locations: [],
   segments: [],
   mapStyle: "light",
@@ -80,6 +81,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
         id: generateId(),
         name: loc.name,
         coordinates: loc.coordinates,
+        isWaypoint: false,
         photos: [],
         isWaypoint: false,
       };
@@ -183,12 +185,30 @@ export const useProjectStore = create<ProjectState>((set) => ({
 
   clearRoute: () => set({ locations: [], segments: [] }),
 
+  exportRoute: () => {
+    const { locations, segments } = get();
+    return {
+      name: "My Trip",
+      locations: locations.map((loc) => ({
+        name: loc.name,
+        coordinates: loc.coordinates as [number, number],
+        isWaypoint: loc.isWaypoint ?? false,
+      })),
+      segments: segments.map((seg) => ({
+        fromIndex: locations.findIndex((l) => l.id === seg.fromId),
+        toIndex: locations.findIndex((l) => l.id === seg.toId),
+        transportMode: seg.transportMode,
+      })),
+    };
+  },
+
   importRoute: (data) =>
     set(() => {
       const locations: Location[] = data.locations.map((loc, i) => ({
         id: generateId(),
         name: loc.name,
         coordinates: loc.coordinates,
+        isWaypoint: loc.isWaypoint ?? false,
         photos: [],
         // First and last can never be waypoints
         isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
