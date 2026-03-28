@@ -11,6 +11,8 @@ import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
 import ExportDialog from "./ExportDialog";
 import {
+  SEGMENT_LAYER_PREFIX,
+  SEGMENT_GLOW_LAYER_PREFIX,
   SEGMENT_SOURCE_PREFIX,
   setSegmentSourceData,
 } from "./routeSegmentSources";
@@ -76,6 +78,22 @@ function EditorContent() {
       if (!map.getSource(`${SEGMENT_SOURCE_PREFIX}${seg.id}`)) return;
 
       const fraction = e.routeDrawFraction ?? 0;
+
+      // Make current segment's layers visible (they start hidden)
+      const layerId = SEGMENT_LAYER_PREFIX + seg.id;
+      const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+      if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
+      if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
+
+      // Also show all past segments (in case they were hidden)
+      for (let i = 0; i < e.segmentIndex; i++) {
+        const pastSeg = segments[i];
+        const pastLid = SEGMENT_LAYER_PREFIX + pastSeg.id;
+        const pastGlid = SEGMENT_GLOW_LAYER_PREFIX + pastSeg.id;
+        if (map.getLayer(pastLid)) map.setLayoutProperty(pastLid, "visibility", "visible");
+        if (map.getLayer(pastGlid)) map.setLayoutProperty(pastGlid, "visibility", "visible");
+        setSegmentSourceData(map, pastSeg.id, pastSeg.geometry);
+      }
 
       setSegmentSourceData(map, seg.id, seg.geometry, fraction);
     });
