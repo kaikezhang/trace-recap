@@ -54,9 +54,18 @@ function rebuildSegments(
   for (let i = 0; i < locations.length - 1; i++) {
     const fromId = locations[i].id;
     const toId = locations[i + 1].id;
-    const existing = segmentMap.get(`${fromId}-${toId}`);
+    const forward = segmentMap.get(`${fromId}-${toId}`);
+    const reversed = segmentMap.get(`${toId}-${fromId}`);
+    const existing = forward || reversed;
     if (existing) {
-      segments.push(existing);
+      segments.push({
+        ...existing,
+        id: forward ? existing.id : generateId(),
+        fromId,
+        toId,
+        // Keep geometry only if direction unchanged; reversed needs re-fetch
+        geometry: forward ? existing.geometry : null,
+      });
     } else {
       segments.push({
         id: generateId(),

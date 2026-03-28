@@ -1,6 +1,8 @@
 "use client";
 
-import { X, GripVertical, ChevronUp, ChevronDown } from "lucide-react";
+import { X, GripVertical } from "lucide-react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import PhotoManager from "./PhotoManager";
 import type { Location } from "@/types";
@@ -10,8 +12,6 @@ interface LocationCardProps {
   index: number;
   total: number;
   onRemove: (id: string) => void;
-  onMoveUp: (index: number) => void;
-  onMoveDown: (index: number) => void;
   onToggleWaypoint: (id: string) => void;
 }
 
@@ -20,40 +20,42 @@ export default function LocationCard({
   index,
   total,
   onRemove,
-  onMoveUp,
-  onMoveDown,
   onToggleWaypoint,
 }: LocationCardProps) {
   const isFirstOrLast = index === 0 || index === total - 1;
   const isWaypoint = location.isWaypoint;
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: location.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
   return (
     <div
+      ref={setNodeRef}
+      style={style}
       className={`rounded-lg border bg-card p-3 shadow-sm space-y-2 ${
         isWaypoint ? "opacity-60" : ""
-      }`}
+      } ${isDragging ? "shadow-lg" : ""}`}
     >
       <div className="flex items-center gap-2">
-        <div className="flex flex-col items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5"
-            disabled={index === 0}
-            onClick={() => onMoveUp(index)}
-          >
-            <ChevronUp className="h-3 w-3" />
-          </Button>
-          <GripVertical className="h-3 w-3 text-muted-foreground" />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5"
-            disabled={index === total - 1}
-            onClick={() => onMoveDown(index)}
-          >
-            <ChevronDown className="h-3 w-3" />
-          </Button>
+        <div
+          className="flex items-center cursor-grab active:cursor-grabbing touch-none"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
         </div>
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
           {index + 1}
@@ -63,7 +65,7 @@ export default function LocationCard({
             <p className="text-sm font-medium truncate">{location.name}</p>
             {isWaypoint && (
               <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                fly-through
+                stop by
               </span>
             )}
           </div>
@@ -77,7 +79,7 @@ export default function LocationCard({
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
-            title={isWaypoint ? "Switch to destination" : "Switch to fly-through"}
+            title={isWaypoint ? "Switch to destination" : "Switch to stop by"}
             onClick={() => onToggleWaypoint(location.id)}
           >
             <span className="text-sm">{isWaypoint ? "\u2708\uFE0F" : "\uD83C\uDFE0"}</span>
