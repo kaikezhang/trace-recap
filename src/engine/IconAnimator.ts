@@ -2,22 +2,22 @@ import mapboxgl from "mapbox-gl";
 import * as turf from "@turf/turf";
 import type { Segment, AnimationPhase, TransportMode } from "@/types";
 
-// PNG icon paths (served from /public/icons/)
-// All icons face RIGHT (east = bearing 90°) by default
-const ICON_PATHS: Record<TransportMode, string> = {
-  flight: "/icons/flight.png",
-  car: "/icons/car.png",
-  train: "/icons/train.png",
-  bus: "/icons/bus.png",
-  ferry: "/icons/ferry.png",
-  walk: "/icons/walk.png",
-  bicycle: "/icons/bicycle.png",
-};
+// 4 direction variants per transport mode
+// Bearing ranges: right (315-45°), down (45-135°), left (135-225°), up (225-315°)
+type Direction = "right" | "down" | "left" | "up";
 
-// Icons face right (east), so bearing 90° = no rotation needed
-// To point the icon in the direction of travel (bearing from turf),
-// we subtract 90° because turf bearing is clockwise from north
-const ICON_BEARING_OFFSET = -90;
+function bearingToDirection(bearing: number): Direction {
+  // Normalize bearing to 0-360
+  const b = ((bearing % 360) + 360) % 360;
+  if (b >= 315 || b < 45) return "right";
+  if (b >= 45 && b < 135) return "down";
+  if (b >= 135 && b < 225) return "left";
+  return "up";
+}
+
+function getIconPath(mode: TransportMode, direction: Direction): string {
+  return `/icons/${mode}-${direction}.png`;
+}
 
 const BASE_SIZE = 52;
 
@@ -27,7 +27,7 @@ export class IconAnimator {
   private marker: mapboxgl.Marker | null = null;
   private iconEl: HTMLDivElement;
   private imgEl: HTMLImageElement;
-  private currentMode: string = "";
+  private currentIconKey: string = "";
 
   constructor(map: mapboxgl.Map, segments: Segment[]) {
     this.map = map;
@@ -55,18 +55,20 @@ export class IconAnimator {
       this.marker = new mapboxgl.Marker({
         element: this.iconEl,
         anchor: "center",
-        rotationAlignment: "map",
-        pitchAlignment: "map",
+        // No rotation — we use directional icon variants instead
+        rotationAlignment: "viewport",
+        pitchAlignment: "viewport",
       })
         .setLngLat([0, 0])
         .addTo(this.map);
     }
   }
 
-  private setIcon(mode: TransportMode) {
-    if (mode === this.currentMode) return;
-    this.currentMode = mode;
-    this.imgEl.src = ICON_PATHS[mode] || ICON_PATHS.flight;
+  private setIcon(mode: TransportMode, direction: Direction) {
+    const key = `${mode}-${direction}`;
+    if (key === this.currentIconKey) return;
+    this.currentIconKey = key;
+    this.imgEl.src = getIconPath(mode, direction);
   }
 
   update(segmentIndex: number, phase: AnimationPhase, progress: number) {
@@ -74,7 +76,6 @@ export class IconAnimator {
     if (!seg) return;
 
     this.ensureMarker();
-    this.setIcon(seg.transportMode);
 
     const routeLine = seg.geometry;
     if (!routeLine || routeLine.coordinates.length < 2) {
@@ -86,15 +87,19 @@ export class IconAnimator {
     const totalLength = turf.length(line);
     const coords = routeLine.coordinates;
 
-    let position: [number, number];
-    let showIcon = true;
-    let scale = 1.0;
-    let opacity = 1.0;
-
     // Fixed bearing for the entire segment: from start to end
     const startPt = coords[0] as [number, number];
     const endPt = coords[coords.length - 1] as [number, number];
     const bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
+    const direction = bearingToDirection(bearing);
+
+    // Set the correct directional icon (no CSS rotation needed!)
+    this.setIcon(seg.transportMode, direction);
+
+    let position: [number, number];
+    let showIcon = true;
+    let scale = 1.0;
+    let opacity = 1.0;
 
     switch (phase) {
       case "HOVER": {
@@ -130,18 +135,12 @@ export class IconAnimator {
     }
 
     this.marker!.setLngLat(position);
+    // NO rotation — directional variant handles it
+    this.marker!.setRotation(0);
 
-    // Apply rotation: turf.bearing gives clockwise from north
-    // Our icons face right (east = 90° from north)
-    // So rotation = bearing + offset
-    this.marker!.setRotation(bearing + ICON_BEARING_OFFSET);
-
-    // Apply scale
     const size = Math.round(BASE_SIZE * scale);
     this.iconEl.style.width = `${size}px`;
     this.iconEl.style.height = `${size}px`;
-
-    // Apply opacity
     this.iconEl.style.opacity = showIcon ? String(opacity) : "0";
     this.iconEl.style.display = showIcon ? "block" : "none";
   }
@@ -161,5 +160,3 @@ export class IconAnimator {
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
-
-
