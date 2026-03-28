@@ -7,12 +7,17 @@ import type { Segment, AnimationPhase, TransportMode } from "@/types";
 type Direction = "right" | "down" | "left" | "up";
 
 function bearingToDirection(bearing: number): Direction {
-  // Normalize bearing to 0-360
+  // turf.bearing: 0°=North, 90°=East, 180°=South, 270°=West
+  // Map to icon direction:
+  //   North (315°-45°)  → up icon
+  //   East  (45°-135°)  → right icon
+  //   South (135°-225°) → down icon
+  //   West  (225°-315°) → left icon
   const b = ((bearing % 360) + 360) % 360;
-  if (b >= 315 || b < 45) return "right";
-  if (b >= 45 && b < 135) return "down";
-  if (b >= 135 && b < 225) return "left";
-  return "up";
+  if (b >= 315 || b < 45) return "up";
+  if (b >= 45 && b < 135) return "right";
+  if (b >= 135 && b < 225) return "down";
+  return "left";
 }
 
 function getIconPath(mode: TransportMode, direction: Direction): string {
