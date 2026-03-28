@@ -19,6 +19,7 @@ export interface Location {
   name: string;
   coordinates: [number, number]; // [lng, lat]
   photos: Photo[];
+  isWaypoint: boolean;
 }
 
 export interface Segment {
@@ -47,6 +48,14 @@ export interface SegmentTiming {
   startTime: number;
   duration: number;
   phases: PhaseTiming[];
+}
+
+export interface AnimationGroup {
+  segments: Segment[];
+  fromLoc: Location;
+  toLoc: Location;
+  allLocations: Location[];
+  mergedGeometry: GeoJSON.LineString | null;
 }
 
 export interface CameraState {

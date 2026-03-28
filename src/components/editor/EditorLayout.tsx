@@ -16,6 +16,7 @@ import {
   SEGMENT_SOURCE_PREFIX,
   setSegmentSourceData,
 } from "./routeSegmentSources";
+import * as turf from "@turf/turf";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
@@ -71,22 +72,15 @@ function EditorContent() {
     });
 
     // Progressive route drawing updates each segment's own source directly.
+    // With animation groups, we need to draw all segments in the group together.
     engine.on("routeDrawProgress", (e) => {
       if (!map) return;
-      const seg = segments[e.segmentIndex];
-      if (!seg?.geometry || seg.geometry.coordinates.length < 2) return;
-      if (!map.getSource(`${SEGMENT_SOURCE_PREFIX}${seg.id}`)) return;
-
       const fraction = e.routeDrawFraction ?? 0;
+      const groupSegIndices = e.groupSegmentIndices;
 
-      // Make current segment's layers visible (they start hidden)
-      const layerId = SEGMENT_LAYER_PREFIX + seg.id;
-      const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
-      if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
-      if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
-
-      // Also show all past segments (in case they were hidden)
-      for (let i = 0; i < e.segmentIndex; i++) {
+      // Show all segments from past groups (fully drawn)
+      const firstGroupSegIdx = groupSegIndices[0];
+      for (let i = 0; i < firstGroupSegIdx; i++) {
         const pastSeg = segments[i];
         const pastLid = SEGMENT_LAYER_PREFIX + pastSeg.id;
         const pastGlid = SEGMENT_GLOW_LAYER_PREFIX + pastSeg.id;
@@ -95,7 +89,46 @@ function EditorContent() {
         setSegmentSourceData(map, pastSeg.id, pastSeg.geometry);
       }
 
-      setSegmentSourceData(map, seg.id, seg.geometry, fraction);
+      // For the current group, compute how the merged fraction maps to individual segments
+      const group = engine.getGroups()[e.groupIndex];
+      if (!group) return;
+      const mergedGeom = group.mergedGeometry;
+      const mergedLength = mergedGeom && mergedGeom.coordinates.length > 1
+        ? turf.length(turf.lineString(mergedGeom.coordinates))
+        : 0;
+
+      let accumulatedLength = 0;
+      const drawnDistance = fraction * mergedLength;
+
+      for (let gi = 0; gi < groupSegIndices.length; gi++) {
+        const segIdx = groupSegIndices[gi];
+        const seg = segments[segIdx];
+        if (!seg?.geometry || seg.geometry.coordinates.length < 2) continue;
+        if (!map.getSource(`${SEGMENT_SOURCE_PREFIX}${seg.id}`)) continue;
+
+        const segLength = turf.length(turf.lineString(seg.geometry.coordinates));
+        const segStart = accumulatedLength;
+        const segEnd = accumulatedLength + segLength;
+        accumulatedLength = segEnd;
+
+        // Make layers visible
+        const layerId = SEGMENT_LAYER_PREFIX + seg.id;
+        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+        if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
+        if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
+
+        if (drawnDistance >= segEnd) {
+          // This segment is fully drawn
+          setSegmentSourceData(map, seg.id, seg.geometry);
+        } else if (drawnDistance > segStart) {
+          // Partially drawn
+          const segFraction = (drawnDistance - segStart) / segLength;
+          setSegmentSourceData(map, seg.id, seg.geometry, segFraction);
+        } else {
+          // Not yet drawn
+          setSegmentSourceData(map, seg.id, seg.geometry, 0);
+        }
+      }
     });
 
     engine.on("complete", () => {

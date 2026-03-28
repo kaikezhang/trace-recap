@@ -1,6 +1,6 @@
 import * as turf from "@turf/turf";
 import BezierEasing from "bezier-easing";
-import type { Location, Segment, AnimationPhase, CameraState } from "@/types";
+import type { AnimationGroup, AnimationPhase, CameraState } from "@/types";
 
 // Per-phase easing curves
 const PHASE_EASINGS: Record<AnimationPhase, (t: number) => number> = {
@@ -11,7 +11,7 @@ const PHASE_EASINGS: Record<AnimationPhase, (t: number) => number> = {
   ARRIVE: (t: number) => t, // linear
 };
 
-interface SegmentCamera {
+interface GroupCamera {
   fromCenter: [number, number];
   toCenter: [number, number];
   midpoint: [number, number];
@@ -23,25 +23,21 @@ interface SegmentCamera {
 }
 
 export class CameraController {
-  private segmentCameras: SegmentCamera[];
+  private groupCameras: GroupCamera[];
 
-  constructor(locations: Location[], segments: Segment[]) {
-    // First pass: compute basic segment data
-    const basicData = segments.map((seg) => {
-      const fromLoc = locations.find((l) => l.id === seg.fromId)!;
-      const toLoc = locations.find((l) => l.id === seg.toId)!;
+  constructor(groups: AnimationGroup[]) {
+    // First pass: compute basic group data
+    const basicData = groups.map((group) => {
+      const fromCoords = group.fromLoc.coordinates;
+      const toCoords = group.toLoc.coordinates;
       const distKm = turf.distance(
-        turf.point(fromLoc.coordinates),
-        turf.point(toLoc.coordinates)
+        turf.point(fromCoords),
+        turf.point(toCoords)
       );
 
-      // Fly zoom: fit both endpoints in view using bbox
-      const bbox = turf.bbox(
-        turf.featureCollection([
-          turf.point(fromLoc.coordinates),
-          turf.point(toLoc.coordinates),
-        ])
-      );
+      // Fly zoom: fit ALL locations in the group using bbox
+      const points = group.allLocations.map((loc) => turf.point(loc.coordinates));
+      const bbox = turf.bbox(turf.featureCollection(points));
       const bboxWidth = Math.abs(bbox[2] - bbox[0]);
       const bboxHeight = Math.abs(bbox[3] - bbox[1]);
       const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
@@ -51,17 +47,17 @@ export class CameraController {
         8
       );
 
-      const routeLine = seg.geometry;
+      const routeLine = group.mergedGeometry;
       const routeLength = routeLine
         ? turf.length(turf.lineString(routeLine.coordinates))
         : distKm;
 
       return {
-        fromCenter: fromLoc.coordinates,
-        toCenter: toLoc.coordinates,
+        fromCenter: fromCoords,
+        toCenter: toCoords,
         midpoint: [
-          (fromLoc.coordinates[0] + toLoc.coordinates[0]) / 2,
-          (fromLoc.coordinates[1] + toLoc.coordinates[1]) / 2,
+          (fromCoords[0] + toCoords[0]) / 2,
+          (fromCoords[1] + toCoords[1]) / 2,
         ] as [number, number],
         flyZoom,
         arriveZoom: 12, // placeholder, computed in second pass
@@ -71,18 +67,16 @@ export class CameraController {
       };
     });
 
-    // Second pass: compute arriveZoom using look-ahead to NEXT segment
-    this.segmentCameras = basicData.map((cam, i) => {
+    // Second pass: compute arriveZoom using look-ahead to NEXT group
+    this.groupCameras = basicData.map((cam, i) => {
       const isLast = i === basicData.length - 1;
 
       if (isLast) {
-        // Last destination: zoom to city level
         cam.arriveZoom = clamp(cam.flyZoom + 5, 12, 13);
       } else {
         const nextDist = basicData[i + 1].distanceKm;
 
         if (nextDist < 100) {
-          // Short next segment: zoom to fit current + next destination
           const nextCam = basicData[i + 1];
           const bbox = turf.bbox(
             turf.featureCollection([
@@ -96,10 +90,8 @@ export class CameraController {
           const fitZoom = Math.log2(360 / maxSpan) - 1;
           cam.arriveZoom = clamp(fitZoom, 9, 13);
         } else if (nextDist >= 1000) {
-          // Very long next segment: barely zoom in
           cam.arriveZoom = clamp(cam.flyZoom + 2, 6, 7);
         } else {
-          // Medium next segment (100-1000km): moderate zoom
           cam.arriveZoom = clamp(cam.flyZoom + 3, 9, 10);
         }
       }
@@ -113,42 +105,40 @@ export class CameraController {
     return PHASE_EASINGS[phase];
   }
 
-  /** Get the look-ahead hover duration for a segment */
-  getHoverDuration(segmentIndex: number): number {
-    const n = this.segmentCameras.length;
-    const isLast = segmentIndex === n - 1;
+  /** Get the look-ahead hover duration for a group */
+  getHoverDuration(groupIndex: number): number {
+    const n = this.groupCameras.length;
+    const isLast = groupIndex === n - 1;
 
     if (isLast) return 2.0;
 
-    const nextDist = this.segmentCameras[segmentIndex + 1]?.distanceKm ?? 0;
+    const nextDist = this.groupCameras[groupIndex + 1]?.distanceKm ?? 0;
     if (nextDist < 100) return 1.5;
     if (nextDist >= 1000) return 0.8;
     return 1.0;
   }
 
   getCameraState(
-    segmentIndex: number,
+    groupIndex: number,
     phase: AnimationPhase,
     progress: number
   ): CameraState {
-    const sc = this.segmentCameras[segmentIndex];
-    if (!sc) {
+    const gc = this.groupCameras[groupIndex];
+    if (!gc) {
       return { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 };
     }
 
     const eased = PHASE_EASINGS[phase](progress);
 
-    // Get the arrive zoom of the previous segment
-    // For the first segment, start at a city-level zoom on the departure city
     const prevArriveZoom =
-      segmentIndex > 0
-        ? this.segmentCameras[segmentIndex - 1].arriveZoom
-        : clamp(sc.flyZoom + 4, 10, 13);
+      groupIndex > 0
+        ? this.groupCameras[groupIndex - 1].arriveZoom
+        : clamp(gc.flyZoom + 4, 10, 13);
 
     switch (phase) {
       case "HOVER": {
         return {
-          center: sc.fromCenter,
+          center: gc.fromCenter,
           zoom: prevArriveZoom,
           bearing: 0,
           pitch: 0,
@@ -156,58 +146,58 @@ export class CameraController {
       }
 
       case "ZOOM_OUT": {
-        const center = lerp2d(sc.fromCenter, sc.midpoint, eased);
-        const zoom = lerp(prevArriveZoom, sc.flyZoom, eased);
+        const center = lerp2d(gc.fromCenter, gc.midpoint, eased);
+        const zoom = lerp(prevArriveZoom, gc.flyZoom, eased);
         return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "FLY": {
         let center: [number, number];
 
-        if (sc.routeLine && sc.routeLine.coordinates.length > 1) {
-          const line = turf.lineString(sc.routeLine.coordinates);
-          const along = turf.along(line, eased * sc.routeLength);
+        if (gc.routeLine && gc.routeLine.coordinates.length > 1) {
+          const line = turf.lineString(gc.routeLine.coordinates);
+          const along = turf.along(line, eased * gc.routeLength);
           center = along.geometry.coordinates as [number, number];
         } else {
-          center = lerp2d(sc.fromCenter, sc.toCenter, eased);
+          center = lerp2d(gc.fromCenter, gc.toCenter, eased);
         }
 
-        const zoom = sc.flyZoom;
+        const zoom = gc.flyZoom;
         return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "ZOOM_IN": {
-        const routeEnd = sc.routeLine
-          ? (sc.routeLine.coordinates[
-              sc.routeLine.coordinates.length - 1
+        const routeEnd = gc.routeLine
+          ? (gc.routeLine.coordinates[
+              gc.routeLine.coordinates.length - 1
             ] as [number, number])
-          : sc.toCenter;
-        const center = lerp2d(routeEnd, sc.toCenter, eased);
-        const zoom = lerp(sc.flyZoom, sc.arriveZoom, eased);
+          : gc.toCenter;
+        const center = lerp2d(routeEnd, gc.toCenter, eased);
+        const zoom = lerp(gc.flyZoom, gc.arriveZoom, eased);
         return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "ARRIVE":
         return {
-          center: sc.toCenter,
-          zoom: sc.arriveZoom,
+          center: gc.toCenter,
+          zoom: gc.arriveZoom,
           bearing: 0,
           pitch: 0,
         };
 
       default:
         return {
-          center: sc.fromCenter,
-          zoom: sc.arriveZoom,
+          center: gc.fromCenter,
+          zoom: gc.arriveZoom,
           bearing: 0,
           pitch: 0,
         };
     }
   }
 
-  /** Get the route length for a segment (used for progressive drawing) */
-  getRouteLength(segmentIndex: number): number {
-    return this.segmentCameras[segmentIndex]?.routeLength ?? 0;
+  /** Get the route length for a group (used for progressive drawing) */
+  getRouteLength(groupIndex: number): number {
+    return this.groupCameras[groupIndex]?.routeLength ?? 0;
   }
 }
 
