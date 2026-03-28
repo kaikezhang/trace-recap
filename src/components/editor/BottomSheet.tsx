@@ -75,6 +75,8 @@ export default function BottomSheet() {
         <button
           className="flex w-full items-center justify-between px-4 h-14 focus:outline-none"
           onClick={toggleBottomSheet}
+          aria-expanded={expanded}
+          aria-label="Toggle route panel"
         >
           <div className="flex items-center gap-2">
             <div className="mx-auto w-10 h-1 rounded-full bg-muted-foreground/30 absolute top-2 left-1/2 -translate-x-1/2" />
@@ -87,7 +89,7 @@ export default function BottomSheet() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs"
+              className="h-11 text-xs"
               onClick={(e) => {
                 e.stopPropagation();
                 fileInputRef.current?.click();

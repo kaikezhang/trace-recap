@@ -137,7 +137,7 @@ function EditorContent() {
       <div className="flex flex-1 overflow-hidden">
         <LeftPanel />
         {/* Map area: full width on mobile, flex-1 on desktop */}
-        <div className="flex-1 relative pb-14 md:pb-0">
+        <div className="flex-1 relative">
           <MapCanvas />
           {/* City label overlay */}
           <AnimatePresence>

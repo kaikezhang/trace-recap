@@ -36,8 +36,8 @@ export default function PlaybackControls({
     <div
       className={[
         "z-10 flex items-center gap-2 md:gap-3 bg-background/90 backdrop-blur-sm border shadow-lg px-3 md:px-4 py-2",
-        // Mobile: full-width bar at bottom
-        "absolute bottom-0 left-0 right-0 rounded-none",
+        // Mobile: full-width bar above the collapsed bottom sheet (56px)
+        "absolute bottom-14 left-0 right-0 rounded-none",
         // Desktop: floating centered pill
         "md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:rounded-xl md:w-auto",
       ].join(" ")}
@@ -45,16 +45,18 @@ export default function PlaybackControls({
       <Button
         variant="ghost"
         size="icon"
-        className="h-9 w-9 md:h-8 md:w-8 min-w-[36px] md:min-w-0"
+        className="h-11 w-11 md:h-8 md:w-8 min-w-[44px] md:min-w-0"
         onClick={onReset}
+        aria-label="Reset playback"
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
       <Button
         variant="ghost"
         size="icon"
-        className="h-9 w-9 md:h-8 md:w-8 min-w-[36px] md:min-w-0"
+        className="h-11 w-11 md:h-8 md:w-8 min-w-[44px] md:min-w-0"
         onClick={isPlaying ? onPause : onPlay}
+        aria-label={isPlaying ? "Pause" : "Play"}
       >
         {isPlaying ? (
           <Pause className="h-4 w-4" />
