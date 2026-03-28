@@ -93,11 +93,11 @@ export class VideoExporter {
       framerate: fps,
     });
 
-    // Pre-warm tile cache by quickly scrubbing through the animation
-    for (let i = 0; i <= 5; i++) {
-      this.engine.renderFrame((i / 5) * totalDuration);
-      await this.waitForMapIdle();
-    }
+    // Pre-warm: just render start and end to prime the cache
+    this.engine.renderFrame(0);
+    await this.waitForMapIdle();
+    this.engine.renderFrame(totalDuration);
+    await this.waitForMapIdle();
 
     // Capture and encode frames
     for (let i = 0; i < totalFrames; i++) {
@@ -170,11 +170,11 @@ export class VideoExporter {
         resolve();
         return;
       }
-      // Timeout after 2s to prevent infinite hang
+      // Timeout after 500ms to prevent hanging — tiles may not fully load but frame is still usable
       const timeout = setTimeout(() => {
         this.map.off("idle", onIdle);
         resolve();
-      }, 2000);
+      }, 500);
       const onIdle = () => {
         clearTimeout(timeout);
         resolve();
