@@ -15,7 +15,7 @@ export const ZOOM_RANGE = {
 
 export const TARGET_DURATION = {
   min: 20,
-  max: 40,
+  max: 180,  // Allow longer videos for big trips
 } as const;
 
 export const FPS = 30;

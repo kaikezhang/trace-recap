@@ -170,9 +170,11 @@ export class AnimationEngine {
     const n = this.groups.length;
     if (n === 0) return [];
 
+    // Each group gets ~4s base + proportional fly time
+    // Minimum 20s, scales with number of stops
     const totalTarget = Math.min(
       TARGET_DURATION.max,
-      Math.max(TARGET_DURATION.min, n * 5)
+      Math.max(TARGET_DURATION.min, n * 4)
     );
 
     const arriveTime = PHASE_DURATIONS.ARRIVE;
@@ -217,9 +219,11 @@ export class AnimationEngine {
       const variableForGroup = totalVariable * proportion;
 
       const hoverTime = this.camera.getHoverDuration(i);
-      const zoomOutDur = variableForGroup * 0.25;
-      const flyDur = variableForGroup * 0.45;
-      const zoomInDur = variableForGroup * 0.3;
+      // Minimum 1.5s for variable portion so short legs aren't invisible
+      const effectiveVariable = Math.max(variableForGroup, 1.5);
+      const zoomOutDur = effectiveVariable * 0.25;
+      const flyDur = effectiveVariable * 0.45;
+      const zoomInDur = effectiveVariable * 0.3;
       const arriveDur = arriveTime + (hasPhotos ? photoTime : 0);
 
       const phases: SegmentTiming["phases"] = [
