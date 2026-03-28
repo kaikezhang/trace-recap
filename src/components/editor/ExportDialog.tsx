@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { Download, X, Loader2 } from "lucide-react";
+import { useState, useRef, useCallback, useMemo } from "react";
+import { Download, X, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/select";
 import { useMap } from "./MapContext";
 import { useProjectStore } from "@/stores/projectStore";
-import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { VideoExporter, type ExportProgress } from "@/engine/VideoExporter";
@@ -31,6 +30,8 @@ export default function ExportDialog() {
   const { map } = useMap();
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
+
+  const isSupported = useMemo(() => VideoExporter.isSupported(), []);
 
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [resolution, setResolution] = useState("720");
@@ -128,33 +129,32 @@ export default function ExportDialog() {
             </Select>
           </div>
 
+          {!isSupported && (
+            <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                Your browser doesn&apos;t support video encoding. Please use Chrome or Edge.
+              </span>
+            </div>
+          )}
+
           {isExporting && progress && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
                   {progress.phase === "capturing"
-                    ? "Capturing frames..."
-                    : progress.phase === "uploading"
-                    ? "Uploading frames..."
-                    : progress.phase === "encoding"
-                    ? "Encoding on server..."
+                    ? "Capturing & encoding frames..."
                     : "Done!"}
                 </span>
-                {progress.phase === "capturing" ? (
+                {progress.phase === "capturing" && (
                   <span className="font-medium">{progressPercent}%</span>
-                ) : progress.phase === "encoding" || progress.phase === "uploading" ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : null}
+                )}
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
-                {progress.phase === "encoding" || progress.phase === "uploading" ? (
-                  <div className="h-full bg-primary animate-pulse w-full" />
-                ) : (
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                )}
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
             </div>
           )}
@@ -184,7 +184,7 @@ export default function ExportDialog() {
               <Button
                 className="flex-1"
                 onClick={handleExport}
-                disabled={segments.length === 0}
+                disabled={segments.length === 0 || !isSupported}
               >
                 <Loader2 className="h-4 w-4 mr-2 animate-spin hidden" />
                 Start Export
