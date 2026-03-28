@@ -135,16 +135,34 @@ export class VideoExporter {
 
   private waitForMapIdle(): Promise<void> {
     return new Promise((resolve) => {
-      if (!this.map.isMoving() && this.map.areTilesLoaded()) {
+      // Force a repaint so tiles start loading
+      this.map.triggerRepaint();
+
+      const checkReady = () => {
+        if (!this.map.isMoving() && this.map.areTilesLoaded()) {
+          return true;
+        }
+        return false;
+      };
+
+      if (checkReady()) {
         resolve();
         return;
       }
-      const timeout = setTimeout(() => {
-        this.map.off("idle", onIdle);
-        resolve();
-      }, 3000);
+
+      // Poll every 100ms until tiles loaded, with 5s max timeout
+      let elapsed = 0;
+      const interval = setInterval(() => {
+        elapsed += 100;
+        if (checkReady() || elapsed >= 5000) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+
+      // Also listen for idle event as a faster path
       const onIdle = () => {
-        clearTimeout(timeout);
+        clearInterval(interval);
         resolve();
       };
       this.map.once("idle", onIdle);

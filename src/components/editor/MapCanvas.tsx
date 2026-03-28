@@ -56,6 +56,7 @@ export default function MapCanvas() {
       style: opts.style,
       center: opts.center,
       zoom: opts.zoom,
+      preserveDrawingBuffer: true, // Required for canvas.toBlob() in video export
     });
 
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
