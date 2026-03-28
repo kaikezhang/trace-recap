@@ -20,8 +20,8 @@ export default function BottomSheet() {
   const toggleBottomSheet = useUIStore((s) => s.toggleBottomSheet);
   const setBottomSheetExpanded = useUIStore((s) => s.setBottomSheetExpanded);
 
-  const handleExportRoute = () => {
-    const data = exportRoute();
+  const handleExportRoute = async () => {
+    const data = await exportRoute();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

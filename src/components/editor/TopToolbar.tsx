@@ -13,8 +13,8 @@ export default function TopToolbar() {
   const setLeftPanelOpen = useUIStore((s) => s.setLeftPanelOpen);
   const exportRoute = useProjectStore((s) => s.exportRoute);
 
-  const handleExportRoute = () => {
-    const data = exportRoute();
+  const handleExportRoute = async () => {
+    const data = await exportRoute();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

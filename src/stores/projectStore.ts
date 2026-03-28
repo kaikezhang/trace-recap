@@ -9,7 +9,12 @@ import type {
 
 export interface ImportRouteData {
   name: string;
-  locations: { name: string; coordinates: [number, number]; isWaypoint?: boolean }[];
+  locations: {
+    name: string;
+    coordinates: [number, number];
+    isWaypoint?: boolean;
+    photos?: { url: string; caption?: string }[];
+  }[];
   segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
 }
 
@@ -33,7 +38,7 @@ interface ProjectState {
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
   importRoute: (data: ImportRouteData) => void;
-  exportRoute: () => ImportRouteData;
+  exportRoute: () => Promise<ImportRouteData>;
 }
 
 let nextId = 1;
@@ -193,15 +198,45 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   clearRoute: () => set({ locations: [], segments: [] }),
 
-  exportRoute: () => {
+  exportRoute: async () => {
     const { locations, segments } = get();
+
+    // Convert blob URLs to base64 data URLs for persistence
+    const toDataURL = async (url: string): Promise<string> => {
+      if (url.startsWith("data:")) return url; // already base64
+      try {
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        return url; // fallback to original
+      }
+    };
+
+    const exportedLocations = await Promise.all(
+      locations.map(async (loc) => {
+        const photos = await Promise.all(
+          loc.photos.map(async (p) => ({
+            url: await toDataURL(p.url),
+            caption: p.caption,
+          }))
+        );
+        return {
+          name: loc.name,
+          coordinates: loc.coordinates as [number, number],
+          isWaypoint: loc.isWaypoint ?? false,
+          ...(photos.length > 0 ? { photos } : {}),
+        };
+      })
+    );
+
     return {
       name: "My Trip",
-      locations: locations.map((loc) => ({
-        name: loc.name,
-        coordinates: loc.coordinates as [number, number],
-        isWaypoint: loc.isWaypoint ?? false,
-      })),
+      locations: exportedLocations,
       segments: segments.map((seg) => ({
         fromIndex: locations.findIndex((l) => l.id === seg.fromId),
         toIndex: locations.findIndex((l) => l.id === seg.toId),
@@ -212,14 +247,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   importRoute: (data) =>
     set(() => {
-      const locations: Location[] = data.locations.map((loc, i) => ({
-        id: generateId(),
-        name: loc.name,
-        coordinates: loc.coordinates,
-        photos: [],
-        // First and last can never be waypoints
-        isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
-      }));
+      const locations: Location[] = data.locations.map((loc, i) => {
+        const locId = generateId();
+        const photos = (loc.photos ?? []).map((p) => ({
+          id: generateId(),
+          locationId: locId,
+          url: p.url,
+          caption: p.caption,
+        }));
+        return {
+          id: locId,
+          name: loc.name,
+          coordinates: loc.coordinates,
+          photos,
+          isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
+        };
+      });
 
       const segments: Segment[] = data.segments.map((seg) => ({
         id: generateId(),
