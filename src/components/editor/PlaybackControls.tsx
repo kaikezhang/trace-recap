@@ -4,6 +4,7 @@ import { Play, Pause, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useAnimationStore } from "@/stores/animationStore";
+import { useUIStore } from "@/stores/uiStore";
 
 interface PlaybackControlsProps {
   onPlay: () => void;
@@ -28,25 +29,38 @@ export default function PlaybackControls({
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentTime = useAnimationStore((s) => s.currentTime);
   const totalDuration = useAnimationStore((s) => s.totalDuration);
+  const bottomSheetExpanded = useUIStore((s) => s.bottomSheetExpanded);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-3 rounded-xl bg-background/90 backdrop-blur-sm border shadow-lg px-4 py-2">
+    <div
+      className={[
+        "z-10 flex items-center gap-2 md:gap-3 bg-background/90 backdrop-blur-sm border shadow-lg px-3 md:px-4 py-2",
+        // Mobile: full-width bar above the collapsed bottom sheet (56px)
+        // When bottom sheet is expanded, slide up above the 60vh sheet
+        "absolute left-0 right-0 rounded-none transition-[bottom] duration-300 ease-out",
+        bottomSheetExpanded ? "bottom-[60vh]" : "bottom-14",
+        // Desktop: floating centered pill (bottom sheet state irrelevant)
+        "md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:rounded-xl md:w-auto",
+      ].join(" ")}
+    >
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-11 w-11 md:h-8 md:w-8 min-w-[44px] md:min-w-0"
         onClick={onReset}
+        aria-label="Reset playback"
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8"
+        className="h-11 w-11 md:h-8 md:w-8 min-w-[44px] md:min-w-0"
         onClick={isPlaying ? onPause : onPlay}
+        aria-label={isPlaying ? "Pause" : "Play"}
       >
         {isPlaying ? (
           <Pause className="h-4 w-4" />
@@ -54,7 +68,7 @@ export default function PlaybackControls({
           <Play className="h-4 w-4" />
         )}
       </Button>
-      <div className="w-48">
+      <div className="flex-1 md:flex-none md:w-48">
         <Slider
           value={[progress]}
           min={0}
@@ -66,7 +80,7 @@ export default function PlaybackControls({
           }}
         />
       </div>
-      <span className="text-xs text-muted-foreground min-w-[70px]">
+      <span className="text-xs text-muted-foreground min-w-[70px] text-right">
         {formatTime(currentTime)} / {formatTime(totalDuration)}
       </span>
     </div>

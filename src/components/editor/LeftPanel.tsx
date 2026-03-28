@@ -5,6 +5,7 @@ import { Upload } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import CitySearch from "./CitySearch";
 import RouteList from "./RouteList";
@@ -51,8 +52,12 @@ export default function LeftPanel() {
     }
   };
 
+  const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
+
+  if (!leftPanelOpen) return null;
+
   return (
-    <div className="flex h-full w-80 flex-col overflow-hidden border-r bg-background">
+    <div className="hidden md:flex h-full w-80 flex-col overflow-hidden border-r bg-background">
       <div className="border-b px-3 py-2">
         <h2 className="text-sm font-semibold">Route</h2>
       </div>
