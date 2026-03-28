@@ -166,6 +166,14 @@ export class AnimationEngine {
     return this.groups;
   }
 
+  getIconAnimator(): IconAnimator {
+    return this.iconAnimator;
+  }
+
+  getSegments(): Segment[] {
+    return this.segments;
+  }
+
   private computeTimeline(): SegmentTiming[] {
     const n = this.groups.length;
     if (n === 0) return [];
@@ -286,6 +294,13 @@ export class AnimationEngine {
     const list = this.listeners.get(event) || [];
     list.push(listener);
     this.listeners.set(event, list);
+  }
+
+  off(event: AnimationEventType, listener: AnimationListener) {
+    const list = this.listeners.get(event);
+    if (!list) return;
+    const idx = list.indexOf(listener);
+    if (idx !== -1) list.splice(idx, 1);
   }
 
   private emit(event: AnimationEvent) {

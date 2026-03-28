@@ -26,6 +26,14 @@ function getIconPath(mode: TransportMode, direction: Direction): string {
 
 const BASE_SIZE = 52;
 
+export interface IconState {
+  visible: boolean;
+  position: [number, number] | null;
+  iconSrc: string;
+  size: number;
+  opacity: number;
+}
+
 export class IconAnimator {
   private map: mapboxgl.Map;
   private groups: AnimationGroup[];
@@ -33,6 +41,13 @@ export class IconAnimator {
   private iconEl: HTMLDivElement;
   private imgEl: HTMLImageElement;
   private currentIconKey: string = "";
+  private lastState: IconState = {
+    visible: false,
+    position: null,
+    iconSrc: "",
+    size: BASE_SIZE,
+    opacity: 1,
+  };
 
   constructor(map: mapboxgl.Map, groups: AnimationGroup[]) {
     this.map = map;
@@ -149,6 +164,19 @@ export class IconAnimator {
     this.iconEl.style.height = `${size}px`;
     this.iconEl.style.opacity = showIcon ? String(opacity) : "0";
     this.iconEl.style.display = showIcon ? "block" : "none";
+
+    // Store state for canvas compositing (video export)
+    this.lastState = {
+      visible: showIcon && opacity > 0,
+      position,
+      iconSrc: this.imgEl.src,
+      size,
+      opacity: showIcon ? opacity : 0,
+    };
+  }
+
+  getState(): IconState {
+    return { ...this.lastState };
   }
 
   private getTransportModeAtProgress(
