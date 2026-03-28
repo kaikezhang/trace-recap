@@ -83,7 +83,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         coordinates: loc.coordinates,
         isWaypoint: false,
         photos: [],
-        isWaypoint: false,
       };
       const locations = [...state.locations, newLocation];
       return {
@@ -208,7 +207,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         id: generateId(),
         name: loc.name,
         coordinates: loc.coordinates,
-        isWaypoint: loc.isWaypoint ?? false,
         photos: [],
         // First and last can never be waypoints
         isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),

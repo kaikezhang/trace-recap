@@ -84,11 +84,14 @@ export default function BottomSheet() {
         style={{ height: "60vh" }}
       >
         {/* Drag handle + collapsed bar */}
-        <button
-          className="flex w-full items-center justify-between px-4 h-14 focus:outline-none"
+        <div
+          className="flex w-full items-center justify-between px-4 h-14 cursor-pointer"
           onClick={toggleBottomSheet}
+          role="button"
+          tabIndex={0}
           aria-expanded={expanded}
           aria-label="Toggle route panel"
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleBottomSheet(); }}
         >
           <div className="flex items-center gap-2">
             <div className="mx-auto w-10 h-1 rounded-full bg-muted-foreground/30 absolute top-2 left-1/2 -translate-x-1/2" />
@@ -128,7 +131,7 @@ export default function BottomSheet() {
               }`}
             />
           </div>
-        </button>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
