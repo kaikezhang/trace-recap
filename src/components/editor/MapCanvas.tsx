@@ -174,11 +174,12 @@ export default function MapCanvas() {
             type: "geojson",
             data: getEmptyRouteData(),
           });
-          // Glow layer (wider, blurred underneath)
+          // Glow layer (wider, blurred underneath) — start HIDDEN
           map.addLayer({
             id: glowLayerId,
             type: "line",
             source: srcId,
+            layout: { visibility: "none" },
             paint: {
               "line-color": lineStyle.color,
               "line-width": 10,
@@ -187,11 +188,12 @@ export default function MapCanvas() {
               "line-dasharray": lineStyle.dasharray || [1, 0],
             },
           });
-          // Main crisp line on top
+          // Main crisp line on top — start HIDDEN
           map.addLayer({
             id: layerId,
             type: "line",
             source: srcId,
+            layout: { visibility: "none" },
             paint: {
               "line-color": lineStyle.color,
               "line-width": 4,
