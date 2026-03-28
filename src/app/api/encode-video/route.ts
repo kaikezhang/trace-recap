@@ -5,7 +5,7 @@ import path from "path";
 
 export const maxDuration = 300; // 5 minutes for long videos
 
-const FFMPEG_PATH = "/usr/bin/ffmpeg";
+const FFMPEG_PATH = "ffmpeg"; // uses PATH, works on Mac (homebrew) and Linux
 
 export async function POST(request: Request): Promise<NextResponse> {
   let tmpDir = "";
