@@ -31,15 +31,17 @@ export class VideoExporter {
     this.cancelled = true;
   }
 
-  static async isConfigSupported(): Promise<boolean> {
+  static async isConfigSupported(
+    config?: { width?: number; height?: number; fps?: number }
+  ): Promise<boolean> {
     if (typeof VideoEncoder === "undefined") return false;
     try {
       const result = await VideoEncoder.isConfigSupported({
         codec: "avc1.640028",
-        width: 1280,
-        height: 720,
+        width: config?.width ?? 1280,
+        height: config?.height ?? 720,
         bitrate: 5_000_000,
-        framerate: 30,
+        framerate: config?.fps ?? 30,
       });
       return result.supported === true;
     } catch {
