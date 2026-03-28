@@ -191,28 +191,15 @@ export class CameraController {
           center = lerp2d(gc.fromCenter, gc.toCenter, eased);
         }
 
-        // Zoom: don't start until past last waypoint
-        let zoomStartAt: number;
-        if (gc.segmentCount > 1) {
-          zoomStartAt = Math.min((gc.segmentCount - 1) / gc.segmentCount + 0.05, 0.95);
-        } else {
-          zoomStartAt = 0.75;
-        }
-
-        let zoom: number;
-        if (eased > zoomStartAt) {
-          const zoomProgress = (eased - zoomStartAt) / (1 - zoomStartAt);
-          zoom = lerp(gc.flyZoom, gc.arriveZoom, zoomProgress * 0.7);
-        } else {
-          zoom = gc.flyZoom;
-        }
+        // Keep constant zoom during FLY — no zoom change while flying
+        // All zoom changes happen in ZOOM_OUT and ZOOM_IN phases
+        const zoom = gc.flyZoom;
         return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "ZOOM_IN": {
-        // Finish the remaining 30% of zoom
-        const startZoom = lerp(gc.flyZoom, gc.arriveZoom, 0.7);
-        const zoom = lerp(startZoom, gc.arriveZoom, eased);
+        // Full zoom from flyZoom to arriveZoom — icon is already at destination
+        const zoom = lerp(gc.flyZoom, gc.arriveZoom, eased);
         return { center: gc.toCenter, zoom, bearing: 0, pitch: 0 };
       }
 
