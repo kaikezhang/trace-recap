@@ -1,10 +1,13 @@
 "use client";
 
-import { X, GripVertical } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { X, GripVertical, Pencil } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import PhotoManager, { usePhotoDropZone } from "./PhotoManager";
+import { useProjectStore } from "@/stores/projectStore";
 import type { Location } from "@/types";
 
 interface LocationCardProps {
@@ -13,6 +16,67 @@ interface LocationCardProps {
   total: number;
   onRemove: (id: string) => void;
   onToggleWaypoint: (id: string) => void;
+}
+
+function EditableName({
+  value,
+  placeholder,
+  onSave,
+  className,
+}: {
+  value: string;
+  placeholder: string;
+  onSave: (val: string) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  if (editing) {
+    return (
+      <Input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          onSave(draft);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            onSave(draft);
+            setEditing(false);
+          } else if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        placeholder={placeholder}
+        className={`h-6 text-xs px-1 py-0 ${className ?? ""}`}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`cursor-pointer hover:underline decoration-dotted underline-offset-2 ${className ?? ""}`}
+      onClick={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
+      title="Click to edit"
+    >
+      {value || <span className="text-muted-foreground italic">{placeholder}</span>}
+    </span>
+  );
 }
 
 export default function LocationCard({
@@ -24,6 +88,7 @@ export default function LocationCard({
 }: LocationCardProps) {
   const isFirst = index === 0;
   const isWaypoint = location.isWaypoint;
+  const updateLocation = useProjectStore((s) => s.updateLocation);
 
   const {
     attributes,
@@ -67,17 +132,24 @@ export default function LocationCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="text-sm font-medium truncate">{location.name}</p>
+            <EditableName
+              value={location.name}
+              placeholder="English name"
+              onSave={(val) => updateLocation(location.id, { name: val })}
+              className="text-sm font-medium truncate"
+            />
             {isWaypoint && (
               <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                 stop by
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {location.coordinates[1].toFixed(2)},{" "}
-            {location.coordinates[0].toFixed(2)}
-          </p>
+          <EditableName
+            value={location.nameZh ?? ""}
+            placeholder="中文名"
+            onSave={(val) => updateLocation(location.id, { nameZh: val || undefined })}
+            className="text-xs text-muted-foreground"
+          />
         </div>
         {!isFirst && (
           <Button

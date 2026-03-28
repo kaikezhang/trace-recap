@@ -27,7 +27,7 @@ interface ProjectState {
   addLocation: (location: Omit<Location, "id" | "photos" | "isWaypoint">) => void;
   removeLocation: (id: string) => void;
   reorderLocations: (fromIndex: number, toIndex: number) => void;
-  updateLocation: (id: string, updates: Partial<Pick<Location, "name" | "coordinates">>) => void;
+  updateLocation: (id: string, updates: Partial<Pick<Location, "name" | "nameZh" | "coordinates">>) => void;
   toggleWaypoint: (locationId: string) => void;
 
   setTransportMode: (segmentId: string, mode: TransportMode) => void;
