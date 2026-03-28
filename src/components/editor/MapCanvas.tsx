@@ -218,6 +218,18 @@ export default function MapCanvas() {
           if (map.getLayer(glid)) map.setLayoutProperty(glid, "visibility", vis);
           if (idx > csi) setSegmentSourceData(map, seg.id, seg.geometry, 0);
         });
+      } else {
+        // Idle (or exporting): show all segments with full geometry.
+        // This is critical because the visibility useEffect may have already
+        // run and bailed out (isStyleLoaded was false), and won't re-run
+        // since its deps haven't changed.
+        segments.forEach((seg) => {
+          const lid = SEGMENT_LAYER_PREFIX + seg.id;
+          const glid = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+          if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", "visible");
+          if (map.getLayer(glid)) map.setLayoutProperty(glid, "visibility", "visible");
+          setSegmentSourceData(map, seg.id, seg.geometry);
+        });
       }
     };
 
@@ -240,57 +252,57 @@ export default function MapCanvas() {
   // On idle: show all and restore full geometries
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
 
-    // ALWAYS log for debugging
-    const allLayers = map.getStyle()?.layers?.map((l: { id: string }) => l.id).filter((id: string) => id.startsWith("segment")) || [];
-    console.log(`[visibility] state=${playbackState} segIdx=${currentSegmentIndex} segs=${segments.length} mapLayers=[${allLayers.join(",")}]`);
-    segments.forEach((seg, i) => {
-      const lid = SEGMENT_LAYER_PREFIX + seg.id;
-      console.log(`[visibility] seg[${i}] id=${seg.id} layerId=${lid} exists=${!!map.getLayer(lid)}`);
-    });
+    const applyVisibility = () => {
+      if (!map.isStyleLoaded()) return;
 
-    if (playbackState === "playing" || playbackState === "paused") {
-      const segmentChanged = currentSegmentIndex !== prevSegmentIndexRef.current;
+      if (playbackState === "playing" || playbackState === "paused") {
+        const segmentChanged = currentSegmentIndex !== prevSegmentIndexRef.current;
 
-      segments.forEach((seg, i) => {
-        const layerId = SEGMENT_LAYER_PREFIX + seg.id;
-        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+        segments.forEach((seg, i) => {
+          const layerId = SEGMENT_LAYER_PREFIX + seg.id;
+          const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
 
-        if (i < currentSegmentIndex) {
-          // Past: visible with full geometry (restore in case it was sliced)
+          if (i < currentSegmentIndex) {
+            if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
+            if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
+            setSegmentSourceData(map, seg.id, seg.geometry);
+          } else if (i === currentSegmentIndex) {
+            if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
+            if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
+            if (segmentChanged) {
+              setSegmentSourceData(map, seg.id, seg.geometry, 0);
+            }
+          } else {
+            if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "none");
+            if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "none");
+          }
+        });
+
+        prevSegmentIndexRef.current = currentSegmentIndex;
+      } else {
+        // idle: show all segments with full geometry
+        segments.forEach((seg) => {
+          const layerId = SEGMENT_LAYER_PREFIX + seg.id;
+          const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
           if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
           if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
           setSegmentSourceData(map, seg.id, seg.geometry);
-        } else if (i === currentSegmentIndex) {
-          // Current: visible, progressively drawn by routeDrawProgress
-          if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
-          if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
-          // When this segment first becomes current, clear its source so
-          // progressive draw starts from empty (routeDrawProgress fills it in).
-          // Skip on pause/resume so we don't erase existing progress.
-          if (segmentChanged) {
-            setSegmentSourceData(map, seg.id, seg.geometry, 0);
-          }
-        } else {
-          // Future: hidden
-          console.log(`[visibility] HIDE future seg ${i} (${seg.id}), layer=${layerId}, exists=${!!map.getLayer(layerId)}`);
-          if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "none");
-          if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "none");
-        }
-      });
+        });
+        prevSegmentIndexRef.current = -1;
+      }
+    };
 
-      prevSegmentIndexRef.current = currentSegmentIndex;
+    if (map.isStyleLoaded()) {
+      applyVisibility();
     } else {
-      // idle: show all segments with full geometry
-      segments.forEach((seg) => {
-        const layerId = SEGMENT_LAYER_PREFIX + seg.id;
-        const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
-        if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
-        if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
-        setSegmentSourceData(map, seg.id, seg.geometry);
-      });
-      prevSegmentIndexRef.current = -1;
+      // Style not loaded yet — defer until it is. This handles the race
+      // where segments arrive before the map style finishes loading.
+      map.once("style.load", applyVisibility);
+      return () => {
+        map.off("style.load", applyVisibility);
+      };
     }
   }, [playbackState, currentSegmentIndex, segments]);
 
