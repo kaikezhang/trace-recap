@@ -243,7 +243,12 @@ export default function MapCanvas() {
     if (!map || !map.isStyleLoaded()) return;
 
     // ALWAYS log for debugging
-    console.log(`[visibility] state=${playbackState} segIdx=${currentSegmentIndex} segs=${segments.length}`);
+    const allLayers = map.getStyle()?.layers?.map((l: { id: string }) => l.id).filter((id: string) => id.startsWith("segment")) || [];
+    console.log(`[visibility] state=${playbackState} segIdx=${currentSegmentIndex} segs=${segments.length} mapLayers=[${allLayers.join(",")}]`);
+    segments.forEach((seg, i) => {
+      const lid = SEGMENT_LAYER_PREFIX + seg.id;
+      console.log(`[visibility] seg[${i}] id=${seg.id} layerId=${lid} exists=${!!map.getLayer(lid)}`);
+    });
 
     if (playbackState === "playing" || playbackState === "paused") {
       const segmentChanged = currentSegmentIndex !== prevSegmentIndexRef.current;
