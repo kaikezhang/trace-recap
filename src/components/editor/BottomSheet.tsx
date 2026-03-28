@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Upload, ChevronUp, MapPin } from "lucide-react";
+import { Upload, Save, ChevronUp, MapPin } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
@@ -13,11 +13,23 @@ import RouteList from "./RouteList";
 export default function BottomSheet() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importRoute = useProjectStore((s) => s.importRoute);
+  const exportRoute = useProjectStore((s) => s.exportRoute);
   const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
   const locations = useProjectStore((s) => s.locations);
   const expanded = useUIStore((s) => s.bottomSheetExpanded);
   const toggleBottomSheet = useUIStore((s) => s.toggleBottomSheet);
   const setBottomSheetExpanded = useUIStore((s) => s.setBottomSheetExpanded);
+
+  const handleExportRoute = () => {
+    const data = exportRoute();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "trace-recap-route.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -97,6 +109,18 @@ export default function BottomSheet() {
             >
               <Upload className="mr-1.5 h-3.5 w-3.5" />
               Import
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleExportRoute();
+              }}
+            >
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              Export
             </Button>
             <ChevronUp
               className={`h-4 w-4 text-muted-foreground transition-transform duration-300 ${

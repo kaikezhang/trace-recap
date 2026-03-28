@@ -32,6 +32,7 @@ interface ProjectState {
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
   importRoute: (data: ImportRouteData) => void;
+  exportRoute: () => ImportRouteData;
 }
 
 let nextId = 1;
@@ -158,6 +159,22 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setMapStyle: (style) => set({ mapStyle: style }),
 
   clearRoute: () => set({ locations: [], segments: [] }),
+
+  exportRoute: () => {
+    const { locations, segments } = useProjectStore.getState();
+    return {
+      name: "My Trip",
+      locations: locations.map((loc) => ({
+        name: loc.name,
+        coordinates: loc.coordinates as [number, number],
+      })),
+      segments: segments.map((seg) => ({
+        fromIndex: locations.findIndex((l) => l.id === seg.fromId),
+        toIndex: locations.findIndex((l) => l.id === seg.toId),
+        transportMode: seg.transportMode,
+      })),
+    };
+  },
 
   importRoute: (data) =>
     set(() => {
