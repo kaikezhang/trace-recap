@@ -94,6 +94,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const newLocation: Location = {
         id: generateId(),
         name: loc.name,
+        nameZh: loc.nameZh,
         coordinates: loc.coordinates,
         isWaypoint: false,
         photos: [],

@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   const q = searchParams.get("q");
   const lng = searchParams.get("lng");
   const lat = searchParams.get("lat");
+  const language = searchParams.get("language"); // e.g. "zh" for Chinese
 
   if (!MAPBOX_TOKEN) {
     return NextResponse.json(
@@ -21,10 +22,10 @@ export async function GET(request: NextRequest) {
     // Forward geocoding
     url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
       q
-    )}.json?access_token=${MAPBOX_TOKEN}&types=place,locality,region,country&limit=5`;
+    )}.json?access_token=${MAPBOX_TOKEN}&types=place,locality,region,country&limit=5${language ? `&language=${language}` : ""}`;
   } else if (lng && lat) {
     // Reverse geocoding
-    url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=place,locality,region,country&limit=1`;
+    url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=place,locality,region,country&limit=1${language ? `&language=${language}` : ""}`;
   } else {
     return NextResponse.json(
       { error: "Provide either q (query) or lng+lat parameters" },

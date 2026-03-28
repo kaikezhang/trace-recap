@@ -32,16 +32,22 @@ function EditorContent() {
   const setCurrentTime = useAnimationStore((s) => s.setCurrentTime);
   const setTotalDuration = useAnimationStore((s) => s.setTotalDuration);
   const setCurrentCityLabel = useAnimationStore((s) => s.setCurrentCityLabel);
+  const setCurrentCityLabelZh = useAnimationStore((s) => s.setCurrentCityLabelZh);
   const setVisiblePhotos = useAnimationStore((s) => s.setVisiblePhotos);
   const setShowPhotoOverlay = useAnimationStore((s) => s.setShowPhotoOverlay);
   const setCurrentSegmentIndex = useAnimationStore((s) => s.setCurrentSegmentIndex);
   const setCurrentGroupSegmentIndices = useAnimationStore((s) => s.setCurrentGroupSegmentIndices);
   const reset = useAnimationStore((s) => s.reset);
 
-  const currentCityLabel = useAnimationStore((s) => s.currentCityLabel);
+  const cityLabelSize = useUIStore((s) => s.cityLabelSize);
+  const cityLabelLang = useUIStore((s) => s.cityLabelLang);
+  const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
+  const currentCityLabelZh = useAnimationStore((s) => s.currentCityLabelZh);
+  const currentCityLabel = cityLabelLang === "zh"
+    ? (currentCityLabelZh || currentCityLabelEn)
+    : currentCityLabelEn;
   const visiblePhotos = useAnimationStore((s) => s.visiblePhotos);
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
-  const cityLabelSize = useUIStore((s) => s.cityLabelSize);
 
   // Rebuild engine when project changes
   useEffect(() => {
@@ -65,6 +71,7 @@ function EditorContent() {
       setCurrentSegmentIndex(e.segmentIndex);
       setCurrentGroupSegmentIndices(e.groupSegmentIndices);
       setCurrentCityLabel(e.cityLabel);
+      setCurrentCityLabelZh(e.cityLabelZh);
       setShowPhotoOverlay(e.showPhotos);
       if (e.showPhotos) {
         const seg = segments[e.segmentIndex];

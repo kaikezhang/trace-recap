@@ -34,6 +34,8 @@ export default function ExportDialog() {
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
   const setCityLabelSize = useUIStore((s) => s.setCityLabelSize);
+  const cityLabelLang = useUIStore((s) => s.cityLabelLang);
+  const setCityLabelLang = useUIStore((s) => s.setCityLabelLang);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [resolution, setResolution] = useState("720");
 
@@ -56,6 +58,7 @@ export default function ExportDialog() {
       resolution: parseInt(resolution),
       fps: FPS,
       cityLabelSize,
+      cityLabelLang,
     };
 
     const engine = new AnimationEngine(map, locations, segments);
@@ -159,6 +162,23 @@ export default function ExportDialog() {
               <SelectContent>
                 <SelectItem value="720">720p</SelectItem>
                 <SelectItem value="1080">1080p</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">City Label Language</label>
+            <Select
+              value={cityLabelLang}
+              onValueChange={(v) => v && setCityLabelLang(v as "en" | "zh")}
+              disabled={isExporting}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="zh">中文</SelectItem>
               </SelectContent>
             </Select>
           </div>

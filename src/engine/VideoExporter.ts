@@ -281,9 +281,12 @@ export class VideoExporter {
     canvasWidth: number,
     scaleX: number,
     captured: { progress: AnimationEvent | null },
-    baseFontSize: number = 18
+    baseFontSize: number = 18,
+    lang: "en" | "zh" = "en"
   ): void {
-    const label = captured.progress?.cityLabel;
+    const labelEn = captured.progress?.cityLabel;
+    const labelZh = captured.progress?.cityLabelZh;
+    const label = lang === "zh" ? (labelZh || labelEn) : labelEn;
     if (label) {
       this.drawCityLabel(ctx, canvasWidth, scaleX, label, baseFontSize);
     }
@@ -373,7 +376,7 @@ export class VideoExporter {
         offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
         offCtx.drawImage(canvas, 0, 0);
         this.drawVehicleIcon(offCtx, scaleX, scaleY);
-        this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18);
+        this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
 
         const blob = await new Promise<Blob>((resolve, reject) => {
           offscreen.toBlob(

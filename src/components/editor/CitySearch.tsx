@@ -63,9 +63,20 @@ export default function CitySearch() {
     }, 300);
   };
 
-  const selectResult = (result: GeoResult) => {
+  const selectResult = async (result: GeoResult) => {
+    // Fetch Chinese name for this location
+    let nameZh: string | undefined;
+    try {
+      const [lng, lat] = result.center;
+      const res = await fetch(`/api/geocode?lng=${lng}&lat=${lat}&language=zh`);
+      const data = await res.json();
+      nameZh = data.features?.[0]?.text || data.features?.[0]?.place_name || undefined;
+    } catch {
+      // Non-critical, proceed without Chinese name
+    }
     addLocation({
       name: result.text || result.place_name,
+      nameZh,
       coordinates: result.center,
     });
     if (map) {
