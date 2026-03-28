@@ -40,7 +40,7 @@ export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
                 <img
                   src={photo.url}
                   alt={photo.caption || ""}
-                  className="w-64 h-44 object-cover"
+                  className="max-w-64 max-h-72 object-contain"
                 />
                 {photo.caption && (
                   <p className="px-3 py-2 text-sm text-gray-700">

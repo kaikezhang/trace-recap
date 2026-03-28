@@ -83,7 +83,7 @@ export default function PhotoManager({ locationId }: PhotoManagerProps) {
               <img
                 src={photo.url}
                 alt=""
-                className="h-12 w-12 rounded object-cover"
+                className="h-16 max-w-[64px] rounded object-contain bg-muted"
               />
               <button
                 className="absolute -top-1 -right-1 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
