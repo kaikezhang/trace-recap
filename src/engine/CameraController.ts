@@ -48,9 +48,15 @@ export class CameraController {
       );
 
       const routeLine = group.mergedGeometry;
-      const routeLength = routeLine && routeLine.coordinates && routeLine.coordinates.length >= 2
-        ? turf.length(turf.lineString(routeLine.coordinates))
-        : distKm;
+      let routeLength = distKm;
+      if (routeLine && routeLine.coordinates && routeLine.coordinates.length >= 2) {
+        try {
+          routeLength = turf.length(turf.lineString(routeLine.coordinates));
+        } catch {
+          // Invalid coordinates — fallback to straight-line distance
+          routeLength = distKm;
+        }
+      }
 
       return {
         fromCenter: fromCoords,

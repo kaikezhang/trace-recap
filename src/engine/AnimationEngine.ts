@@ -188,7 +188,11 @@ export class AnimationEngine {
     // Compute each group's merged route length for proportional FLY timing
     const groupLengths = this.groups.map((g) => {
       if (g.mergedGeometry && g.mergedGeometry.coordinates.length >= 2) {
-        return turf.length(turf.lineString(g.mergedGeometry.coordinates));
+        try {
+          return turf.length(turf.lineString(g.mergedGeometry.coordinates));
+        } catch {
+          return 0;
+        }
       }
       return 0;
     });
