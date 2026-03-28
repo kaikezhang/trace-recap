@@ -13,6 +13,7 @@ import RouteList from "./RouteList";
 export default function LeftPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importRoute = useProjectStore((s) => s.importRoute);
+  const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
   const exportRoute = useProjectStore((s) => s.exportRoute);
   const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
 
@@ -35,6 +36,8 @@ export default function LeftPanel() {
       const text = await file.text();
       const data: ImportRouteData = JSON.parse(text);
       importRoute(data);
+      // Fetch Chinese names for imported locations (non-blocking)
+      enrichChineseNames();
 
       // Generate geometry for each segment
       const state = useProjectStore.getState();
