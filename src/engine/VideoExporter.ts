@@ -47,7 +47,11 @@ export class VideoExporter {
   static async findSupportedCodec(
     config?: { width?: number; height?: number; fps?: number }
   ): Promise<string | null> {
-    if (typeof VideoEncoder === "undefined") return null;
+    if (typeof window === "undefined" || typeof VideoEncoder === "undefined") {
+      console.log("[codec] VideoEncoder not available (SSR or unsupported browser)");
+      return null;
+    }
+    console.log("[codec] VideoEncoder available, testing codecs...");
     const w = config?.width ?? 1280;
     const h = config?.height ?? 720;
     const f = config?.fps ?? 30;

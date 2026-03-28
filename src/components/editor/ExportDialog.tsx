@@ -33,7 +33,14 @@ export default function ExportDialog() {
 
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   useEffect(() => {
-    VideoExporter.isConfigSupported().then(setIsSupported);
+    console.log("[ExportDialog] checking codec support...");
+    VideoExporter.isConfigSupported().then((result) => {
+      console.log("[ExportDialog] isConfigSupported result:", result);
+      setIsSupported(result);
+    }).catch((e) => {
+      console.error("[ExportDialog] isConfigSupported error:", e);
+      setIsSupported(false);
+    });
   }, []);
 
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
