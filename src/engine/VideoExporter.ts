@@ -1,6 +1,6 @@
 import * as turf from "@turf/turf";
 import type mapboxgl from "mapbox-gl";
-import type { ExportSettings, Location, Photo, TransportMode } from "@/types";
+import type { ExportSettings, Photo, TransportMode } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 import type { AnimationEvent } from "./AnimationEngine";
 import {
@@ -21,6 +21,7 @@ type ProgressCallback = (progress: ExportProgress) => void;
 interface PreloadedPhoto {
   img: HTMLImageElement;
   aspect: number; // naturalWidth / naturalHeight
+  failed?: boolean; // true if the original image failed to load (placeholder)
 }
 
 const TRANSPORT_MODES: TransportMode[] = [
@@ -100,7 +101,6 @@ export class VideoExporter {
       promises.push(
         new Promise<void>((resolve) => {
           const img = new Image();
-          img.crossOrigin = "anonymous";
           img.onload = () => {
             this.photoImages.set(url, {
               img,
@@ -109,7 +109,13 @@ export class VideoExporter {
             resolve();
           };
           img.onerror = () => {
-            // Not fatal — photo just won't appear
+            // Create a placeholder so layout stays stable
+            const placeholder = this.createPlaceholderImage(240, 180);
+            this.photoImages.set(url, {
+              img: placeholder,
+              aspect: 240 / 180,
+              failed: true,
+            });
             resolve();
           };
           img.src = url;
@@ -117,6 +123,43 @@ export class VideoExporter {
       );
     }
     await Promise.all(promises);
+  }
+
+  /** Create a placeholder HTMLImageElement for failed photo loads */
+  private createPlaceholderImage(w: number, h: number): HTMLImageElement {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const cx = c.getContext("2d")!;
+    // Gray background
+    cx.fillStyle = "#d1d5db";
+    cx.fillRect(0, 0, w, h);
+    // Draw an X
+    const m = 40;
+    cx.strokeStyle = "#9ca3af";
+    cx.lineWidth = 6;
+    cx.lineCap = "round";
+    cx.beginPath();
+    cx.moveTo(m, m);
+    cx.lineTo(w - m, h - m);
+    cx.moveTo(w - m, m);
+    cx.lineTo(m, h - m);
+    cx.stroke();
+    // Camera icon (simple rectangle + circle)
+    const iconW = 50;
+    const iconH = 36;
+    const ix = (w - iconW) / 2;
+    const iy = (h - iconH) / 2;
+    cx.strokeStyle = "#6b7280";
+    cx.lineWidth = 3;
+    cx.strokeRect(ix, iy, iconW, iconH);
+    cx.beginPath();
+    cx.arc(w / 2, h / 2, 10, 0, Math.PI * 2);
+    cx.stroke();
+
+    const img = new Image();
+    img.src = c.toDataURL();
+    return img;
   }
 
   /** Hide all segment layers and reset source data before export starts */
@@ -363,6 +406,7 @@ export class VideoExporter {
     const shadowOffY = 2 * scaleX;
     const captionFontSize = 14 * scaleX;
     const captionGap = 4 * scaleX;
+    const captionExtra = captionFontSize + captionGap + pad; // extra height when caption present
 
     // Determine layout based on photo count
     const count = loaded.length;
@@ -431,9 +475,12 @@ export class VideoExporter {
       })
     );
 
-    // Compute total height of all rows
+    // Compute total height of all rows (include caption height in card size)
     const rowHeights = rowRects.map((row) =>
-      Math.max(...row.map((r) => r.h + pad * 2))
+      Math.max(...row.map((r) => {
+        const cardH = r.h + pad * 2 + (r.photo.caption ? captionExtra : 0);
+        return cardH;
+      }))
     );
     const totalHeight =
       rowHeights.reduce((s, h) => s + h, 0) + gap * (rows.length - 1);
@@ -454,8 +501,9 @@ export class VideoExporter {
 
       for (let ci = 0; ci < row.length; ci++) {
         const { photo, preloaded, w, h } = row[ci];
+        const hasCaption = !!photo.caption;
         const frameW = w + pad * 2;
-        const frameH = h + pad * 2;
+        const frameH = h + pad * 2 + (hasCaption ? captionExtra : 0);
 
         // Determine rotation
         let rotation = 0;
@@ -510,16 +558,16 @@ export class VideoExporter {
         ctx.drawImage(preloaded.img, -frameW / 2 + pad, -frameH / 2 + pad, w, h);
         ctx.restore();
 
-        // Caption
-        if (photo.caption) {
+        // Caption (drawn inside the white card, below the photo)
+        if (hasCaption) {
           ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
           ctx.fillText(
-            photo.caption,
+            photo.caption!,
             0,
-            frameH / 2 + captionGap,
+            -frameH / 2 + pad + h + captionGap,
             w
           );
         }
