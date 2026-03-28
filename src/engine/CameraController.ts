@@ -177,11 +177,10 @@ export class CameraController {
       case "FLY": {
         let center: [number, number];
 
-        if (gc.routeLine && gc.routeLine.coordinates.length > 1) {
-          const line = turf.lineString(gc.routeLine.coordinates);
-          const along = turf.along(line, eased * gc.routeLength);
-          center = along.geometry.coordinates as [number, number];
-        } else {
+        // Camera follows a smooth straight-line path (fromCenter → toCenter)
+        // NOT the road geometry — this prevents jitter on winding roads
+        // The icon still follows the actual road in IconAnimator
+        {
           center = lerp2d(gc.fromCenter, gc.toCenter, eased);
         }
 
@@ -190,14 +189,8 @@ export class CameraController {
       }
 
       case "ZOOM_IN": {
-        const routeEnd = gc.routeLine
-          ? (gc.routeLine.coordinates[
-              gc.routeLine.coordinates.length - 1
-            ] as [number, number])
-          : gc.toCenter;
-        const center = lerp2d(routeEnd, gc.toCenter, eased);
         const zoom = lerp(gc.flyZoom, gc.arriveZoom, eased);
-        return { center, zoom, bearing: 0, pitch: 0 };
+        return { center: gc.toCenter, zoom, bearing: 0, pitch: 0 };
       }
 
       case "ARRIVE":
