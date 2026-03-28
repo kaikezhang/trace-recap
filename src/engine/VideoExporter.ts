@@ -152,10 +152,11 @@ export class VideoExporter {
     }
 
     // Finalizing phase: flush encoder and mux remaining data
-    onProgress({ phase: "finalizing", current: 1, total: 1 });
+    onProgress({ phase: "finalizing", current: 0, total: 1 });
     await encoder.flush();
     encoder.close();
     muxer.finalize();
+    onProgress({ phase: "finalizing", current: 1, total: 1 });
 
     const buffer = muxer.target.buffer;
     onProgress({ phase: "done", current: 1, total: 1 });
