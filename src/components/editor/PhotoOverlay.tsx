@@ -149,16 +149,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
         right: 0,
       }}
     >
-      <div
-        className="absolute inset-0"
-        style={{
-          opacity: visible ? 1 : 0,
-          transform: visible ? "scale(1) translateY(0)" : "scale(0.7) translateY(-50px)",
-          filter: visible ? "blur(0px)" : "blur(8px)",
-          transition: "opacity 0.5s ease-out, transform 0.5s ease-out, filter 0.5s ease-out",
-          pointerEvents: "none",
-        }}
-      >
+      <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
         {hasDisplayPhotos && rects.map((rect, i) => {
             const photo = orderedMetas[i];
             if (!photo) return null;
@@ -174,17 +165,27 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
                 ? (i === 0 ? -2 : i === n - 1 ? 2 : 0)
                 : (i % 2 === 0 ? -1.5 : 1.5);
 
+            // Per-photo exit: staggered fade based on opacity prop
+            // Last photo fades first (reverse stagger)
+            const exitProgress = 1 - opacity; // 0 = fully visible, 1 = fully gone
+            const staggerOffset = n > 1 ? (n - 1 - i) / (n - 1) * 0.4 : 0;
+            const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
+            
+            const exitOpacity = exitProgress > 0 ? 1 - photoExitT : 1;
+            const exitScale = exitProgress > 0 ? 1 - photoExitT * 0.4 : 1; // shrink to 60%
+            const exitY = exitProgress > 0 ? -photoExitT * 60 : 0; // float up 60px
+            const exitBlur = exitProgress > 0 ? photoExitT * 6 : 0; // blur to 6px
+            const exitRotate = exitProgress > 0 ? photoExitT * (i % 2 === 0 ? -12 : 12) : 0;
+
             return (
               <motion.div
                 key={photo.id}
                 initial={{ opacity: 0, scale: 0.6, y: 60, filter: "blur(8px)" }}
-                animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
-                transition={{
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 25,
-                  delay: i * 0.08,
-                }}
+                animate={{ opacity: exitOpacity, scale: exitScale, y: exitY, filter: `blur(${exitBlur}px)`, rotate: exitRotate + rotation }}
+                transition={exitProgress > 0
+                  ? { duration: 0.15, ease: "easeOut" }
+                  : { type: "spring", stiffness: 300, damping: 25, delay: i * 0.08 }
+                }
                 className="absolute overflow-hidden drop-shadow-xl"
                 style={{
                   left: `${rect.x * 100}%`,

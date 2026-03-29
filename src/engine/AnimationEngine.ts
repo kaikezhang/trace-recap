@@ -451,9 +451,16 @@ export class AnimationEngine {
       cityLabelZh = group.toLoc.nameZh ?? null;
     }
 
-    // Photos: show during ARRIVE only. AnimatePresence handles exit animation.
+    // Photos: show during ARRIVE. Fade out in the last 30% of ARRIVE phase.
     const showPhotos = phase === "ARRIVE" && group.toLoc.photos.length > 0;
-    const photoOpacity = showPhotos ? 1 : 0;
+    let photoOpacity = 0;
+    if (showPhotos) {
+      if (phaseProgress < 0.7) {
+        photoOpacity = 1; // Full opacity for first 70%
+      } else {
+        photoOpacity = 1 - ((phaseProgress - 0.7) / 0.3); // Fade 1→0 in last 30%
+      }
+    }
 
     const progress = clamped / this.totalDuration;
     this.emit({
