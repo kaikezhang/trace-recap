@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useMap } from "./MapContext";
@@ -37,6 +38,7 @@ export default function MapCanvas() {
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const segmentLayersRef = useRef<Set<string>>(new Set());
+  const [mapLoaded, setMapLoaded] = useState(false);
   const { setMap } = useMap();
   const addLocation = useProjectStore((s) => s.addLocation);
   const locations = useProjectStore((s) => s.locations);
@@ -60,6 +62,7 @@ export default function MapCanvas() {
     });
 
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
+    map.once("style.load", () => setMapLoaded(true));
     mapInstanceRef.current = map;
     setMap(map);
 
@@ -419,5 +422,19 @@ export default function MapCanvas() {
     });
   }, [mapStyle]);
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+      <AnimatePresence>
+        {!mapLoaded && (
+          <motion.div
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="absolute inset-0 animate-pulse bg-gradient-to-br from-gray-100 to-gray-200"
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
