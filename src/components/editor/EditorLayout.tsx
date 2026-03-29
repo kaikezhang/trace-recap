@@ -19,6 +19,7 @@ import {
 } from "./routeSegmentSources";
 import * as turf from "@turf/turf";
 import { AnimationEngine } from "@/engine/AnimationEngine";
+import { demoProject } from "@/lib/demoProject";
 import {
   initializeProjectPersistence,
   useProjectStore,
@@ -26,14 +27,71 @@ import {
 import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
 
+const ONBOARDING_STORAGE_KEY = "trace-recap-onboarded";
+
+type OnboardingHintKey =
+  | "searchStart"
+  | "searchSecondStop"
+  | "playPreview";
+
+type OnboardingState = Record<OnboardingHintKey, boolean>;
+
+const DEFAULT_ONBOARDING_STATE: OnboardingState = {
+  searchStart: false,
+  searchSecondStop: false,
+  playPreview: false,
+};
+
+function readOnboardingState(): OnboardingState {
+  if (typeof window === "undefined") {
+    return DEFAULT_ONBOARDING_STATE;
+  }
+
+  const saved = window.localStorage.getItem(ONBOARDING_STORAGE_KEY);
+  if (!saved) {
+    return DEFAULT_ONBOARDING_STATE;
+  }
+
+  if (saved === "true") {
+    return {
+      searchStart: true,
+      searchSecondStop: true,
+      playPreview: true,
+    };
+  }
+
+  try {
+    return {
+      ...DEFAULT_ONBOARDING_STATE,
+      ...(JSON.parse(saved) as Partial<OnboardingState>),
+    };
+  } catch {
+    return DEFAULT_ONBOARDING_STATE;
+  }
+}
+
+function persistOnboardingState(state: OnboardingState): void {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(
+    ONBOARDING_STORAGE_KEY,
+    Object.values(state).every(Boolean) ? "true" : JSON.stringify(state),
+  );
+}
+
 function EditorContent() {
   const { map } = useMap();
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
+  const importRoute = useProjectStore((s) => s.importRoute);
+  const regenerateSegmentGeometries = useProjectStore(
+    (s) => s.regenerateSegmentGeometries,
+  );
   const segmentTimingOverrides = useProjectStore(
     (s) => s.segmentTimingOverrides,
   );
   const engineRef = useRef<AnimationEngine | null>(null);
+  const demoLoadedRef = useRef(false);
 
   const setPlaybackState = useAnimationStore((s) => s.setPlaybackState);
   const setCurrentTime = useAnimationStore((s) => s.setCurrentTime);
@@ -58,6 +116,7 @@ function EditorContent() {
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
+  const setBottomSheetExpanded = useUIStore((s) => s.setBottomSheetExpanded);
   const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
   const currentCityLabelZh = useAnimationStore((s) => s.currentCityLabelZh);
   const currentCityLabel =
@@ -78,10 +137,43 @@ function EditorContent() {
   >(null);
   const visiblePhotoLocation =
     locations.find((l) => l.id === visiblePhotoLocationId) ?? null;
+  const [shouldLoadDemo, setShouldLoadDemo] = useState(false);
+  const [demoQueryChecked, setDemoQueryChecked] = useState(false);
+  const [onboardingState, setOnboardingState] =
+    useState<OnboardingState | null>(null);
 
   useEffect(() => {
-    initializeProjectPersistence();
+    const nextShouldLoadDemo =
+      new URL(window.location.href).searchParams.get("demo") === "true";
+    setShouldLoadDemo(nextShouldLoadDemo);
+    setDemoQueryChecked(true);
+    initializeProjectPersistence({ skipRestore: nextShouldLoadDemo });
   }, []);
+
+  useEffect(() => {
+    setOnboardingState(readOnboardingState());
+  }, []);
+
+  useEffect(() => {
+    if (!demoQueryChecked || !shouldLoadDemo || demoLoadedRef.current) return;
+
+    demoLoadedRef.current = true;
+
+    const loadDemoProject = async () => {
+      importRoute(demoProject);
+      await regenerateSegmentGeometries();
+
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("demo");
+      window.history.replaceState(
+        {},
+        "",
+        `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`,
+      );
+    };
+
+    void loadDemoProject();
+  }, [demoQueryChecked, importRoute, regenerateSegmentGeometries, shouldLoadDemo]);
 
   // Rebuild engine when project changes
   useEffect(() => {
@@ -372,6 +464,61 @@ function EditorContent() {
   const isPlaying = playbackState === "playing";
   const hasSegments = segments.length > 0;
 
+  const dismissHint = useCallback((hintKey: OnboardingHintKey) => {
+    setOnboardingState((current) => {
+      if (!current || current[hintKey]) {
+        return current;
+      }
+
+      const nextState = {
+        ...current,
+        [hintKey]: true,
+      };
+      persistOnboardingState(nextState);
+      return nextState;
+    });
+  }, []);
+
+  const searchHintMessage =
+    onboardingState && !onboardingState.searchStart && locations.length === 0
+      ? "Search for a city above to start building your route"
+      : onboardingState &&
+          !onboardingState.searchSecondStop &&
+          locations.length === 1
+        ? "Add one more city above to create your first route segment"
+        : undefined;
+
+  const handleSearchHintDismiss = useCallback(() => {
+    if (!onboardingState) return;
+
+    if (!onboardingState.searchStart && locations.length === 0) {
+      dismissHint("searchStart");
+      return;
+    }
+
+    if (!onboardingState.searchSecondStop && locations.length === 1) {
+      dismissHint("searchSecondStop");
+    }
+  }, [dismissHint, locations.length, onboardingState]);
+
+  const playHintMessage =
+    onboardingState &&
+    !onboardingState.playPreview &&
+    locations.length >= 2 &&
+    hasSegments
+      ? "Press Play to preview your route animation"
+      : undefined;
+
+  useEffect(() => {
+    if (
+      searchHintMessage &&
+      typeof window !== "undefined" &&
+      window.innerWidth < 768
+    ) {
+      setBottomSheetExpanded(true);
+    }
+  }, [searchHintMessage, setBottomSheetExpanded]);
+
   return (
     <div className="flex h-screen flex-col">
       <TopToolbar />
@@ -379,6 +526,8 @@ function EditorContent() {
         <LeftPanel
           onLocationClick={handleLocationClick}
           onEditLayout={handleEditLayout}
+          searchHintMessage={searchHintMessage}
+          onDismissSearchHint={handleSearchHintDismiss}
         />
         {/* Map area: full width on mobile, flex-1 on desktop */}
         <div className="flex-1 relative">
@@ -458,6 +607,8 @@ function EditorContent() {
               onPause={handlePause}
               onReset={handleReset}
               onSeek={handleSeek}
+              hintMessage={playHintMessage}
+              onHintDismiss={() => dismissHint("playPreview")}
             />
           )}
         </div>
@@ -468,6 +619,8 @@ function EditorContent() {
           <BottomSheet
             onLocationClick={handleLocationClick}
             onEditLayout={handleEditLayout}
+            searchHintMessage={searchHintMessage}
+            onDismissSearchHint={handleSearchHintDismiss}
           />
         </div>
       )}

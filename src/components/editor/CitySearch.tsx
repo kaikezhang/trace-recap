@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useProjectStore } from "@/stores/projectStore";
 import { useMap } from "./MapContext";
+import OnboardingHint from "./OnboardingHint";
 
 interface GeoResult {
   id: string;
@@ -13,7 +14,15 @@ interface GeoResult {
   center: [number, number];
 }
 
-export default function CitySearch() {
+interface CitySearchProps {
+  hintMessage?: string;
+  onHintDismiss?: () => void;
+}
+
+export default function CitySearch({
+  hintMessage,
+  onHintDismiss,
+}: CitySearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeoResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -98,6 +107,14 @@ export default function CitySearch() {
           className="pl-9"
         />
       </div>
+      {hintMessage && onHintDismiss && (
+        <OnboardingHint
+          message={hintMessage}
+          onDismiss={onHintDismiss}
+          className="left-3 right-3 top-[calc(100%+0.25rem)] max-w-none"
+          arrowClassName="left-6 -top-[7px] border-b-0 border-r-0"
+        />
+      )}
       {isOpen && results.length > 0 && (
         <div className="absolute left-3 right-3 top-14 z-50 rounded-md border bg-popover shadow-lg">
           {results.map((r) => (
