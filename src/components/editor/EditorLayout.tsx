@@ -25,6 +25,7 @@ import {
 } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useHistoryStore } from "@/stores/historyStore";
 
 function EditorContent() {
   const { map } = useMap();
@@ -355,6 +356,19 @@ function EditorContent() {
         e.target instanceof HTMLTextAreaElement
       )
         return;
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        useHistoryStore.getState().undo();
+        return;
+      }
+      if (mod && e.key === "z" && e.shiftKey) {
+        e.preventDefault();
+        useHistoryStore.getState().redo();
+        return;
+      }
+
       if (e.code === "Space") {
         e.preventDefault();
         const state = useAnimationStore.getState().playbackState;

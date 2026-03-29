@@ -8,6 +8,7 @@ import type {
   TransportMode,
   MapStyle,
 } from "@/types";
+import { useHistoryStore } from "./historyStore";
 
 export interface ImportRouteData {
   name: string;
@@ -207,8 +208,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   mapStyle: DEFAULT_MAP_STYLE,
   segmentTimingOverrides: {},
 
-  addLocation: (loc) =>
-    set((state) => {
+  addLocation: (loc) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => {
       const newLocation: Location = {
         id: generateId(),
         name: loc.name,
@@ -222,10 +224,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         locations,
         segments: rebuildSegments(locations, state.segments),
       };
-    }),
+    });
+  },
 
-  removeLocation: (id) =>
-    set((state) => {
+  removeLocation: (id) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => {
       const locations = state.locations.filter((l) => l.id !== id);
       // Ensure first and last locations are never waypoints
       if (locations.length > 0) {
@@ -235,10 +239,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         locations,
         segments: rebuildSegments(locations, state.segments),
       };
-    }),
+    });
+  },
 
-  reorderLocations: (fromIndex, toIndex) =>
-    set((state) => {
+  reorderLocations: (fromIndex, toIndex) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => {
       const locations = [...state.locations];
       const [moved] = locations.splice(fromIndex, 1);
       locations.splice(toIndex, 0, moved);
@@ -250,7 +256,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         locations,
         segments: rebuildSegments(locations, state.segments),
       };
-    }),
+    });
+  },
 
   updateLocation: (id, updates) =>
     set((state) => ({
@@ -259,8 +266,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       ),
     })),
 
-  toggleWaypoint: (locationId) =>
-    set((state) => {
+  toggleWaypoint: (locationId) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => {
       const idx = state.locations.findIndex((l) => l.id === locationId);
       // First and last locations can never be waypoints
       if (idx <= 0 || idx >= state.locations.length - 1) return state;
@@ -269,14 +277,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           l.id === locationId ? { ...l, isWaypoint: !l.isWaypoint } : l,
         ),
       };
-    }),
+    });
+  },
 
-  setTransportMode: (segmentId, mode) =>
-    set((state) => ({
+  setTransportMode: (segmentId, mode) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => ({
       segments: state.segments.map((s) =>
         s.id === segmentId ? { ...s, transportMode: mode, geometry: null } : s,
       ),
-    })),
+    }));
+  },
 
   setSegmentGeometry: (segmentId, geometry) =>
     set((state) => ({
@@ -285,8 +296,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       ),
     })),
 
-  setSegmentTiming: (segmentId, duration) =>
-    set((state) => {
+  setSegmentTiming: (segmentId, duration) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => {
       const overrides = { ...state.segmentTimingOverrides };
       if (duration === null) {
         delete overrides[segmentId];
@@ -294,12 +306,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         overrides[segmentId] = duration;
       }
       return { segmentTimingOverrides: overrides };
-    }),
+    });
+  },
 
   clearAllTimingOverrides: () => set({ segmentTimingOverrides: {} }),
 
-  addPhoto: (locationId, photo) =>
-    set((state) => ({
+  addPhoto: (locationId, photo) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
           ? {
@@ -308,16 +322,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             }
           : l,
       ),
-    })),
+    }));
+  },
 
-  removePhoto: (locationId, photoId) =>
-    set((state) => ({
+  removePhoto: (locationId, photoId) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
           ? { ...l, photos: l.photos.filter((p) => p.id !== photoId) }
           : l,
       ),
-    })),
+    }));
+  },
 
   setPhotoLayout: (locationId, layout) =>
     set((state) => ({
@@ -343,6 +360,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   setMapStyle: (style) => set({ mapStyle: style }),
 
   clearRoute: () => {
+    useHistoryStore.getState().pushState();
     if (isBrowser()) {
       if (persistTimeout) {
         clearTimeout(persistTimeout);
@@ -437,8 +455,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     };
   },
 
-  importRoute: (data) =>
-    set(() => {
+  importRoute: (data) => {
+    useHistoryStore.getState().pushState();
+    return set(() => {
       const locations: Location[] = data.locations.map((loc, i) => {
         const locId = generateId();
         const photos = (loc.photos ?? []).map((p) => ({
@@ -497,7 +516,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         mapStyle: data.mapStyle ?? DEFAULT_MAP_STYLE,
         segmentTimingOverrides,
       };
-    }),
+    });
+  },
 
   loadRouteData: async (data) => {
     get().importRoute(data);
