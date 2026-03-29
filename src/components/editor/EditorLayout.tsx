@@ -19,7 +19,10 @@ import {
 } from "./routeSegmentSources";
 import * as turf from "@turf/turf";
 import { AnimationEngine } from "@/engine/AnimationEngine";
-import { useProjectStore } from "@/stores/projectStore";
+import {
+  initializeProjectPersistence,
+  useProjectStore,
+} from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
 
@@ -27,19 +30,29 @@ function EditorContent() {
   const { map } = useMap();
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
-  const segmentTimingOverrides = useProjectStore((s) => s.segmentTimingOverrides);
+  const segmentTimingOverrides = useProjectStore(
+    (s) => s.segmentTimingOverrides,
+  );
   const engineRef = useRef<AnimationEngine | null>(null);
 
   const setPlaybackState = useAnimationStore((s) => s.setPlaybackState);
   const setCurrentTime = useAnimationStore((s) => s.setCurrentTime);
   const setTotalDuration = useAnimationStore((s) => s.setTotalDuration);
   const setCurrentCityLabel = useAnimationStore((s) => s.setCurrentCityLabel);
-  const setCurrentCityLabelZh = useAnimationStore((s) => s.setCurrentCityLabelZh);
+  const setCurrentCityLabelZh = useAnimationStore(
+    (s) => s.setCurrentCityLabelZh,
+  );
   const setVisiblePhotos = useAnimationStore((s) => s.setVisiblePhotos);
   const setShowPhotoOverlay = useAnimationStore((s) => s.setShowPhotoOverlay);
-  const setPhotoOverlayOpacity = useAnimationStore((s) => s.setPhotoOverlayOpacity);
-  const setCurrentSegmentIndex = useAnimationStore((s) => s.setCurrentSegmentIndex);
-  const setCurrentGroupSegmentIndices = useAnimationStore((s) => s.setCurrentGroupSegmentIndices);
+  const setPhotoOverlayOpacity = useAnimationStore(
+    (s) => s.setPhotoOverlayOpacity,
+  );
+  const setCurrentSegmentIndex = useAnimationStore(
+    (s) => s.setCurrentSegmentIndex,
+  );
+  const setCurrentGroupSegmentIndices = useAnimationStore(
+    (s) => s.setCurrentGroupSegmentIndices,
+  );
   const setTimeline = useAnimationStore((s) => s.setTimeline);
   const reset = useAnimationStore((s) => s.reset);
 
@@ -47,17 +60,28 @@ function EditorContent() {
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
   const currentCityLabelZh = useAnimationStore((s) => s.currentCityLabelZh);
-  const currentCityLabel = cityLabelLang === "zh"
-    ? (currentCityLabelZh || currentCityLabelEn)
-    : currentCityLabelEn;
+  const currentCityLabel =
+    cityLabelLang === "zh"
+      ? currentCityLabelZh || currentCityLabelEn
+      : currentCityLabelEn;
   const visiblePhotos = useAnimationStore((s) => s.visiblePhotos);
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
   const photoOverlayOpacity = useAnimationStore((s) => s.photoOverlayOpacity);
 
-  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
-  const editingLocation = locations.find((l) => l.id === editingLocationId) ?? null;
-  const [visiblePhotoLocationId, setVisiblePhotoLocationId] = useState<string | null>(null);
-  const visiblePhotoLocation = locations.find((l) => l.id === visiblePhotoLocationId) ?? null;
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(
+    null,
+  );
+  const editingLocation =
+    locations.find((l) => l.id === editingLocationId) ?? null;
+  const [visiblePhotoLocationId, setVisiblePhotoLocationId] = useState<
+    string | null
+  >(null);
+  const visiblePhotoLocation =
+    locations.find((l) => l.id === visiblePhotoLocationId) ?? null;
+
+  useEffect(() => {
+    initializeProjectPersistence();
+  }, []);
 
   // Rebuild engine when project changes
   useEffect(() => {
@@ -72,7 +96,12 @@ function EditorContent() {
     const allReady = segments.every((s) => s.geometry !== null);
     if (!allReady) return;
 
-    const engine = new AnimationEngine(map, locations, segments, segmentTimingOverrides);
+    const engine = new AnimationEngine(
+      map,
+      locations,
+      segments,
+      segmentTimingOverrides,
+    );
     engineRef.current = engine;
     setTotalDuration(engine.getTotalDuration());
     setTimeline(engine.getTimeline());
@@ -113,8 +142,10 @@ function EditorContent() {
         const pastSeg = segments[i];
         const pastLid = SEGMENT_LAYER_PREFIX + pastSeg.id;
         const pastGlid = SEGMENT_GLOW_LAYER_PREFIX + pastSeg.id;
-        if (map.getLayer(pastLid)) map.setLayoutProperty(pastLid, "visibility", "visible");
-        if (map.getLayer(pastGlid)) map.setLayoutProperty(pastGlid, "visibility", "visible");
+        if (map.getLayer(pastLid))
+          map.setLayoutProperty(pastLid, "visibility", "visible");
+        if (map.getLayer(pastGlid))
+          map.setLayoutProperty(pastGlid, "visibility", "visible");
         setSegmentSourceData(map, pastSeg.id, pastSeg.geometry);
       }
 
@@ -122,9 +153,10 @@ function EditorContent() {
       const group = engine.getGroups()[e.groupIndex];
       if (!group) return;
       const mergedGeom = group.mergedGeometry;
-      const mergedLength = mergedGeom && mergedGeom.coordinates.length > 1
-        ? turf.length(turf.lineString(mergedGeom.coordinates))
-        : 0;
+      const mergedLength =
+        mergedGeom && mergedGeom.coordinates.length > 1
+          ? turf.length(turf.lineString(mergedGeom.coordinates))
+          : 0;
 
       let accumulatedLength = 0;
       const drawnDistance = fraction * mergedLength;
@@ -135,7 +167,9 @@ function EditorContent() {
         if (!seg?.geometry || seg.geometry.coordinates.length < 2) continue;
         if (!map.getSource(`${SEGMENT_SOURCE_PREFIX}${seg.id}`)) continue;
 
-        const segLength = turf.length(turf.lineString(seg.geometry.coordinates));
+        const segLength = turf.length(
+          turf.lineString(seg.geometry.coordinates),
+        );
         const segStart = accumulatedLength;
         const segEnd = accumulatedLength + segLength;
         accumulatedLength = segEnd;
@@ -143,8 +177,10 @@ function EditorContent() {
         // Make layers visible
         const layerId = SEGMENT_LAYER_PREFIX + seg.id;
         const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
-        if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", "visible");
-        if (map.getLayer(glowLayerId)) map.setLayoutProperty(glowLayerId, "visibility", "visible");
+        if (map.getLayer(layerId))
+          map.setLayoutProperty(layerId, "visibility", "visible");
+        if (map.getLayer(glowLayerId))
+          map.setLayoutProperty(glowLayerId, "visibility", "visible");
 
         if (drawnDistance >= segEnd) {
           // This segment is fully drawn
@@ -176,7 +212,10 @@ function EditorContent() {
       const style = map.getStyle();
       if (style?.layers) {
         style.layers.forEach((layer: { id: string }) => {
-          if (layer.id.startsWith("segment-") || layer.id.startsWith("segment-glow-")) {
+          if (
+            layer.id.startsWith("segment-") ||
+            layer.id.startsWith("segment-glow-")
+          ) {
             map.setLayoutProperty(layer.id, "visibility", "none");
           }
         });
@@ -196,19 +235,13 @@ function EditorContent() {
     reset();
   }, [reset]);
 
-  const handleSeek = useCallback(
-    (progress: number) => {
-      engineRef.current?.seekTo(progress);
-    },
-    []
-  );
+  const handleSeek = useCallback((progress: number) => {
+    engineRef.current?.seekTo(progress);
+  }, []);
 
-  const handleEditLayout = useCallback(
-    (locationId: string) => {
-      setEditingLocationId(locationId);
-    },
-    []
-  );
+  const handleEditLayout = useCallback((locationId: string) => {
+    setEditingLocationId(locationId);
+  }, []);
 
   const handleLocationClick = useCallback(
     (index: number) => {
@@ -230,7 +263,9 @@ function EditorContent() {
       if (index === 0) {
         // First location: seek to HOVER phase start of first group
         if (timeline.length > 0) {
-          const hoverPhase = timeline[0].phases.find((p) => p.phase === "HOVER");
+          const hoverPhase = timeline[0].phases.find(
+            (p) => p.phase === "HOVER",
+          );
           seekTime = hoverPhase ? hoverPhase.startTime : timeline[0].startTime;
         }
       } else {
@@ -241,7 +276,9 @@ function EditorContent() {
             const group = groups[gi];
             if (group.toLoc.id === targetLoc.id) {
               // Exact match on toLoc — seek to ARRIVE phase
-              const arrivePhase = timeline[gi]?.phases.find((p) => p.phase === "ARRIVE");
+              const arrivePhase = timeline[gi]?.phases.find(
+                (p) => p.phase === "ARRIVE",
+              );
               if (arrivePhase) {
                 seekTime = arrivePhase.startTime;
               } else if (timeline[gi]) {
@@ -250,22 +287,34 @@ function EditorContent() {
               break;
             }
             // Check if this is an intermediate waypoint within the group
-            const locIdx = group.allLocations.findIndex((l) => l.id === targetLoc.id);
+            const locIdx = group.allLocations.findIndex(
+              (l) => l.id === targetLoc.id,
+            );
             if (locIdx > 0 && locIdx < group.allLocations.length - 1) {
               // Waypoint found — seek proportionally by accumulated route distance within FLY phase
-              const flyPhase = timeline[gi]?.phases.find((p) => p.phase === "FLY");
-              if (flyPhase && group.mergedGeometry && group.mergedGeometry.coordinates.length >= 2) {
+              const flyPhase = timeline[gi]?.phases.find(
+                (p) => p.phase === "FLY",
+              );
+              if (
+                flyPhase &&
+                group.mergedGeometry &&
+                group.mergedGeometry.coordinates.length >= 2
+              ) {
                 // Compute accumulated segment lengths to find distance-based fraction
                 let accumulatedDist = 0;
                 let totalDist = 0;
                 try {
-                  const mergedLine = turf.lineString(group.mergedGeometry.coordinates);
+                  const mergedLine = turf.lineString(
+                    group.mergedGeometry.coordinates,
+                  );
                   totalDist = turf.length(mergedLine);
                   // Sum segment distances up to the waypoint (locIdx segments from start)
                   for (let si = 0; si < group.segments.length; si++) {
                     const seg = group.segments[si];
                     if (seg.geometry && seg.geometry.coordinates.length >= 2) {
-                      const segLen = turf.length(turf.lineString(seg.geometry.coordinates));
+                      const segLen = turf.length(
+                        turf.lineString(seg.geometry.coordinates),
+                      );
                       if (si < locIdx) {
                         accumulatedDist += segLen;
                       }
@@ -276,7 +325,10 @@ function EditorContent() {
                   totalDist = 1;
                   accumulatedDist = locIdx / (group.allLocations.length - 1);
                 }
-                const fraction = totalDist > 0 ? accumulatedDist / totalDist : locIdx / (group.allLocations.length - 1);
+                const fraction =
+                  totalDist > 0
+                    ? accumulatedDist / totalDist
+                    : locIdx / (group.allLocations.length - 1);
                 seekTime = flyPhase.startTime + flyPhase.duration * fraction;
               } else if (flyPhase) {
                 const fraction = locIdx / (group.allLocations.length - 1);
@@ -292,13 +344,17 @@ function EditorContent() {
       engine.pause();
       setPlaybackState("paused");
     },
-    [locations, setPlaybackState]
+    [locations, setPlaybackState],
   );
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return;
       if (e.code === "Space") {
         e.preventDefault();
         const state = useAnimationStore.getState().playbackState;
@@ -320,7 +376,10 @@ function EditorContent() {
     <div className="flex h-screen flex-col">
       <TopToolbar />
       <div className="flex flex-1 overflow-hidden">
-        <LeftPanel onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />
+        <LeftPanel
+          onLocationClick={handleLocationClick}
+          onEditLayout={handleEditLayout}
+        />
         {/* Map area: full width on mobile, flex-1 on desktop */}
         <div className="flex-1 relative">
           <MapCanvas />
@@ -358,7 +417,10 @@ function EditorContent() {
                     "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)",
                 }}
               >
-                <p className="font-semibold flex items-center gap-2" style={{ fontSize: `${cityLabelSize}px` }}>
+                <p
+                  className="font-semibold flex items-center gap-2"
+                  style={{ fontSize: `${cityLabelSize}px` }}
+                >
                   <svg
                     className="w-4 h-4 text-indigo-500 flex-shrink-0"
                     viewBox="0 0 20 20"
@@ -376,7 +438,12 @@ function EditorContent() {
             )}
           </AnimatePresence>
           {/* Photo overlay */}
-          <PhotoOverlay photos={visiblePhotos} visible={showPhotoOverlay} photoLayout={visiblePhotoLocation?.photoLayout} opacity={photoOverlayOpacity} />
+          <PhotoOverlay
+            photos={visiblePhotos}
+            visible={showPhotoOverlay}
+            photoLayout={visiblePhotoLocation?.photoLayout}
+            opacity={photoOverlayOpacity}
+          />
           {/* Photo layout editor */}
           {editingLocation && editingLocation.photos.length > 0 && (
             <PhotoLayoutEditor
@@ -398,7 +465,10 @@ function EditorContent() {
       {/* Mobile bottom sheet — hidden during playback */}
       {!isPlaying && (
         <div className="md:hidden">
-          <BottomSheet onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />
+          <BottomSheet
+            onLocationClick={handleLocationClick}
+            onEditLayout={handleEditLayout}
+          />
         </div>
       )}
     </div>

@@ -6,7 +6,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import CitySearch from "./CitySearch";
 import RouteList from "./RouteList";
 
@@ -15,16 +14,20 @@ interface LeftPanelProps {
   onEditLayout?: (locationId: string) => void;
 }
 
-export default function LeftPanel({ onLocationClick, onEditLayout }: LeftPanelProps) {
+export default function LeftPanel({
+  onLocationClick,
+  onEditLayout,
+}: LeftPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const importRoute = useProjectStore((s) => s.importRoute);
+  const loadRouteData = useProjectStore((s) => s.loadRouteData);
   const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
   const exportRoute = useProjectStore((s) => s.exportRoute);
-  const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
 
   const handleExportRoute = async () => {
     const data = await exportRoute();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -40,28 +43,8 @@ export default function LeftPanel({ onLocationClick, onEditLayout }: LeftPanelPr
     try {
       const text = await file.text();
       const data: ImportRouteData = JSON.parse(text);
-      importRoute(data);
-      // Fetch Chinese names for imported locations (non-blocking)
-      enrichChineseNames();
-
-      // Generate geometry for each segment
-      const state = useProjectStore.getState();
-      for (const seg of state.segments) {
-        const fromLoc = state.locations.find((l) => l.id === seg.fromId);
-        const toLoc = state.locations.find((l) => l.id === seg.toId);
-        if (fromLoc && toLoc) {
-          try {
-            const geometry = await generateRouteGeometry(
-              fromLoc.coordinates,
-              toLoc.coordinates,
-              seg.transportMode
-            );
-            setSegmentGeometry(seg.id, geometry);
-          } catch {
-            // Geometry generation failed; segment keeps null geometry
-          }
-        }
-      }
+      await loadRouteData(data);
+      void enrichChineseNames();
     } catch {
       // Invalid JSON or file read error
     }
@@ -112,7 +95,10 @@ export default function LeftPanel({ onLocationClick, onEditLayout }: LeftPanelPr
         />
       </div>
       <ScrollArea className="flex-1 min-h-0">
-        <RouteList onLocationClick={onLocationClick} onEditLayout={onEditLayout} />
+        <RouteList
+          onLocationClick={onLocationClick}
+          onEditLayout={onEditLayout}
+        />
       </ScrollArea>
     </div>
   );

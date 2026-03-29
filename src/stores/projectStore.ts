@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import type {
   Location,
   Segment,
@@ -15,12 +16,28 @@ export interface ImportRouteData {
     nameZh?: string;
     coordinates: [number, number];
     isWaypoint?: boolean;
-    photos?: { url: string; caption?: string; focalPoint?: { x: number; y: number } }[];
+    photos?: {
+      url: string;
+      caption?: string;
+      focalPoint?: { x: number; y: number };
+    }[];
     photoLayout?: PhotoLayout;
   }[];
-  segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
+  segments: {
+    fromIndex: number;
+    toIndex: number;
+    transportMode: TransportMode;
+  }[];
   timingOverrides?: Record<string, number>;
+  mapStyle?: MapStyle;
 }
+
+type PersistedProjectData = ImportRouteData;
+
+const DEFAULT_ROUTE_NAME = "My Trip";
+const DEFAULT_MAP_STYLE: MapStyle = "light";
+const PROJECT_STORAGE_KEY = "trace-recap-project";
+const PROJECT_SAVE_DEBOUNCE_MS = 500;
 
 interface ProjectState {
   locations: Location[];
@@ -28,10 +45,15 @@ interface ProjectState {
   mapStyle: MapStyle;
   segmentTimingOverrides: Record<string, number>;
 
-  addLocation: (location: Omit<Location, "id" | "photos" | "isWaypoint">) => void;
+  addLocation: (
+    location: Omit<Location, "id" | "photos" | "isWaypoint">,
+  ) => void;
   removeLocation: (id: string) => void;
   reorderLocations: (fromIndex: number, toIndex: number) => void;
-  updateLocation: (id: string, updates: Partial<Pick<Location, "name" | "nameZh" | "coordinates">>) => void;
+  updateLocation: (
+    id: string,
+    updates: Partial<Pick<Location, "name" | "nameZh" | "coordinates">>,
+  ) => void;
   toggleWaypoint: (locationId: string) => void;
 
   setTransportMode: (segmentId: string, mode: TransportMode) => void;
@@ -40,24 +62,108 @@ interface ProjectState {
   setSegmentTiming: (segmentId: string, duration: number | null) => void;
   clearAllTimingOverrides: () => void;
 
-  addPhoto: (locationId: string, photo: Omit<Photo, "id" | "locationId">) => void;
+  addPhoto: (
+    locationId: string,
+    photo: Omit<Photo, "id" | "locationId">,
+  ) => void;
   removePhoto: (locationId: string, photoId: string) => void;
   setPhotoLayout: (locationId: string, layout: PhotoLayout) => void;
-  setPhotoFocalPoint: (locationId: string, photoId: string, point: { x: number; y: number }) => void;
+  setPhotoFocalPoint: (
+    locationId: string,
+    photoId: string,
+    point: { x: number; y: number },
+  ) => void;
 
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
   importRoute: (data: ImportRouteData) => void;
+  loadRouteData: (data: ImportRouteData) => Promise<void>;
+  regenerateSegmentGeometries: () => Promise<void>;
+  restorePersistedProject: () => Promise<void>;
   enrichChineseNames: () => Promise<void>;
   exportRoute: () => Promise<ImportRouteData>;
 }
 
 let nextId = 1;
+let persistTimeout: ReturnType<typeof setTimeout> | null = null;
+let persistenceInitialized = false;
+let skipNextPersist = false;
+let lastSavedProjectJson = "";
+
 const generateId = () => String(nextId++);
+
+function isBrowser(): boolean {
+  return typeof window !== "undefined";
+}
+
+function serializeProjectState(
+  locations: Location[],
+  segments: Segment[],
+  mapStyle: MapStyle,
+  segmentTimingOverrides: Record<string, number>,
+): PersistedProjectData {
+  const exportedLocations = locations.map((loc) => ({
+    name: loc.name,
+    nameZh: loc.nameZh,
+    coordinates: loc.coordinates as [number, number],
+    isWaypoint: loc.isWaypoint ?? false,
+    ...(loc.photos.length > 0
+      ? {
+          photos: loc.photos.map((photo) => ({
+            url: photo.url,
+            caption: photo.caption,
+            ...(photo.focalPoint ? { focalPoint: photo.focalPoint } : {}),
+          })),
+        }
+      : {}),
+    ...(loc.photoLayout
+      ? {
+          photoLayout: {
+            ...loc.photoLayout,
+            order: loc.photoLayout.order
+              ? loc.photoLayout.order
+                  .map((photoId) =>
+                    loc.photos.findIndex((photo) => photo.id === photoId),
+                  )
+                  .filter((index) => index >= 0)
+                  .map(String)
+              : undefined,
+          },
+        }
+      : {}),
+  }));
+
+  return {
+    name: DEFAULT_ROUTE_NAME,
+    mapStyle,
+    locations: exportedLocations,
+    segments: segments.map((segment) => ({
+      fromIndex: locations.findIndex(
+        (location) => location.id === segment.fromId,
+      ),
+      toIndex: locations.findIndex((location) => location.id === segment.toId),
+      transportMode: segment.transportMode,
+    })),
+    ...(Object.keys(segmentTimingOverrides).length > 0
+      ? {
+          timingOverrides: Object.fromEntries(
+            Object.entries(segmentTimingOverrides)
+              .map(([segmentId, duration]) => {
+                const index = segments.findIndex(
+                  (segment) => segment.id === segmentId,
+                );
+                return index >= 0 ? [String(index), duration] : null;
+              })
+              .filter(Boolean) as [string, number][],
+          ),
+        }
+      : {}),
+  };
+}
 
 function rebuildSegments(
   locations: Location[],
-  oldSegments: Segment[]
+  oldSegments: Segment[],
 ): Segment[] {
   if (locations.length < 2) return [];
 
@@ -98,7 +204,7 @@ function rebuildSegments(
 export const useProjectStore = create<ProjectState>((set, get) => ({
   locations: [],
   segments: [],
-  mapStyle: "light",
+  mapStyle: DEFAULT_MAP_STYLE,
   segmentTimingOverrides: {},
 
   addLocation: (loc) =>
@@ -149,7 +255,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   updateLocation: (id, updates) =>
     set((state) => ({
       locations: state.locations.map((l) =>
-        l.id === id ? { ...l, ...updates } : l
+        l.id === id ? { ...l, ...updates } : l,
       ),
     })),
 
@@ -160,7 +266,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (idx <= 0 || idx >= state.locations.length - 1) return state;
       return {
         locations: state.locations.map((l) =>
-          l.id === locationId ? { ...l, isWaypoint: !l.isWaypoint } : l
+          l.id === locationId ? { ...l, isWaypoint: !l.isWaypoint } : l,
         ),
       };
     }),
@@ -168,16 +274,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   setTransportMode: (segmentId, mode) =>
     set((state) => ({
       segments: state.segments.map((s) =>
-        s.id === segmentId
-          ? { ...s, transportMode: mode, geometry: null }
-          : s
+        s.id === segmentId ? { ...s, transportMode: mode, geometry: null } : s,
       ),
     })),
 
   setSegmentGeometry: (segmentId, geometry) =>
     set((state) => ({
       segments: state.segments.map((s) =>
-        s.id === segmentId ? { ...s, geometry } : s
+        s.id === segmentId ? { ...s, geometry } : s,
       ),
     })),
 
@@ -200,12 +304,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         l.id === locationId
           ? {
               ...l,
-              photos: [
-                ...l.photos,
-                { ...photo, id: generateId(), locationId },
-              ],
+              photos: [...l.photos, { ...photo, id: generateId(), locationId }],
             }
-          : l
+          : l,
       ),
     })),
 
@@ -214,14 +315,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
           ? { ...l, photos: l.photos.filter((p) => p.id !== photoId) }
-          : l
+          : l,
       ),
     })),
 
   setPhotoLayout: (locationId, layout) =>
     set((state) => ({
       locations: state.locations.map((l) =>
-        l.id === locationId ? { ...l, photoLayout: layout } : l
+        l.id === locationId ? { ...l, photoLayout: layout } : l,
       ),
     })),
 
@@ -232,19 +333,36 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           ? {
               ...l,
               photos: l.photos.map((p) =>
-                p.id === photoId ? { ...p, focalPoint: point } : p
+                p.id === photoId ? { ...p, focalPoint: point } : p,
               ),
             }
-          : l
+          : l,
       ),
     })),
 
   setMapStyle: (style) => set({ mapStyle: style }),
 
-  clearRoute: () => set({ locations: [], segments: [], segmentTimingOverrides: {} }),
+  clearRoute: () => {
+    if (isBrowser()) {
+      if (persistTimeout) {
+        clearTimeout(persistTimeout);
+        persistTimeout = null;
+      }
+      skipNextPersist = true;
+      window.localStorage.removeItem(PROJECT_STORAGE_KEY);
+      lastSavedProjectJson = "";
+    }
+
+    set({
+      locations: [],
+      segments: [],
+      mapStyle: DEFAULT_MAP_STYLE,
+      segmentTimingOverrides: {},
+    });
+  },
 
   exportRoute: async () => {
-    const { locations, segments, segmentTimingOverrides } = get();
+    const { locations, segments, mapStyle, segmentTimingOverrides } = get();
 
     // Convert blob URLs to base64 data URLs for persistence
     const toDataURL = async (url: string): Promise<string> => {
@@ -269,7 +387,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             url: await toDataURL(p.url),
             caption: p.caption,
             ...(p.focalPoint ? { focalPoint: p.focalPoint } : {}),
-          }))
+          })),
         );
         return {
           name: loc.name,
@@ -277,24 +395,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           coordinates: loc.coordinates as [number, number],
           isWaypoint: loc.isWaypoint ?? false,
           ...(photos.length > 0 ? { photos } : {}),
-          ...(loc.photoLayout ? {
-            photoLayout: {
-              ...loc.photoLayout,
-              // Convert order from photo IDs to indices for portable serialization
-              order: loc.photoLayout.order
-                ? loc.photoLayout.order
-                    .map((id) => loc.photos.findIndex((p) => p.id === id))
-                    .filter((idx) => idx >= 0)
-                    .map(String)
-                : undefined,
-            },
-          } : {}),
+          ...(loc.photoLayout
+            ? {
+                photoLayout: {
+                  ...loc.photoLayout,
+                  // Convert order from photo IDs to indices for portable serialization
+                  order: loc.photoLayout.order
+                    ? loc.photoLayout.order
+                        .map((id) => loc.photos.findIndex((p) => p.id === id))
+                        .filter((idx) => idx >= 0)
+                        .map(String)
+                    : undefined,
+                },
+              }
+            : {}),
         };
-      })
+      }),
     );
 
     return {
-      name: "My Trip",
+      name: DEFAULT_ROUTE_NAME,
+      mapStyle,
       locations: exportedLocations,
       segments: segments.map((seg) => ({
         fromIndex: locations.findIndex((l) => l.id === seg.fromId),
@@ -309,7 +430,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                   const idx = segments.findIndex((s) => s.id === segId);
                   return idx >= 0 ? [String(idx), duration] : null;
                 })
-                .filter(Boolean) as [string, number][]
+                .filter(Boolean) as [string, number][],
             ),
           }
         : {}),
@@ -333,18 +454,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           nameZh: loc.nameZh,
           coordinates: loc.coordinates,
           photos,
-          isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
-          ...(loc.photoLayout ? {
-            photoLayout: {
-              ...loc.photoLayout,
-              // Order was exported as index strings — remap to new photo IDs
-              order: loc.photoLayout.order
-                ? loc.photoLayout.order
-                    .map((idxStr) => photos[parseInt(idxStr)]?.id)
-                    .filter(Boolean)
-                : undefined,
-            },
-          } : {}),
+          isWaypoint:
+            i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
+          ...(loc.photoLayout
+            ? {
+                photoLayout: {
+                  ...loc.photoLayout,
+                  // Order was exported as index strings — remap to new photo IDs
+                  order: loc.photoLayout.order
+                    ? loc.photoLayout.order
+                        .map((idxStr) => photos[parseInt(idxStr, 10)]?.id)
+                        .filter(Boolean)
+                    : undefined,
+                },
+              }
+            : {}),
         };
       });
 
@@ -360,7 +484,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const segmentTimingOverrides: Record<string, number> = {};
       if (data.timingOverrides) {
         for (const [key, duration] of Object.entries(data.timingOverrides)) {
-          const idx = parseInt(key);
+          const idx = parseInt(key, 10);
           if (!isNaN(idx) && idx >= 0 && idx < segments.length) {
             segmentTimingOverrides[segments[idx].id] = duration;
           }
@@ -370,9 +494,69 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       return {
         locations,
         segments,
+        mapStyle: data.mapStyle ?? DEFAULT_MAP_STYLE,
         segmentTimingOverrides,
       };
     }),
+
+  loadRouteData: async (data) => {
+    get().importRoute(data);
+    await get().regenerateSegmentGeometries();
+  },
+
+  regenerateSegmentGeometries: async () => {
+    const { locations, segments } = get();
+
+    const geometries = await Promise.all(
+      segments.map(async (segment) => {
+        const fromLocation = locations.find(
+          (location) => location.id === segment.fromId,
+        );
+        const toLocation = locations.find(
+          (location) => location.id === segment.toId,
+        );
+
+        if (!fromLocation || !toLocation) {
+          return { segmentId: segment.id, geometry: null };
+        }
+
+        try {
+          const geometry = await generateRouteGeometry(
+            fromLocation.coordinates,
+            toLocation.coordinates,
+            segment.transportMode,
+          );
+          return { segmentId: segment.id, geometry };
+        } catch {
+          return { segmentId: segment.id, geometry: null };
+        }
+      }),
+    );
+
+    set((state) => ({
+      segments: state.segments.map((segment) => {
+        const match = geometries.find(
+          (entry) => entry.segmentId === segment.id,
+        );
+        return match ? { ...segment, geometry: match.geometry } : segment;
+      }),
+    }));
+  },
+
+  restorePersistedProject: async () => {
+    if (!isBrowser()) return;
+
+    const savedProject = window.localStorage.getItem(PROJECT_STORAGE_KEY);
+    if (!savedProject) return;
+
+    try {
+      const data = JSON.parse(savedProject) as PersistedProjectData;
+      await get().loadRouteData(data);
+    } catch {
+      window.localStorage.removeItem(PROJECT_STORAGE_KEY);
+      lastSavedProjectJson = "";
+    }
+  },
 
   enrichChineseNames: async () => {
     const { locations } = get();
@@ -384,14 +568,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         try {
           // Forward geocode English name → Chinese: more reliable than reverse geocode
           // which returns the nearest place at a finer granularity (e.g. district instead of city)
-          const res = await fetch(`/api/geocode?q=${encodeURIComponent(loc.name)}&language=zh`);
+          const res = await fetch(
+            `/api/geocode?q=${encodeURIComponent(loc.name)}&language=zh`,
+          );
           const data = await res.json();
-          const nameZh = data.features?.[0]?.text || data.features?.[0]?.place_name || undefined;
+          const nameZh =
+            data.features?.[0]?.text ||
+            data.features?.[0]?.place_name ||
+            undefined;
           return { id: loc.id, nameZh };
         } catch {
           return { id: loc.id, nameZh: undefined };
         }
-      })
+      }),
     );
 
     set((state) => ({
@@ -402,3 +591,41 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }));
   },
 }));
+
+export function initializeProjectPersistence(): void {
+  if (!isBrowser() || persistenceInitialized) return;
+
+  persistenceInitialized = true;
+  lastSavedProjectJson = window.localStorage.getItem(PROJECT_STORAGE_KEY) ?? "";
+
+  useProjectStore.subscribe((state) => {
+    if (skipNextPersist) {
+      skipNextPersist = false;
+      return;
+    }
+
+    if (persistTimeout) {
+      clearTimeout(persistTimeout);
+    }
+
+    persistTimeout = setTimeout(() => {
+      const nextProjectJson = JSON.stringify(
+        serializeProjectState(
+          state.locations,
+          state.segments,
+          state.mapStyle,
+          state.segmentTimingOverrides,
+        ),
+      );
+
+      if (nextProjectJson === lastSavedProjectJson) {
+        return;
+      }
+
+      window.localStorage.setItem(PROJECT_STORAGE_KEY, nextProjectJson);
+      lastSavedProjectJson = nextProjectJson;
+    }, PROJECT_SAVE_DEBOUNCE_MS);
+  });
+
+  void useProjectStore.getState().restorePersistedProject();
+}
