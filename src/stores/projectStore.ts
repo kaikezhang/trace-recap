@@ -612,7 +612,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 }));
 
-export function initializeProjectPersistence(): void {
+interface ProjectPersistenceOptions {
+  skipRestore?: boolean;
+}
+
+export function initializeProjectPersistence(
+  options: ProjectPersistenceOptions = {},
+): void {
   if (!isBrowser() || persistenceInitialized) return;
 
   persistenceInitialized = true;
@@ -647,5 +653,7 @@ export function initializeProjectPersistence(): void {
     }, PROJECT_SAVE_DEBOUNCE_MS);
   });
 
-  void useProjectStore.getState().restorePersistedProject();
+  if (!options.skipRestore) {
+    void useProjectStore.getState().restorePersistedProject();
+  }
 }

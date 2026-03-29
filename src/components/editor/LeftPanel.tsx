@@ -12,11 +12,15 @@ import RouteList from "./RouteList";
 interface LeftPanelProps {
   onLocationClick?: (index: number) => void;
   onEditLayout?: (locationId: string) => void;
+  searchHintMessage?: string;
+  onDismissSearchHint?: () => void;
 }
 
 export default function LeftPanel({
   onLocationClick,
   onEditLayout,
+  searchHintMessage,
+  onDismissSearchHint,
 }: LeftPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadRouteData = useProjectStore((s) => s.loadRouteData);
@@ -64,7 +68,10 @@ export default function LeftPanel({
       <div className="border-b px-3 py-2">
         <h2 className="text-sm font-semibold">Route</h2>
       </div>
-      <CitySearch />
+      <CitySearch
+        hintMessage={searchHintMessage}
+        onHintDismiss={onDismissSearchHint}
+      />
       <div className="px-3 py-2">
         <div className="flex gap-2">
           <Button

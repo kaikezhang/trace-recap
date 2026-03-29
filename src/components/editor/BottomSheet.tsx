@@ -10,9 +10,16 @@ import RouteList from "./RouteList";
 interface BottomSheetProps {
   onLocationClick?: (index: number) => void;
   onEditLayout?: (locationId: string) => void;
+  searchHintMessage?: string;
+  onDismissSearchHint?: () => void;
 }
 
-export default function BottomSheet({ onLocationClick, onEditLayout }: BottomSheetProps) {
+export default function BottomSheet({
+  onLocationClick,
+  onEditLayout,
+  searchHintMessage,
+  onDismissSearchHint,
+}: BottomSheetProps) {
   const locations = useProjectStore((s) => s.locations);
   const expanded = useUIStore((s) => s.bottomSheetExpanded);
   const toggleBottomSheet = useUIStore((s) => s.toggleBottomSheet);
@@ -62,7 +69,10 @@ export default function BottomSheet({ onLocationClick, onEditLayout }: BottomShe
 
         {/* Expanded content */}
         <div className="flex flex-col overflow-hidden" style={{ height: "calc(60vh - 56px)" }}>
-          <CitySearch />
+          <CitySearch
+            hintMessage={searchHintMessage}
+            onHintDismiss={onDismissSearchHint}
+          />
           <ScrollArea className="flex-1 min-h-0">
             <RouteList onLocationClick={onLocationClick} onEditLayout={onEditLayout} />
           </ScrollArea>

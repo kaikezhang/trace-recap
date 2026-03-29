@@ -5,12 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
+import OnboardingHint from "./OnboardingHint";
 
 interface PlaybackControlsProps {
   onPlay: () => void;
   onPause: () => void;
   onReset: () => void;
   onSeek: (progress: number) => void;
+  hintMessage?: string;
+  onHintDismiss?: () => void;
 }
 
 function formatTime(seconds: number): string {
@@ -25,6 +28,8 @@ export default function PlaybackControls({
   onPause,
   onReset,
   onSeek,
+  hintMessage,
+  onHintDismiss,
 }: PlaybackControlsProps) {
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentTime = useAnimationStore((s) => s.currentTime);
@@ -54,19 +59,29 @@ export default function PlaybackControls({
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-11 w-11 md:h-8 md:w-8 min-w-[44px] md:min-w-0"
-        onClick={isPlaying ? onPause : onPlay}
-        aria-label={isPlaying ? "Pause" : "Play"}
-      >
-        {isPlaying ? (
-          <Pause className="h-4 w-4" />
-        ) : (
-          <Play className="h-4 w-4" />
+      <div className="relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 md:h-8 md:w-8 min-w-[44px] md:min-w-0"
+          onClick={isPlaying ? onPause : onPlay}
+          aria-label={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? (
+            <Pause className="h-4 w-4" />
+          ) : (
+            <Play className="h-4 w-4" />
+          )}
+        </Button>
+        {hintMessage && onHintDismiss && (
+          <OnboardingHint
+            message={hintMessage}
+            onDismiss={onHintDismiss}
+            className="bottom-[calc(100%+0.75rem)] left-1/2 w-56 -translate-x-1/2"
+            arrowClassName="left-1/2 -bottom-[7px] -translate-x-1/2 border-l-0 border-t-0"
+          />
         )}
-      </Button>
+      </div>
       <div className="flex-1 md:flex-none md:w-48">
         <Slider
           value={[progress]}

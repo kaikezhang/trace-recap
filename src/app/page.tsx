@@ -10,12 +10,20 @@ export default function Home() {
           minutes.
         </p>
       </div>
-      <Link
-        href="/editor"
-        className="inline-flex items-center justify-center rounded-lg bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-      >
-        Create Video
-      </Link>
+      <div className="flex flex-col items-center gap-3">
+        <Link
+          href="/editor"
+          className="inline-flex items-center justify-center rounded-lg bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        >
+          Create Video
+        </Link>
+        <Link
+          href="/editor?demo=true"
+          className="inline-flex items-center justify-center rounded-lg border border-border bg-secondary px-8 py-3 text-sm font-medium text-secondary-foreground shadow-sm transition-colors hover:bg-secondary/80"
+        >
+          Try Demo
+        </Link>
+      </div>
     </main>
   );
 }
