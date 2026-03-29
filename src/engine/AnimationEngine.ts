@@ -451,28 +451,9 @@ export class AnimationEngine {
       cityLabelZh = group.toLoc.nameZh ?? null;
     }
 
-    // Photos: show during ARRIVE, fade out during next group's HOVER/ZOOM_OUT
-    let showPhotos = false;
-    let photoOpacity = 0;
-
-    if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
-      // Current group's ARRIVE: show photos at full opacity
-      showPhotos = true;
-      photoOpacity = 1;
-    } else if ((phase === "HOVER" || phase === "ZOOM_OUT") && groupIndex > 0) {
-      // Check if the PREVIOUS group had photos — fade them out
-      const prevGroup = this.groups[groupIndex - 1];
-      if (prevGroup && prevGroup.toLoc.photos.length > 0) {
-        showPhotos = true;
-        if (phase === "HOVER") {
-          // Fade out during HOVER: 1 → 0.3
-          photoOpacity = 1 - phaseProgress * 0.7;
-        } else {
-          // Fade out during ZOOM_OUT: 0.3 → 0
-          photoOpacity = 0.3 * (1 - phaseProgress);
-        }
-      }
-    }
+    // Photos: show during ARRIVE only. AnimatePresence handles exit animation.
+    const showPhotos = phase === "ARRIVE" && group.toLoc.photos.length > 0;
+    const photoOpacity = showPhotos ? 1 : 0;
 
     const progress = clamped / this.totalDuration;
     this.emit({

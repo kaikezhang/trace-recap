@@ -84,20 +84,14 @@ function EditorContent() {
       setCurrentCityLabel(e.cityLabel);
       setCurrentCityLabelZh(e.cityLabelZh);
       setShowPhotoOverlay(e.showPhotos);
-      setPhotoOverlayOpacity(e.photoOpacity);
       if (e.showPhotos) {
-        // During ARRIVE: show current group's destination photos
-        // During HOVER/ZOOM_OUT fade-out: show previous group's destination photos
-        if (e.phase === "ARRIVE") {
-          const seg = segments[e.segmentIndex];
-          const toLoc = locations.find((l) => l.id === seg?.toId);
-          setVisiblePhotos(toLoc?.photos || []);
-          setVisiblePhotoLocationId(toLoc?.id ?? null);
-        }
-        // During fade-out (HOVER/ZOOM_OUT), keep the previous photos visible (don't update)
+        const seg = segments[e.segmentIndex];
+        const toLoc = locations.find((l) => l.id === seg?.toId);
+        setVisiblePhotos(toLoc?.photos || []);
+        setVisiblePhotoLocationId(toLoc?.id ?? null);
       } else {
-        setVisiblePhotos([]);
-        setVisiblePhotoLocationId(null);
+        // Don't clear photos immediately — let AnimatePresence exit animation play
+        // Photos will be cleared when new ones are set in the next ARRIVE
       }
     });
 
