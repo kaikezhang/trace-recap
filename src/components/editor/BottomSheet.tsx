@@ -1,11 +1,8 @@
 "use client";
 
-import { useRef } from "react";
-import { Upload, Save, ChevronUp, MapPin } from "lucide-react";
+import { ChevronUp, MapPin } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
-import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
-import { generateRouteGeometry } from "@/engine/RouteGeometry";
+import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import CitySearch from "./CitySearch";
 import RouteList from "./RouteList";
@@ -16,63 +13,10 @@ interface BottomSheetProps {
 }
 
 export default function BottomSheet({ onLocationClick, onEditLayout }: BottomSheetProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const importRoute = useProjectStore((s) => s.importRoute);
-  const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
-  const exportRoute = useProjectStore((s) => s.exportRoute);
-  const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
   const locations = useProjectStore((s) => s.locations);
   const expanded = useUIStore((s) => s.bottomSheetExpanded);
   const toggleBottomSheet = useUIStore((s) => s.toggleBottomSheet);
   const setBottomSheetExpanded = useUIStore((s) => s.setBottomSheetExpanded);
-
-  const handleExportRoute = async () => {
-    const data = await exportRoute();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "trace-recap-route.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const data: ImportRouteData = JSON.parse(text);
-      importRoute(data);
-      // Fetch Chinese names for imported locations (non-blocking)
-      enrichChineseNames();
-
-      const state = useProjectStore.getState();
-      for (const seg of state.segments) {
-        const fromLoc = state.locations.find((l) => l.id === seg.fromId);
-        const toLoc = state.locations.find((l) => l.id === seg.toId);
-        if (fromLoc && toLoc) {
-          try {
-            const geometry = await generateRouteGeometry(
-              fromLoc.coordinates,
-              toLoc.coordinates,
-              seg.transportMode
-            );
-            setSegmentGeometry(seg.id, geometry);
-          } catch {
-            // Geometry generation failed
-          }
-        }
-      }
-    } catch {
-      // Invalid JSON or file read error
-    }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
 
   return (
     <>
@@ -114,40 +58,11 @@ export default function BottomSheet({ onLocationClick, onEditLayout }: BottomShe
             }`}
           />
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          className="hidden"
-          onChange={handleImport}
-        />
+
 
         {/* Expanded content */}
         <div className="flex flex-col overflow-hidden" style={{ height: "calc(60vh - 56px)" }}>
-          {/* Import/Save buttons — top right of expanded area */}
-          <div className="flex items-center justify-between px-3 pt-1 pb-0">
-            <CitySearch />
-            <div className="flex items-center gap-1.5 shrink-0 ml-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => fileInputRef.current?.click()}
-                title="Import Route"
-              >
-                <Upload className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={handleExportRoute}
-                title="Save Route"
-              >
-                <Save className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          <CitySearch />
           <ScrollArea className="flex-1 min-h-0">
             <RouteList onLocationClick={onLocationClick} onEditLayout={onEditLayout} />
           </ScrollArea>
