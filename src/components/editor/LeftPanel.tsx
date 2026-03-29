@@ -12,9 +12,10 @@ import RouteList from "./RouteList";
 
 interface LeftPanelProps {
   onLocationClick?: (index: number) => void;
+  onEditLayout?: (locationId: string) => void;
 }
 
-export default function LeftPanel({ onLocationClick }: LeftPanelProps) {
+export default function LeftPanel({ onLocationClick, onEditLayout }: LeftPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importRoute = useProjectStore((s) => s.importRoute);
   const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
@@ -111,7 +112,7 @@ export default function LeftPanel({ onLocationClick }: LeftPanelProps) {
         />
       </div>
       <ScrollArea className="flex-1 min-h-0">
-        <RouteList onLocationClick={onLocationClick} />
+        <RouteList onLocationClick={onLocationClick} onEditLayout={onEditLayout} />
       </ScrollArea>
     </div>
   );

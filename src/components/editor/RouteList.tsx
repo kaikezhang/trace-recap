@@ -21,9 +21,10 @@ import TransportSelector from "./TransportSelector";
 
 interface RouteListProps {
   onLocationClick?: (index: number) => void;
+  onEditLayout?: (locationId: string) => void;
 }
 
-export default function RouteList({ onLocationClick }: RouteListProps) {
+export default function RouteList({ onLocationClick, onEditLayout }: RouteListProps) {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
   const removeLocation = useProjectStore((s) => s.removeLocation);
@@ -83,6 +84,7 @@ export default function RouteList({ onLocationClick }: RouteListProps) {
                 onRemove={removeLocation}
                 onToggleWaypoint={toggleWaypoint}
                 onClick={onLocationClick}
+                onEditLayout={onEditLayout}
               />
               {i < segments.length && (
                 <TransportSelector segment={segments[i]} />

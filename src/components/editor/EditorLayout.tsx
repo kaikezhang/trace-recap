@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
@@ -9,6 +9,7 @@ import BottomSheet from "./BottomSheet";
 import MapCanvas from "./MapCanvas";
 import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
+import PhotoLayoutEditor from "./PhotoLayoutEditor";
 import ExportDialog from "./ExportDialog";
 import {
   SEGMENT_LAYER_PREFIX,
@@ -49,6 +50,11 @@ function EditorContent() {
   const visiblePhotos = useAnimationStore((s) => s.visiblePhotos);
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
 
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const editingLocation = locations.find((l) => l.id === editingLocationId) ?? null;
+  const [visiblePhotoLocationId, setVisiblePhotoLocationId] = useState<string | null>(null);
+  const visiblePhotoLocation = locations.find((l) => l.id === visiblePhotoLocationId) ?? null;
+
   // Rebuild engine when project changes
   useEffect(() => {
     if (engineRef.current) {
@@ -77,8 +83,10 @@ function EditorContent() {
         const seg = segments[e.segmentIndex];
         const toLoc = locations.find((l) => l.id === seg?.toId);
         setVisiblePhotos(toLoc?.photos || []);
+        setVisiblePhotoLocationId(toLoc?.id ?? null);
       } else {
         setVisiblePhotos([]);
+        setVisiblePhotoLocationId(null);
       }
     });
 
@@ -185,8 +193,20 @@ function EditorContent() {
     []
   );
 
+  const handleEditLayout = useCallback(
+    (locationId: string) => {
+      setEditingLocationId(locationId);
+    },
+    []
+  );
+
   const handleLocationClick = useCallback(
     (index: number) => {
+      const targetLoc = locations[index];
+      if (targetLoc) {
+        setEditingLocationId(targetLoc.id);
+      }
+
       const engine = engineRef.current;
       if (!engine) return;
       const totalDuration = engine.getTotalDuration();
@@ -288,7 +308,7 @@ function EditorContent() {
     <div className="flex h-screen flex-col">
       <TopToolbar />
       <div className="flex flex-1 overflow-hidden">
-        <LeftPanel onLocationClick={handleLocationClick} />
+        <LeftPanel onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />
         {/* Map area: full width on mobile, flex-1 on desktop */}
         <div className="flex-1 relative">
           <MapCanvas />
@@ -344,7 +364,14 @@ function EditorContent() {
             )}
           </AnimatePresence>
           {/* Photo overlay */}
-          <PhotoOverlay photos={visiblePhotos} visible={showPhotoOverlay} />
+          <PhotoOverlay photos={visiblePhotos} visible={showPhotoOverlay} photoLayout={visiblePhotoLocation?.photoLayout} />
+          {/* Photo layout editor */}
+          {editingLocation && editingLocation.photos.length > 0 && (
+            <PhotoLayoutEditor
+              location={editingLocation}
+              onClose={() => setEditingLocationId(null)}
+            />
+          )}
           {/* Playback controls */}
           {hasSegments && (
             <PlaybackControls
@@ -358,7 +385,7 @@ function EditorContent() {
       </div>
       {/* Mobile bottom sheet */}
       <div className="md:hidden">
-        <BottomSheet onLocationClick={handleLocationClick} />
+        <BottomSheet onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ interface LocationCardProps {
   onRemove: (id: string) => void;
   onToggleWaypoint: (id: string) => void;
   onClick?: (index: number) => void;
+  onEditLayout?: (locationId: string) => void;
 }
 
 function EditableName({
@@ -88,6 +89,7 @@ export default function LocationCard({
   onRemove,
   onToggleWaypoint,
   onClick,
+  onEditLayout,
 }: LocationCardProps) {
   const isFirst = index === 0;
   const isWaypoint = location.isWaypoint;
@@ -180,7 +182,7 @@ export default function LocationCard({
           <X className="h-4 w-4" />
         </Button>
       </div>
-      <PhotoManager locationId={location.id} />
+      <PhotoManager locationId={location.id} onEditLayout={onEditLayout} />
     </div>
   );
 }

@@ -21,6 +21,7 @@ export interface Location {
   coordinates: [number, number]; // [lng, lat]
   photos: Photo[];
   isWaypoint: boolean;
+  photoLayout?: PhotoLayout;
 }
 
 export interface Segment {
@@ -76,6 +77,16 @@ export interface ExportSettings {
   fps: number;
   cityLabelSize?: number; // CSS font size in px (default 18)
   cityLabelLang?: "en" | "zh";
+}
+
+export type LayoutTemplate = "grid" | "hero" | "masonry" | "filmstrip" | "scatter";
+
+export interface PhotoLayout {
+  mode: "auto" | "manual";
+  template?: LayoutTemplate;
+  order?: string[];        // photo IDs in custom order
+  gap?: number;            // gap in px (0-20), default 8
+  borderRadius?: number;   // border radius in px (0-20), default 8
 }
 
 export type MapStyle = "light" | "dark" | "satellite";

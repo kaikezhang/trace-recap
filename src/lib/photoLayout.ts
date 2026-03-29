@@ -1,3 +1,5 @@
+import type { LayoutTemplate } from "@/types";
+
 export interface PhotoRect {
   /** All values as fractions of container (0-1) */
   x: number;
@@ -241,5 +243,159 @@ function layoutNine(gap: number): PhotoRect[] {
       });
     }
   }
+  return rects;
+}
+
+/**
+ * Compute layout using a specific template.
+ * For "auto" mode, delegates to computeAutoLayout.
+ */
+export function computeTemplateLayout(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  template: LayoutTemplate,
+  gap?: number,
+  containerWidthPx?: number
+): PhotoRect[] {
+  const gapPx = gap ?? 8;
+  const widthPx = containerWidthPx ?? 1000;
+  const g = gapPx / widthPx; // gap as fraction
+
+  switch (template) {
+    case "grid":
+      return layoutGrid(photos.length, g);
+    case "hero":
+      return layoutHero(photos.length, g);
+    case "masonry":
+      return layoutMasonry(photos, g);
+    case "filmstrip":
+      return layoutFilmstrip(photos, g);
+    case "scatter":
+      // Phase 3 placeholder — falls back to grid
+      return layoutGrid(photos.length, g);
+    default:
+      return computeAutoLayout(photos, containerAspect, gapPx, widthPx);
+  }
+}
+
+/** Grid: equal-sized cells filling rows/columns */
+function layoutGrid(n: number, gap: number): PhotoRect[] {
+  if (n === 0) return [];
+  const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3;
+  const rows = Math.ceil(n / cols);
+  const w = (1 - gap * (cols + 1)) / cols;
+  const h = (1 - gap * (rows + 1)) / rows;
+  const rects: PhotoRect[] = [];
+  for (let i = 0; i < n; i++) {
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    rects.push({
+      x: gap + col * (w + gap),
+      y: gap + row * (h + gap),
+      width: w,
+      height: h,
+    });
+  }
+  return rects;
+}
+
+/** Hero: first photo large (~60% area), remaining in smaller grid */
+function layoutHero(n: number, gap: number): PhotoRect[] {
+  if (n === 0) return [];
+  if (n === 1) {
+    const w = 1 - gap * 2;
+    const h = 1 - gap * 2;
+    return [{ x: gap, y: gap, width: w, height: h }];
+  }
+
+  const heroW = 0.6 - gap * 1.5;
+  const heroH = 1 - gap * 2;
+  const rightW = 0.4 - gap * 1.5;
+  const remaining = n - 1;
+  const rows = Math.min(remaining, 3);
+  const cellH = (heroH - gap * (rows - 1)) / rows;
+
+  const rects: PhotoRect[] = [
+    { x: gap, y: gap, width: heroW, height: heroH },
+  ];
+
+  for (let i = 0; i < remaining; i++) {
+    const row = i % rows;
+    const col = Math.floor(i / rows);
+    const cols = Math.ceil(remaining / rows);
+    const cellW = cols > 1 ? (rightW - gap * (cols - 1)) / cols : rightW;
+    rects.push({
+      x: gap * 2 + heroW + col * (cellW + gap),
+      y: gap + row * (cellH + gap),
+      width: cellW,
+      height: cellH,
+    });
+  }
+
+  return rects;
+}
+
+/** Masonry: alternating tall and short photos in columns */
+function layoutMasonry(photos: PhotoMeta[], gap: number): PhotoRect[] {
+  const n = photos.length;
+  if (n === 0) return [];
+  if (n === 1) {
+    const w = 1 - gap * 2;
+    const h = 1 - gap * 2;
+    return [{ x: gap, y: gap, width: w, height: h }];
+  }
+
+  const cols = n <= 2 ? 2 : 3;
+  const colW = (1 - gap * (cols + 1)) / cols;
+  const colTops: number[] = new Array(cols).fill(gap);
+  const rects: PhotoRect[] = new Array(n);
+
+  for (let i = 0; i < n; i++) {
+    // Pick the column with the smallest top
+    let minCol = 0;
+    for (let c = 1; c < cols; c++) {
+      if (colTops[c] < colTops[minCol]) minCol = c;
+    }
+    // Alternate height: tall (0.5) for even indices, short (0.3) for odd
+    const cellH = i % 2 === 0 ? 0.45 : 0.3;
+    const x = gap + minCol * (colW + gap);
+    const y = colTops[minCol];
+    rects[i] = { x, y, width: colW, height: cellH };
+    colTops[minCol] = y + cellH + gap;
+  }
+
+  // Normalize: scale all rects so the tallest column fits within [0, 1]
+  const maxBottom = Math.max(...colTops);
+  if (maxBottom > 1) {
+    const scale = (1 - gap) / (maxBottom - gap);
+    for (const r of rects) {
+      r.y = gap + (r.y - gap) * scale;
+      r.height *= scale;
+    }
+  }
+
+  return rects;
+}
+
+/** Filmstrip: single horizontal row, all same height */
+function layoutFilmstrip(photos: PhotoMeta[], gap: number): PhotoRect[] {
+  const n = photos.length;
+  if (n === 0) return [];
+
+  const rowH = 0.7;
+  const yOff = (1 - rowH) / 2;
+
+  // Width proportional to aspect ratio
+  const totalAspect = photos.reduce((sum, p) => sum + Math.max(p.aspect, 0.5), 0);
+  const availW = 1 - gap * (n + 1);
+  const rects: PhotoRect[] = [];
+  let x = gap;
+  for (let i = 0; i < n; i++) {
+    const aspect = Math.max(photos[i].aspect, 0.5);
+    const w = (aspect / totalAspect) * availW;
+    rects.push({ x, y: yOff, width: w, height: rowH });
+    x += w + gap;
+  }
+
   return rects;
 }

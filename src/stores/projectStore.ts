@@ -3,6 +3,7 @@ import type {
   Location,
   Segment,
   Photo,
+  PhotoLayout,
   TransportMode,
   MapStyle,
 } from "@/types";
@@ -15,6 +16,7 @@ export interface ImportRouteData {
     coordinates: [number, number];
     isWaypoint?: boolean;
     photos?: { url: string; caption?: string }[];
+    photoLayout?: PhotoLayout;
   }[];
   segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
 }
@@ -35,6 +37,7 @@ interface ProjectState {
 
   addPhoto: (locationId: string, photo: Omit<Photo, "id" | "locationId">) => void;
   removePhoto: (locationId: string, photoId: string) => void;
+  setPhotoLayout: (locationId: string, layout: PhotoLayout) => void;
 
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
@@ -195,6 +198,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       ),
     })),
 
+  setPhotoLayout: (locationId, layout) =>
+    set((state) => ({
+      locations: state.locations.map((l) =>
+        l.id === locationId ? { ...l, photoLayout: layout } : l
+      ),
+    })),
+
   setMapStyle: (style) => set({ mapStyle: style }),
 
   clearRoute: () => set({ locations: [], segments: [] }),
@@ -232,6 +242,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           coordinates: loc.coordinates as [number, number],
           isWaypoint: loc.isWaypoint ?? false,
           ...(photos.length > 0 ? { photos } : {}),
+          ...(loc.photoLayout ? { photoLayout: loc.photoLayout } : {}),
         };
       })
     );
@@ -264,6 +275,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           coordinates: loc.coordinates,
           photos,
           isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
+          ...(loc.photoLayout ? { photoLayout: loc.photoLayout } : {}),
         };
       });
 

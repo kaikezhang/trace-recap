@@ -9,7 +9,7 @@ import {
   SEGMENT_GLOW_LAYER_PREFIX,
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
-import { computeAutoLayout } from "@/lib/photoLayout";
+import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -393,12 +393,32 @@ export class VideoExporter {
     const group = groups[progress.groupIndex];
     if (!group) return;
 
-    const photos: Photo[] = group.toLoc.photos;
+    const toLoc = group.toLoc;
+    const photos: Photo[] = toLoc.photos;
     if (photos.length === 0) return;
+
+    const layout = toLoc.photoLayout;
+    const gapPx = layout?.gap ?? 8;
+    const borderRadiusPx = layout?.borderRadius ?? 8;
+
+    // Apply custom photo order if set
+    const orderedPhotos = (() => {
+      if (layout?.order && layout.order.length > 0) {
+        const photoMap = new Map(photos.map((p) => [p.id, p]));
+        const ordered = layout.order
+          .map((id) => photoMap.get(id))
+          .filter((p): p is Photo => !!p);
+        for (const p of photos) {
+          if (!ordered.find((o) => o.id === p.id)) ordered.push(p);
+        }
+        return ordered;
+      }
+      return photos;
+    })();
 
     // Collect preloaded images for these photos
     const loaded: { photo: Photo; preloaded: PreloadedPhoto }[] = [];
-    for (const photo of photos) {
+    for (const photo of orderedPhotos) {
       const preloaded = this.photoImages.get(photo.url);
       if (preloaded) {
         loaded.push({ photo, preloaded });
@@ -407,7 +427,7 @@ export class VideoExporter {
     if (loaded.length === 0) return;
 
     const pad = 6 * scaleX; // white frame padding
-    const radius = 12 * scaleX; // rounded corner radius
+    const radius = borderRadiusPx * scaleX; // rounded corner radius
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
     const captionFontSize = 14 * scaleX;
@@ -424,7 +444,10 @@ export class VideoExporter {
       id: photo.id,
       aspect: preloaded.aspect,
     }));
-    const rects = computeAutoLayout(layoutMetas, containerAspect, 8, insetW / scaleX);
+    const widthPx = insetW / scaleX;
+    const rects = layout?.mode === "manual" && layout.template
+      ? computeTemplateLayout(layoutMetas, containerAspect, layout.template, gapPx, widthPx)
+      : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
     const count = loaded.length;
 
     for (let i = 0; i < rects.length; i++) {
