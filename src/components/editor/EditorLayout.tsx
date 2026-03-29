@@ -313,7 +313,7 @@ function EditorContent() {
     <div className="flex h-screen flex-col">
       <TopToolbar />
       <div className="flex flex-1 overflow-hidden">
-        {!isPlaying && <LeftPanel onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />}
+        <LeftPanel onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />
         {/* Map area: full width on mobile, flex-1 on desktop */}
         <div className="flex-1 relative">
           <MapCanvas />
@@ -377,8 +377,8 @@ function EditorContent() {
               onClose={() => setEditingLocationId(null)}
             />
           )}
-          {/* Playback controls */}
-          {hasSegments && (
+          {/* Playback controls — hidden when layout editor is open */}
+          {hasSegments && !editingLocation && (
             <PlaybackControls
               onPlay={handlePlay}
               onPause={handlePause}
