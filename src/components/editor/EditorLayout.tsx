@@ -88,6 +88,7 @@ function EditorContent() {
       if (e.showPhotos) {
         const seg = segments[e.segmentIndex];
         const toLoc = locations.find((l) => l.id === seg?.toId);
+        console.log("[PhotoDebug] showPhotos=true", { segIdx: e.segmentIndex, segId: seg?.id, toLocId: toLoc?.id, toLocName: toLoc?.name, photoCount: toLoc?.photos?.length, phase: e.phase });
         setVisiblePhotos(toLoc?.photos || []);
         setVisiblePhotoLocationId(toLoc?.id ?? null);
       } else {
