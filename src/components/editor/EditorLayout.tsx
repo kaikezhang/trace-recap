@@ -84,6 +84,7 @@ function EditorContent() {
       setCurrentCityLabel(e.cityLabel);
       setCurrentCityLabelZh(e.cityLabelZh);
       setShowPhotoOverlay(e.showPhotos);
+      setPhotoOverlayOpacity(e.photoOpacity);
       if (e.showPhotos) {
         const seg = segments[e.segmentIndex];
         const toLoc = locations.find((l) => l.id === seg?.toId);
