@@ -305,13 +305,15 @@ function EditorContent() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [handlePlay, handlePause, handleReset]);
 
+  const playbackState = useAnimationStore((s) => s.playbackState);
+  const isPlaying = playbackState === "playing";
   const hasSegments = segments.length > 0;
 
   return (
     <div className="flex h-screen flex-col">
       <TopToolbar />
       <div className="flex flex-1 overflow-hidden">
-        <LeftPanel onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />
+        {!isPlaying && <LeftPanel onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />}
         {/* Map area: full width on mobile, flex-1 on desktop */}
         <div className="flex-1 relative">
           <MapCanvas />
@@ -386,10 +388,12 @@ function EditorContent() {
           )}
         </div>
       </div>
-      {/* Mobile bottom sheet */}
-      <div className="md:hidden">
-        <BottomSheet onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />
-      </div>
+      {/* Mobile bottom sheet — hidden during playback */}
+      {!isPlaying && (
+        <div className="md:hidden">
+          <BottomSheet onLocationClick={handleLocationClick} onEditLayout={handleEditLayout} />
+        </div>
+      )}
     </div>
   );
 }
