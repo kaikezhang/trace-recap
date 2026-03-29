@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, GripVertical, Pencil } from "lucide-react";
+import { X, GripVertical, ChevronRight, Pencil, LayoutGrid } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,30 @@ function EditableName({
   );
 }
 
+function WaypointSwitch({
+  isWaypoint,
+  onToggle,
+}: {
+  isWaypoint: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+        isWaypoint ? "bg-gray-300" : "bg-indigo-500"
+      }`}
+      title={isWaypoint ? "Switch to destination" : "Switch to stop by"}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+          isWaypoint ? "translate-x-1" : "translate-x-[18px]"
+        }`}
+      />
+    </button>
+  );
+}
+
 export default function LocationCard({
   location,
   index,
@@ -91,6 +116,7 @@ export default function LocationCard({
   onClick,
   onEditLayout,
 }: LocationCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const isFirst = index === 0;
   const isWaypoint = location.isWaypoint;
   const updateLocation = useProjectStore((s) => s.updateLocation);
@@ -113,76 +139,158 @@ export default function LocationCard({
     opacity: isDragging ? 0.5 : undefined,
   };
 
+  const photoThumbnails = location.photos.slice(0, 3);
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...dropProps}
-      className={`rounded-xl border bg-card p-3 md:p-4 shadow-sm space-y-2 ${
+      className={`rounded-xl border bg-card shadow-sm ${
         isWaypoint ? "opacity-60" : ""
       } ${isDragging ? "shadow-lg" : ""} ${
         isDragOver ? "ring-2 ring-primary ring-offset-1 bg-primary/5" : ""
-      } ${onClick ? "cursor-pointer" : ""}`}
-      onClick={(e) => {
-        // Don't trigger if clicking on buttons, inputs, or editable name spans
-        const target = e.target as HTMLElement;
-        if (target.closest("button") || target.closest("input") || target.closest("[data-no-seek]") || target.closest("[contenteditable]")) return;
-        onClick?.(index);
-      }}
+      }`}
     >
-      <div className="flex items-center gap-2">
+      {/* Collapsed row */}
+      <div
+        className="flex items-center gap-2 p-3 md:p-3 cursor-pointer"
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (
+            target.closest("[data-drag-handle]") ||
+            target.closest("[data-delete-btn]") ||
+            target.closest("[data-no-seek]") ||
+            target.closest("input")
+          )
+            return;
+          setIsExpanded((v) => !v);
+          onClick?.(index);
+        }}
+      >
+        {/* Drag handle */}
         <div
+          data-drag-handle
           className="flex items-center cursor-grab active:cursor-grabbing touch-none"
           {...attributes}
           {...listeners}
         >
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </div>
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+
+        {/* Number badge */}
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-xs font-semibold text-white">
           {index + 1}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <EditableName
-              value={location.name}
-              placeholder="English name"
-              onSave={(val) => updateLocation(location.id, { name: val })}
-              className="text-sm font-medium truncate"
-            />
-            {isWaypoint && (
-              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                stop by
-              </span>
-            )}
-          </div>
-          <EditableName
-            value={location.nameZh ?? ""}
-            placeholder="中文名"
-            onSave={(val) => updateLocation(location.id, { nameZh: val || undefined })}
-            className="text-xs text-muted-foreground"
-          />
+
+        {/* Names on one line */}
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 truncate">
+          <span className="text-sm font-medium truncate">
+            {location.name || <span className="text-muted-foreground italic">English name</span>}
+          </span>
+          {location.nameZh && (
+            <span className="text-xs text-muted-foreground truncate">
+              {location.nameZh}
+            </span>
+          )}
+          {isWaypoint && (
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              stop by
+            </span>
+          )}
         </div>
-        {!isFirst && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            title={isWaypoint ? "Switch to destination" : "Switch to stop by"}
-            onClick={() => onToggleWaypoint(location.id)}
-          >
-            <span className="text-sm">{isWaypoint ? "\u2708\uFE0F" : "\uD83C\uDFE0"}</span>
-          </Button>
+
+        {/* Photo thumbnails (up to 3) */}
+        {photoThumbnails.length > 0 && (
+          <div className="flex gap-0.5 shrink-0">
+            {photoThumbnails.map((photo) => (
+              <img
+                key={photo.id}
+                src={photo.url}
+                alt=""
+                className="w-8 h-8 rounded-lg object-cover bg-muted"
+              />
+            ))}
+          </div>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={() => onRemove(location.id)}
+
+        {/* Chevron */}
+        <ChevronRight
+          className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 ${
+            isExpanded ? "rotate-90" : ""
+          }`}
+        />
+
+        {/* Delete button */}
+        <button
+          data-delete-btn
+          className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-red-500 hover:bg-red-50"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(location.id);
+          }}
         >
           <X className="h-4 w-4" />
-        </Button>
+        </button>
       </div>
-      <PhotoManager locationId={location.id} onEditLayout={onEditLayout} />
+
+      {/* Expanded content */}
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 space-y-3 border-t pt-3">
+              {/* Editable names */}
+              <div className="space-y-1.5">
+                <EditableName
+                  value={location.name}
+                  placeholder="English name"
+                  onSave={(val) => updateLocation(location.id, { name: val })}
+                  className="text-sm font-medium"
+                />
+                <EditableName
+                  value={location.nameZh ?? ""}
+                  placeholder="中文名"
+                  onSave={(val) => updateLocation(location.id, { nameZh: val || undefined })}
+                  className="text-xs text-muted-foreground"
+                />
+              </div>
+
+              {/* Waypoint toggle as switch */}
+              {!isFirst && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Stop by (waypoint)</span>
+                  <WaypointSwitch
+                    isWaypoint={!!isWaypoint}
+                    onToggle={() => onToggleWaypoint(location.id)}
+                  />
+                </div>
+              )}
+
+              {/* Photo manager */}
+              <PhotoManager locationId={location.id} onEditLayout={onEditLayout} />
+
+              {/* Photo layout edit button */}
+              {location.photos.length > 0 && onEditLayout && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1 w-full"
+                  onClick={() => onEditLayout(location.id)}
+                >
+                  <LayoutGrid className="h-3 w-3" />
+                  Edit Photo Layout
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

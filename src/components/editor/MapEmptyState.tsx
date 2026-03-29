@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin } from "lucide-react";
+import { MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface MapEmptyStateProps {
@@ -15,7 +15,9 @@ export default function MapEmptyState({
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
       <div className="bg-background/80 backdrop-blur-sm rounded-2xl border shadow-lg p-8 max-w-sm w-full mx-4 flex flex-col items-center gap-4 pointer-events-auto">
-        <MapPin className="h-12 w-12 text-muted-foreground/50" />
+        <div className="w-20 h-20 rounded-2xl bg-white shadow-xl flex items-center justify-center">
+          <MapPin className="h-10 w-10 text-indigo-500" />
+        </div>
         <p className="text-base font-medium text-muted-foreground text-center">
           Start by searching for a city
         </p>
@@ -25,10 +27,11 @@ export default function MapEmptyState({
             className="flex-1 rounded-lg"
             onClick={onSearchClick}
           >
-            Search a city
+            <Search className="h-4 w-4 mr-1.5" />
+            Search
           </Button>
           <Button
-            className="flex-1 rounded-lg"
+            className="flex-1 rounded-lg bg-indigo-500 hover:bg-indigo-600"
             onClick={onLoadDemo}
           >
             Load Demo

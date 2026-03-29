@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Download, X, Loader2, AlertTriangle } from "lucide-react";
+import {
+  Download,
+  X,
+  AlertTriangle,
+  Monitor,
+  Smartphone,
+  Check,
+  ChevronDown,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,13 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { useMap } from "./MapContext";
 import { useProjectStore } from "@/stores/projectStore";
@@ -24,6 +26,42 @@ import { AnimationEngine } from "@/engine/AnimationEngine";
 import { VideoExporter, type ExportProgress } from "@/engine/VideoExporter";
 import type { AspectRatio, ExportSettings } from "@/types";
 import { FPS } from "@/lib/constants";
+
+function CircularProgress({ percent }: { percent: number }) {
+  const r = 45;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference - (percent / 100) * circumference;
+
+  return (
+    <div className="relative w-32 h-32 mx-auto">
+      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+        <circle
+          cx="50"
+          cy="50"
+          r={r}
+          fill="none"
+          stroke="#e5e7eb"
+          strokeWidth="6"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r={r}
+          fill="none"
+          stroke="#6366f1"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-all duration-300"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-2xl font-bold text-gray-900">{percent}%</span>
+      </div>
+    </div>
+  );
+}
 
 export default function ExportDialog() {
   const open = useUIStore((s) => s.exportDialogOpen);
@@ -39,10 +77,12 @@ export default function ExportDialog() {
   const aspectRatio = useUIStore((s) => s.exportAspectRatio) as AspectRatio;
   const setAspectRatio = useUIStore((s) => s.setExportAspectRatio);
   const [resolution, setResolution] = useState("720");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadSize, setDownloadSize] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const exporterRef = useRef<VideoExporter | null>(null);
 
@@ -51,6 +91,7 @@ export default function ExportDialog() {
 
     setIsExporting(true);
     setDownloadUrl(null);
+    setDownloadSize(null);
     setProgress(null);
     setExportError(null);
 
@@ -72,9 +113,10 @@ export default function ExportDialog() {
       if (blob) {
         const url = URL.createObjectURL(blob);
         setDownloadUrl(url);
+        const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+        setDownloadSize(`${sizeMB} MB`);
       }
     } catch (error) {
-      // Don't show error when user cancelled
       if (error instanceof DOMException && error.name === "AbortError") {
         setProgress(null);
         return;
@@ -90,7 +132,7 @@ export default function ExportDialog() {
       setIsExporting(false);
       exporterRef.current = null;
     }
-  }, [map, locations, segments, aspectRatio, resolution]);
+  }, [map, locations, segments, aspectRatio, resolution, cityLabelSize, cityLabelLang]);
 
   const handleCancel = () => {
     exporterRef.current?.cancel();
@@ -102,6 +144,7 @@ export default function ExportDialog() {
     if (isExporting) return;
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
     setDownloadUrl(null);
+    setDownloadSize(null);
     setProgress(null);
     setExportError(null);
     setOpen(newOpen);
@@ -125,6 +168,68 @@ export default function ExportDialog() {
     }
   };
 
+  // Completion state
+  if (downloadUrl) {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-md">
+          <div className="flex flex-col items-center py-6 space-y-4">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+              <Check className="h-8 w-8 text-green-600" />
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-semibold">Export Complete!</h3>
+              {downloadSize && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  File size: {downloadSize}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2 w-full">
+              <a href={downloadUrl} download="trace-recap.mp4" className="flex-1">
+                <Button className="w-full bg-indigo-500 hover:bg-indigo-600">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download MP4
+                </Button>
+              </a>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => handleClose(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Exporting state with circular progress
+  if (isExporting && progress) {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-md">
+          <div className="flex flex-col items-center py-6 space-y-4">
+            <CircularProgress percent={progressPercent} />
+            <p className="text-sm text-muted-foreground">
+              {phaseLabel(progress.phase)}
+            </p>
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={handleCancel}
+            >
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
@@ -133,73 +238,143 @@ export default function ExportDialog() {
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Step 1: Aspect ratio cards */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Aspect Ratio</label>
-            <Select
-              value={aspectRatio}
-              onValueChange={(v) => v && setAspectRatio(v as AspectRatio)}
-              disabled={isExporting}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="16:9">Landscape (16:9)</SelectItem>
-                <SelectItem value="9:16">Portrait (9:16)</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+                  aspectRatio === "16:9"
+                    ? "border-indigo-500 bg-indigo-50"
+                    : "border-border hover:border-gray-300"
+                }`}
+                onClick={() => setAspectRatio("16:9")}
+              >
+                {aspectRatio === "16:9" && (
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                    <Check className="h-3 w-3 text-white" />
+                  </div>
+                )}
+                <Monitor className="h-8 w-8 text-gray-600" />
+                <span className="text-sm font-medium">Landscape</span>
+                <span className="text-xs text-muted-foreground">16:9</span>
+              </button>
+              <button
+                className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
+                  aspectRatio === "9:16"
+                    ? "border-indigo-500 bg-indigo-50"
+                    : "border-border hover:border-gray-300"
+                }`}
+                onClick={() => setAspectRatio("9:16")}
+              >
+                {aspectRatio === "9:16" && (
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                    <Check className="h-3 w-3 text-white" />
+                  </div>
+                )}
+                <Smartphone className="h-8 w-8 text-gray-600" />
+                <span className="text-sm font-medium">Portrait</span>
+                <span className="text-xs text-muted-foreground">9:16</span>
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Resolution</label>
-            <Select
-              value={resolution}
-              onValueChange={(v) => v && setResolution(v)}
-              disabled={isExporting}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="720">720p</SelectItem>
-                <SelectItem value="1080">1080p</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Quick Export button */}
+          <Button
+            className="w-full h-12 bg-indigo-500 hover:bg-indigo-600 text-base font-medium"
+            onClick={handleExport}
+            disabled={segments.length === 0}
+          >
+            Quick Export (720p)
+          </Button>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">City Label Language</label>
-            <Select
-              value={cityLabelLang}
-              onValueChange={(v) => v && setCityLabelLang(v as "en" | "zh")}
-              disabled={isExporting}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="zh">中文</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              City Label Size: {cityLabelSize}px
-            </label>
-            <Slider
-              value={[cityLabelSize]}
-              min={12}
-              max={48}
-              step={1}
-              onValueChange={(v) => {
-                const val = Array.isArray(v) ? v[0] : v;
-                setCityLabelSize(val);
-              }}
-              disabled={isExporting}
+          {/* Advanced Settings toggle */}
+          <button
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-full justify-center"
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            <span>Advanced Settings</span>
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
             />
-          </div>
+          </button>
+
+          {/* Advanced settings collapsible */}
+          <AnimatePresence initial={false}>
+            {showAdvanced && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-4 pt-1">
+                  {/* Resolution pills */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Resolution</label>
+                    <div className="flex gap-2">
+                      {["720", "1080"].map((res) => (
+                        <button
+                          key={res}
+                          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                            resolution === res
+                              ? "bg-indigo-500 text-white"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
+                          onClick={() => setResolution(res)}
+                        >
+                          {res}p
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* City Label pills */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">City Label</label>
+                    <div className="flex gap-2">
+                      {[
+                        { value: "en", label: "English" },
+                        { value: "zh", label: "中文" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                            cityLabelLang === opt.value
+                              ? "bg-indigo-500 text-white"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
+                          onClick={() =>
+                            setCityLabelLang(opt.value as "en" | "zh")
+                          }
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Label Size slider */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      Label Size: {cityLabelSize}px
+                    </label>
+                    <Slider
+                      value={[cityLabelSize]}
+                      min={12}
+                      max={48}
+                      step={1}
+                      onValueChange={(v) => {
+                        const val = Array.isArray(v) ? v[0] : v;
+                        setCityLabelSize(val);
+                      }}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {exportError && (
             <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -207,58 +382,6 @@ export default function ExportDialog() {
               <span>{exportError}</span>
             </div>
           )}
-
-          {isExporting && progress && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {phaseLabel(progress.phase)}
-                </span>
-                {progress.phase === "capturing" && (
-                  <span className="font-medium">{progressPercent}%</span>
-                )}
-              </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-2 pt-2">
-            {downloadUrl ? (
-              <a
-                href={downloadUrl}
-                download="trace-recap.mp4"
-                className="flex-1"
-              >
-                <Button className="w-full">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download MP4
-                </Button>
-              </a>
-            ) : isExporting ? (
-              <Button
-                variant="destructive"
-                className="flex-1"
-                onClick={handleCancel}
-              >
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-            ) : (
-              <Button
-                className="flex-1"
-                onClick={handleExport}
-                disabled={segments.length === 0}
-              >
-                <Loader2 className="h-4 w-4 mr-2 animate-spin hidden" />
-                Start Export
-              </Button>
-            )}
-          </div>
         </div>
       </DialogContent>
     </Dialog>

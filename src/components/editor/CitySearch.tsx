@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
-import { Search } from "lucide-react";
+import { Search, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useProjectStore } from "@/stores/projectStore";
 import { useMap } from "./MapContext";
@@ -29,6 +29,13 @@ const PLACEHOLDER_CITIES = [
   "Search New York...",
   "Search Sydney...",
 ];
+
+function splitPlaceName(placeName: string): { city: string; region: string } {
+  const parts = placeName.split(",");
+  const city = parts[0]?.trim() ?? placeName;
+  const region = parts.slice(1).join(",").trim();
+  return { city, region };
+}
 
 const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
   function CitySearch({ hintMessage, onHintDismiss }, ref) {
@@ -141,7 +148,8 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
             value={query}
             onChange={(e) => search(e.target.value)}
             className={[
-              "pl-9 h-11 text-base transition-opacity duration-200",
+              "pl-9 h-11 text-base transition-all duration-200",
+              "focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10",
               !query && !placeholderVisible ? "placeholder:opacity-0" : "placeholder:opacity-100",
             ].join(" ")}
           />
@@ -155,16 +163,33 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
           />
         )}
         {isOpen && results.length > 0 && (
-          <div className="absolute left-3 right-3 top-[60px] z-50 rounded-xl border bg-popover shadow-lg">
-            {results.map((r) => (
-              <button
-                key={r.id}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-accent truncate first:rounded-t-xl last:rounded-b-xl"
-                onClick={() => selectResult(r)}
-              >
-                {r.place_name}
-              </button>
-            ))}
+          <div className="absolute left-3 right-3 top-[60px] z-50 rounded-xl border bg-popover shadow-lg overflow-hidden">
+            {results.map((r) => {
+              const { city, region } = splitPlaceName(r.place_name);
+              return (
+                <button
+                  key={r.id}
+                  className="w-full px-3 py-2.5 text-left hover:bg-accent flex items-center gap-2.5 first:rounded-t-xl last:rounded-b-xl"
+                  onClick={() => selectResult(r)}
+                >
+                  <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+                    <MapPin className="h-3.5 w-3.5 text-indigo-500" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium block truncate">{city}</span>
+                    {region && (
+                      <span className="text-xs text-muted-foreground block truncate">{region}</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {isOpen && !isLoading && results.length === 0 && query.trim().length >= 2 && (
+          <div className="absolute left-3 right-3 top-[60px] z-50 rounded-xl border bg-popover shadow-lg p-6 flex flex-col items-center gap-2">
+            <MapPin className="h-8 w-8 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">No cities found</p>
           </div>
         )}
         {isLoading && (
