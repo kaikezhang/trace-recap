@@ -6,6 +6,7 @@ export interface PhotoRect {
   y: number;
   width: number;
   height: number;
+  rotation?: number; // degrees, only used in scatter mode
 }
 
 export interface PhotoMeta {
@@ -247,6 +248,96 @@ function layoutNine(gap: number): PhotoRect[] {
 }
 
 /**
+ * Simple seeded pseudo-random number generator.
+ * Uses a hash of the input string to produce deterministic sequences.
+ */
+function seededRandom(seed: string): () => number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
+  }
+  return () => {
+    h = (h * 1664525 + 1013904223) | 0;
+    return ((h >>> 0) / 4294967296);
+  };
+}
+
+/** Scatter: semi-random positions with rotation, like photos on a table */
+function layoutScatter(photos: PhotoMeta[], gap: number): PhotoRect[] {
+  const n = photos.length;
+  if (n === 0) return [];
+  if (n === 1) {
+    const w = 0.5;
+    const h = 0.5;
+    return [{ x: (1 - w) / 2, y: (1 - h) / 2, width: w, height: h, rotation: 0 }];
+  }
+
+  // Seed based on photo IDs for deterministic layout
+  const seed = photos.map((p) => p.id).join(",");
+  const rand = seededRandom(seed);
+
+  // Base size: each photo gets roughly 1/sqrt(N) of the container
+  const baseSize = Math.min(0.45, 1 / Math.sqrt(n));
+  const margin = gap + 0.02; // keep away from edges
+
+  const rects: PhotoRect[] = [];
+  for (let i = 0; i < n; i++) {
+    // Size variation: 80-110% of base
+    const sizeScale = 0.8 + rand() * 0.3;
+    const w = baseSize * sizeScale;
+    const h = baseSize * sizeScale;
+
+    // Random position within bounds
+    const maxX = 1 - w - margin;
+    const maxY = 1 - h - margin;
+    const x = margin + rand() * Math.max(0, maxX - margin);
+    const y = margin + rand() * Math.max(0, maxY - margin);
+
+    // Random rotation between -8 and +8 degrees
+    const rotation = (rand() - 0.5) * 16;
+
+    rects.push({ x, y, width: w, height: h, rotation });
+  }
+
+  // Basic collision relaxation: nudge overlapping photos apart (3 passes)
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i];
+        const b = rects[j];
+        const aCx = a.x + a.width / 2;
+        const aCy = a.y + a.height / 2;
+        const bCx = b.x + b.width / 2;
+        const bCy = b.y + b.height / 2;
+
+        const overlapX = (a.width + b.width) / 2 - Math.abs(aCx - bCx);
+        const overlapY = (a.height + b.height) / 2 - Math.abs(aCy - bCy);
+
+        // Only nudge if overlap > 30% of the smaller dimension
+        const threshold = Math.min(a.width, b.width) * 0.3;
+        if (overlapX > threshold && overlapY > threshold) {
+          const dx = aCx < bCx ? -1 : 1;
+          const dy = aCy < bCy ? -1 : 1;
+          const nudge = 0.02;
+          a.x += dx * nudge;
+          a.y += dy * nudge;
+          b.x -= dx * nudge;
+          b.y -= dy * nudge;
+        }
+      }
+    }
+  }
+
+  // Clamp all positions to keep within bounds
+  for (const r of rects) {
+    r.x = Math.max(margin, Math.min(r.x, 1 - r.width - margin));
+    r.y = Math.max(margin, Math.min(r.y, 1 - r.height - margin));
+  }
+
+  return rects;
+}
+
+/**
  * Compute layout using a specific template.
  * For "auto" mode, delegates to computeAutoLayout.
  */
@@ -255,7 +346,8 @@ export function computeTemplateLayout(
   containerAspect: number,
   template: LayoutTemplate,
   gap?: number,
-  containerWidthPx?: number
+  containerWidthPx?: number,
+  customProportions?: { rows?: number[]; cols?: number[] }
 ): PhotoRect[] {
   const gapPx = gap ?? 8;
   const widthPx = containerWidthPx ?? 1000;
@@ -263,44 +355,66 @@ export function computeTemplateLayout(
 
   switch (template) {
     case "grid":
-      return layoutGrid(photos.length, g);
+      return layoutGrid(photos.length, g, customProportions);
     case "hero":
-      return layoutHero(photos.length, g);
+      return layoutHero(photos.length, g, customProportions);
     case "masonry":
       return layoutMasonry(photos, g);
     case "filmstrip":
       return layoutFilmstrip(photos, g);
     case "scatter":
-      // Phase 3 placeholder — falls back to grid
-      return layoutGrid(photos.length, g);
+      return layoutScatter(photos, g);
     default:
       return computeAutoLayout(photos, containerAspect, gapPx, widthPx);
   }
 }
 
-/** Grid: equal-sized cells filling rows/columns */
-function layoutGrid(n: number, gap: number): PhotoRect[] {
+/** Grid: equal-sized cells filling rows/columns, with optional custom proportions */
+function layoutGrid(
+  n: number,
+  gap: number,
+  customProportions?: { rows?: number[]; cols?: number[] }
+): PhotoRect[] {
   if (n === 0) return [];
   const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);
-  const w = (1 - gap * (cols + 1)) / cols;
-  const h = (1 - gap * (rows + 1)) / rows;
+
+  // Compute column widths from custom proportions or equal split
+  const colWeights = customProportions?.cols?.slice(0, cols) ?? new Array(cols).fill(1);
+  const totalColWeight = colWeights.reduce((s: number, w: number) => s + w, 0);
+  const availW = 1 - gap * (cols + 1);
+  const colWidths = colWeights.map((w: number) => (w / totalColWeight) * availW);
+
+  // Compute row heights from custom proportions or equal split
+  const rowWeights = customProportions?.rows?.slice(0, rows) ?? new Array(rows).fill(1);
+  const totalRowWeight = rowWeights.reduce((s: number, w: number) => s + w, 0);
+  const availH = 1 - gap * (rows + 1);
+  const rowHeights = rowWeights.map((w: number) => (w / totalRowWeight) * availH);
+
   const rects: PhotoRect[] = [];
   for (let i = 0; i < n; i++) {
     const row = Math.floor(i / cols);
     const col = i % cols;
+    let x = gap;
+    for (let c = 0; c < col; c++) x += colWidths[c] + gap;
+    let y = gap;
+    for (let r = 0; r < row; r++) y += rowHeights[r] + gap;
     rects.push({
-      x: gap + col * (w + gap),
-      y: gap + row * (h + gap),
-      width: w,
-      height: h,
+      x,
+      y,
+      width: colWidths[col],
+      height: rowHeights[row],
     });
   }
   return rects;
 }
 
 /** Hero: first photo large (~60% area), remaining in smaller grid */
-function layoutHero(n: number, gap: number): PhotoRect[] {
+function layoutHero(
+  n: number,
+  gap: number,
+  customProportions?: { rows?: number[]; cols?: number[] }
+): PhotoRect[] {
   if (n === 0) return [];
   if (n === 1) {
     const w = 1 - gap * 2;
@@ -308,9 +422,13 @@ function layoutHero(n: number, gap: number): PhotoRect[] {
     return [{ x: gap, y: gap, width: w, height: h }];
   }
 
-  const heroW = 0.6 - gap * 1.5;
+  // Custom proportions: cols[0] = hero weight, cols[1] = right panel weight
+  const colWeights = customProportions?.cols?.slice(0, 2) ?? [3, 2]; // default 60/40
+  const totalColW = colWeights[0] + colWeights[1];
+  const availW = 1 - gap * 3;
+  const heroW = (colWeights[0] / totalColW) * availW;
   const heroH = 1 - gap * 2;
-  const rightW = 0.4 - gap * 1.5;
+  const rightW = (colWeights[1] / totalColW) * availW;
   const remaining = n - 1;
   const rows = Math.min(remaining, 3);
   const cellH = (heroH - gap * (rows - 1)) / rows;
@@ -322,8 +440,8 @@ function layoutHero(n: number, gap: number): PhotoRect[] {
   for (let i = 0; i < remaining; i++) {
     const row = i % rows;
     const col = Math.floor(i / rows);
-    const cols = Math.ceil(remaining / rows);
-    const cellW = cols > 1 ? (rightW - gap * (cols - 1)) / cols : rightW;
+    const colCount = Math.ceil(remaining / rows);
+    const cellW = colCount > 1 ? (rightW - gap * (colCount - 1)) / colCount : rightW;
     rects.push({
       x: gap * 2 + heroW + col * (cellW + gap),
       y: gap + row * (cellH + gap),

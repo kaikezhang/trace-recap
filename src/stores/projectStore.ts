@@ -38,6 +38,7 @@ interface ProjectState {
   addPhoto: (locationId: string, photo: Omit<Photo, "id" | "locationId">) => void;
   removePhoto: (locationId: string, photoId: string) => void;
   setPhotoLayout: (locationId: string, layout: PhotoLayout) => void;
+  setPhotoFocalPoint: (locationId: string, photoId: string, point: { x: number; y: number }) => void;
 
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
@@ -202,6 +203,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId ? { ...l, photoLayout: layout } : l
+      ),
+    })),
+
+  setPhotoFocalPoint: (locationId, photoId, point) =>
+    set((state) => ({
+      locations: state.locations.map((l) =>
+        l.id === locationId
+          ? {
+              ...l,
+              photos: l.photos.map((p) =>
+                p.id === photoId ? { ...p, focalPoint: point } : p
+              ),
+            }
+          : l
       ),
     })),
 

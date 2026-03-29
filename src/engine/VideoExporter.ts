@@ -446,7 +446,7 @@ export class VideoExporter {
     }));
     const widthPx = insetW / scaleX;
     const rects = layout?.mode === "manual" && layout.template
-      ? computeTemplateLayout(layoutMetas, containerAspect, layout.template, gapPx, widthPx)
+      ? computeTemplateLayout(layoutMetas, containerAspect, layout.template, gapPx, widthPx, layout.customProportions)
       : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
     const count = loaded.length;
 
@@ -467,8 +467,11 @@ export class VideoExporter {
       const imgH = frameH - pad * 2 - (hasCaption ? captionH : 0);
 
       // Determine rotation — must match preview (PhotoOverlay)
+      // Use scatter rotation if provided, otherwise default tilts
       let rotation = 0;
-      if (count <= 3) {
+      if (rect.rotation != null) {
+        rotation = rect.rotation;
+      } else if (count <= 3) {
         if (i === 0) rotation = -2;
         else if (i === count - 1) rotation = 2;
       } else {
@@ -518,22 +521,25 @@ export class VideoExporter {
       );
       ctx.clip();
 
-      // Compute cover dimensions
+      // Compute cover dimensions, respecting focal point
       const imgAspect = preloaded.aspect;
       const targetAspect = imgW / imgH;
+      const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
       let sx: number, sy: number, sw: number, sh: number;
       if (imgAspect > targetAspect) {
-        // Image wider than target — crop sides
+        // Image wider than target — crop sides, center on focal point X
         sh = preloaded.img.naturalHeight;
         sw = sh * targetAspect;
-        sx = (preloaded.img.naturalWidth - sw) / 2;
+        const maxSx = preloaded.img.naturalWidth - sw;
+        sx = Math.max(0, Math.min(maxSx, fp.x * preloaded.img.naturalWidth - sw / 2));
         sy = 0;
       } else {
-        // Image taller than target — crop top/bottom
+        // Image taller than target — crop top/bottom, center on focal point Y
         sw = preloaded.img.naturalWidth;
         sh = sw / targetAspect;
         sx = 0;
-        sy = (preloaded.img.naturalHeight - sh) / 2;
+        const maxSy = preloaded.img.naturalHeight - sh;
+        sy = Math.max(0, Math.min(maxSy, fp.y * preloaded.img.naturalHeight - sh / 2));
       }
       ctx.drawImage(
         preloaded.img,

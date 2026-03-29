@@ -92,6 +92,7 @@ export interface PhotoLayout {
     rows?: number[];       // relative row heights (e.g. [2, 1] = first row 2x the second)
     cols?: number[];       // relative column widths
   };
+  customRatios?: number[]; // per-photo width ratio overrides (divider drag)
 }
 
 export type MapStyle = "light" | "dark" | "satellite";

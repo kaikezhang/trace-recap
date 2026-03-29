@@ -94,7 +94,14 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
     if (!ready) return [];
     const w = containerSize.w || 1000;
     if (photoLayout?.mode === "manual" && photoLayout.template) {
-      return computeTemplateLayout(layoutMetas, containerAspect, photoLayout.template, gapPx, w);
+      return computeTemplateLayout(
+        layoutMetas,
+        containerAspect,
+        photoLayout.template,
+        gapPx,
+        w,
+        photoLayout.customProportions
+      );
     }
     return computeAutoLayout(layoutMetas, containerAspect, gapPx, w);
   })();
@@ -125,6 +132,15 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
             const n = orderedMetas.length;
             const hasCaption = !!photo.caption;
             const pad = 6; // px padding inside frame
+            const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
+
+            // Use scatter rotation if provided, otherwise default tilts
+            const rotation = rect.rotation != null
+              ? rect.rotation
+              : n <= 3
+                ? (i === 0 ? -2 : i === n - 1 ? 2 : 0)
+                : (i % 2 === 0 ? -1.5 : 1.5);
+
             return (
               <motion.div
                 key={photo.id}
@@ -144,7 +160,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
                   width: `${rect.width * 100}%`,
                   height: `${rect.height * 100}%`,
                   borderRadius: `${borderRadiusPx}px`,
-                  rotate: n <= 3 ? (i === 0 ? -2 : i === n - 1 ? 2 : 0) : (i % 2 === 0 ? -1.5 : 1.5),
+                  rotate: rotation,
                   padding: `${pad}px`,
                   display: "flex",
                   flexDirection: "column" as const,
@@ -158,6 +174,9 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
                     src={photo.url}
                     alt={photo.caption || ""}
                     className="w-full h-full object-cover"
+                    style={{
+                      objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
+                    }}
                   />
                 </div>
                 {hasCaption && (
