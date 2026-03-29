@@ -5,6 +5,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -400,7 +401,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   // DnD
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
   );
 
   const handleDragEnd = useCallback(
@@ -466,7 +468,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
         <div className="px-4 pb-3">
           <div
             ref={previewRef}
-            className="relative bg-muted/50 rounded-lg overflow-hidden"
+            className="relative bg-muted/50 rounded-lg overflow-hidden touch-none"
             style={{ width: "100%", paddingBottom: `${(previewH / previewW) * 100}%` }}
           >
             <div className="absolute inset-0">
