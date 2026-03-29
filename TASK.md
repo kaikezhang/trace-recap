@@ -1,96 +1,89 @@
-# TASK.md — Video Export: Photo Overlay Compositing
+# TASK.md — Current Sprint: CrowdTest Fixes
 
-## ⚠️ DO NOT MERGE THE PR. Create PR and stop. DO NOT MERGE.
+## ⚠️ DO NOT MERGE ANY PR. Create PR and stop. DO NOT MERGE.
 
-## Problem
-During preview, when the animation reaches the ARRIVE phase at a location with photos, `PhotoOverlay` (a React DOM component) displays the photos with a nice layout. But during video export, photos are not rendered because DOM overlays aren't captured by `canvas.toBlob()`.
+## Sprint: CrowdTest v1 Fixes
 
-## Context
-PR #18 (merged) already solved this for route drawing, vehicle icons, and city labels by compositing onto an offscreen canvas. We need to extend the same approach for photos.
+| PR | Task | Priority | Status |
+|----|------|----------|--------|
+| PR25 | Project Persistence (localStorage) | P0 | 🔜 |
+| PR26 | Local Photo Upload (file picker) | P0 | 🔜 |
+| PR27 | Onboarding + Demo Project | P0 | ⏳ |
+| PR28 | Undo/Redo | P1 | ⏳ |
 
-The `progress` event from `AnimationEngine` already includes:
-- `showPhotos: boolean` — true during ARRIVE phase if location has photos
-- `phase: "ARRIVE"` — when photos should show
-- `segmentIndex` — to look up the destination location's photos
+## PR25: Project Persistence (localStorage)
 
-`EditorLayout` uses this to set `visiblePhotos` and `showPhotoOverlay` in the animation store.
+**Problem**: Refreshing the page loses ALL work. This is the #1 user complaint.
 
-## Solution
+**Solution**: Auto-save project state to localStorage, auto-restore on page load.
 
-### 1. Pre-load Photo Images
-In `VideoExporter.export()`, before the frame capture loop:
-- Collect all unique photo URLs from all locations that have photos
-- Pre-load them as `HTMLImageElement` (similar to icon preloading)
-- Store in a `Map<string, HTMLImageElement>` keyed by URL
-- Also track each image's natural aspect ratio (width/height)
+### What to Build
 
-### 2. Draw Photos on Canvas
-Add a `drawPhotos()` method to `VideoExporter` that composites photos onto the offscreen canvas during ARRIVE phases.
+1. **Auto-save**: After every state change in `projectStore`, debounce-save the full project state to `localStorage` under key `trace-recap-project`.
+   - Save: locations, segments, mapStyle, segmentTimingOverrides
+   - Debounce: 500ms after last change
 
-**When to draw:** Check `captured.progress.showPhotos === true`. Look up the photos from the destination location.
+2. **Auto-restore**: On app load, check localStorage for saved state and hydrate `projectStore`.
+   - If saved state exists → import it (use existing `importRoute` logic)
+   - Also restore segment geometry by re-fetching directions
 
-**Finding the photos:** The engine emits `progress.segmentIndex`. Use `this.engine.getSegments()[segmentIndex]` to get the segment, then find the `toLoc` from locations to get `toLoc.photos`.
+3. **Clear project**: Add a "Clear Route" button that clears localStorage + resets store.
+   - Confirm dialog: "Are you sure? This cannot be undone."
 
-**Layout logic** (simplified version of `PhotoOverlay`):
-- Center photos in the canvas
-- Photos get a white border/frame effect (like polaroid)
-- Slight rotation for visual interest (-2° first, +2° last)
-- Max photo display area: ~80% canvas width, ~70% canvas height
-- Single row if ≤3 photos, two rows if more
-- Each photo scales to fit within its allocated space while maintaining aspect ratio
-- Draw a white rounded-rect background behind each photo (shadow effect via darker rect offset)
-- Draw the photo image clipped inside
+4. **Route export includes photos**: Ensure `exportRoute()` includes photo URLs in the JSON so imported routes preserve photos.
 
-**Simplified layout rules:**
-- 1 photo: center, max 60% width, 65% height
-- 2 photos: side by side, each max 40% width, 60% height
-- 3 photos: side by side, each max 28% width, 55% height  
-- 4+ photos: split into 2 rows, similar sizing
+### Files to Modify
+- `src/stores/projectStore.ts` — add localStorage save/restore logic
+- `src/components/editor/LeftPanel.tsx` or `TopToolbar.tsx` — add Clear Route button
 
-**Style:**
-- White frame: 6px padding (scaled for HiDPI)
-- Rounded corners: 12px radius
-- Shadow: offset dark rect behind (2px down, 2px right, semi-transparent)
-- Caption text below photo if exists (14px font, dark gray)
+### Acceptance Criteria
+- [ ] Route persists after page refresh
+- [ ] All locations, segments, transport modes preserved
+- [ ] Segment timing overrides preserved
+- [ ] Map style preserved
+- [ ] Photos (URLs) preserved
+- [ ] "Clear Route" works with confirmation
+- [ ] `npm run build` passes
+- [ ] `npx tsc --noEmit` passes
 
-### 3. Pass Locations to VideoExporter
-VideoExporter needs access to `locations` to look up photos by segment's `toId`. Either:
-- Add `locations` as a constructor parameter, OR
-- Add `getLocations()` to `AnimationEngine`
+### Branch: `feat/project-persistence`
 
-Choose whichever is cleaner. `AnimationEngine` already has `getSegments()`, so adding `getLocations()` is consistent.
+---
 
-### 4. Integration in Export Loop
-In the frame capture loop, after drawing vehicle icon and city label:
-```
-offCtx.drawImage(canvas, 0, 0);        // copy map frame
-this.drawVehicleIcon(offCtx, ...);       // vehicle icon
-this.drawCityLabelFromCapture(offCtx, ...); // city label
-this.drawPhotos(offCtx, captured, ...);  // NEW: photos
-offscreen.toBlob(...);                   // capture
-```
+## PR26: Local Photo Upload
 
-### 5. Photo Pre-loading with Dimensions
-Photos need natural dimensions for layout. When pre-loading:
-```ts
-interface PreloadedPhoto {
-  img: HTMLImageElement;
-  aspect: number; // naturalWidth / naturalHeight
-}
-```
+**Problem**: Users can only add photos via URL. No way to upload from local device.
 
-## Files to Modify
-- `src/engine/VideoExporter.ts` — Add photo preloading, layout, and drawing
-- `src/engine/AnimationEngine.ts` — Add `getLocations()` method (if needed)
+**Solution**: Add a file picker that lets users select local images, convert to data URLs or object URLs.
 
-## Files NOT to Modify
-- `src/components/editor/PhotoOverlay.tsx` — Reference only, don't change
-- `src/components/editor/ExportDialog.tsx` — No changes
-- `src/components/editor/EditorLayout.tsx` — No changes
+### What to Build
 
-## Branch
-Create branch: `feat/export-photos`
+1. **File input**: In `PhotoManager`, add a button "Upload from device" alongside the URL input.
+   - Accept: `.jpg, .jpeg, .png, .webp, .gif`
+   - Multiple selection allowed
+   - Max file size: 10MB per image
 
-## Verification
-- `npx tsc --noEmit` must pass
-- `npm run build` must pass
+2. **Convert to usable URL**: 
+   - Use `URL.createObjectURL(file)` for preview (fast, no memory copy)
+   - For persistence/export: convert to base64 data URL and store in the photo's `url` field
+   - Or: store as object URL for session, and on export warn that local photos won't be included in JSON
+
+3. **Drag & drop**: Support dragging image files onto a location card to add photos.
+   - Already partially implemented (`usePhotoDropZone` exists) — extend to handle File drops, not just reorder
+
+4. **Mobile camera**: On mobile, the file input should also offer "Take Photo" option (automatically available with `accept="image/*"` + `capture` attribute).
+
+### Files to Modify
+- `src/components/editor/PhotoManager.tsx` — add file upload button, handle File objects
+- `src/components/editor/LocationCard.tsx` — extend drop zone to handle file drops
+
+### Acceptance Criteria
+- [ ] "Upload" button opens native file picker
+- [ ] Selected images appear as photo thumbnails
+- [ ] Multiple file selection works
+- [ ] Drag & drop files onto location card works
+- [ ] Works on mobile (camera option available)
+- [ ] Photos display correctly in preview and animation
+- [ ] `npm run build` passes
+
+### Branch: `feat/local-photo-upload`
