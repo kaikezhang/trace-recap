@@ -393,6 +393,29 @@ function layoutScatter(photos: PhotoMeta[], gap: number): PhotoRect[] {
     r.y = Math.max(margin, Math.min(r.y, 1 - r.height - margin));
   }
 
+  // Post-clamp validation: if clamping reintroduced overlap > 20%, shrink the offending rects
+  for (let i = 0; i < rects.length; i++) {
+    for (let j = i + 1; j < rects.length; j++) {
+      const a = rects[i];
+      const b = rects[j];
+      const overlapX = (a.width + b.width) / 2 - Math.abs((a.x + a.width / 2) - (b.x + b.width / 2));
+      const overlapY = (a.height + b.height) / 2 - Math.abs((a.y + a.height / 2) - (b.y + b.height / 2));
+      if (overlapX > 0 && overlapY > 0) {
+        const overlapArea = overlapX * overlapY;
+        const smallerArea = Math.min(a.width * a.height, b.width * b.height);
+        if (overlapArea > smallerArea * maxOverlapRatio) {
+          // Shrink the later rect slightly to reduce overlap
+          const shrink = 0.92;
+          b.width *= shrink;
+          b.height *= shrink;
+          // Re-clamp
+          b.x = Math.max(margin, Math.min(b.x, 1 - b.width - margin));
+          b.y = Math.max(margin, Math.min(b.y, 1 - b.height - margin));
+        }
+      }
+    }
+  }
+
   return rects;
 }
 
