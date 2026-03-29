@@ -27,6 +27,8 @@ export interface AnimationEvent {
   cityLabel: string | null;
   cityLabelZh: string | null;
   showPhotos: boolean;
+  /** Opacity for photo overlay (0-1), used for fade-out transition */
+  photoOpacity: number;
   /** For routeDrawProgress: fraction of route drawn (0-1) */
   routeDrawFraction?: number;
   /** The animation group index for this event */
@@ -399,6 +401,7 @@ export class AnimationEngine {
         cityLabel: null,
         cityLabelZh: null,
         showPhotos: false,
+        photoOpacity: 0,
         groupIndex: lastGroupIdx,
         groupSegmentIndices: this.groupSegmentIndices[lastGroupIdx] ?? [],
       });
@@ -448,8 +451,28 @@ export class AnimationEngine {
       cityLabelZh = group.toLoc.nameZh ?? null;
     }
 
-    // Photos
-    const showPhotos = phase === "ARRIVE" && group.toLoc.photos.length > 0;
+    // Photos: show during ARRIVE, fade out during next group's HOVER/ZOOM_OUT
+    let showPhotos = false;
+    let photoOpacity = 0;
+
+    if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
+      // Current group's ARRIVE: show photos at full opacity
+      showPhotos = true;
+      photoOpacity = 1;
+    } else if ((phase === "HOVER" || phase === "ZOOM_OUT") && groupIndex > 0) {
+      // Check if the PREVIOUS group had photos — fade them out
+      const prevGroup = this.groups[groupIndex - 1];
+      if (prevGroup && prevGroup.toLoc.photos.length > 0) {
+        showPhotos = true;
+        if (phase === "HOVER") {
+          // Fade out during HOVER: 1 → 0.3
+          photoOpacity = 1 - phaseProgress * 0.7;
+        } else {
+          // Fade out during ZOOM_OUT: 0.3 → 0
+          photoOpacity = 0.3 * (1 - phaseProgress);
+        }
+      }
+    }
 
     const progress = clamped / this.totalDuration;
     this.emit({
@@ -461,6 +484,7 @@ export class AnimationEngine {
       cityLabel,
       cityLabelZh,
       showPhotos,
+      photoOpacity,
       groupIndex,
       groupSegmentIndices: segIndices,
     });
@@ -476,6 +500,7 @@ export class AnimationEngine {
         cityLabel: null,
         cityLabelZh: null,
         showPhotos: false,
+        photoOpacity: 0,
         routeDrawFraction: 0,
         groupIndex,
         groupSegmentIndices: segIndices,
@@ -493,6 +518,7 @@ export class AnimationEngine {
         cityLabel: null,
         cityLabelZh: null,
         showPhotos: false,
+        photoOpacity: 0,
         routeDrawFraction: easing(phaseProgress),
         groupIndex,
         groupSegmentIndices: segIndices,
@@ -507,6 +533,7 @@ export class AnimationEngine {
         cityLabel: null,
         cityLabelZh: null,
         showPhotos: false,
+        photoOpacity: 0,
         routeDrawFraction: 1,
         groupIndex,
         groupSegmentIndices: segIndices,

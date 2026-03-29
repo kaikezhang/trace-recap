@@ -11,6 +11,7 @@ interface PhotoOverlayProps {
   photos: Photo[];
   visible: boolean;
   photoLayout?: PhotoLayout;
+  opacity?: number; // 0-1, for fade-out transition
 }
 
 interface PhotoMeta extends Photo {
@@ -49,7 +50,7 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
   return dims;
 }
 
-export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOverlayProps) {
+export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1 }: PhotoOverlayProps) {
   const metas = usePhotoDimensions(photos);
   const ready = metas.length === photos.length && photos.length > 0;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,6 +125,8 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
         left: 0,
         right: 0,
         visibility: visible && ready ? "visible" : "hidden",
+        opacity: opacity,
+        transition: "opacity 0.3s ease-out",
       }}
     >
       <AnimatePresence>

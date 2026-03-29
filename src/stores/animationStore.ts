@@ -12,6 +12,7 @@ interface AnimationState {
   currentCityLabelZh: string | null;
   visiblePhotos: Photo[];
   showPhotoOverlay: boolean;
+  photoOverlayOpacity: number;
   timeline: SegmentTiming[];
 
   setPlaybackState: (state: PlaybackState) => void;
@@ -24,6 +25,7 @@ interface AnimationState {
   setCurrentCityLabelZh: (label: string | null) => void;
   setVisiblePhotos: (photos: Photo[]) => void;
   setShowPhotoOverlay: (show: boolean) => void;
+  setPhotoOverlayOpacity: (opacity: number) => void;
   setTimeline: (timeline: SegmentTiming[]) => void;
   reset: () => void;
 }
@@ -39,6 +41,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   currentCityLabelZh: null,
   visiblePhotos: [],
   showPhotoOverlay: false,
+  photoOverlayOpacity: 1,
   timeline: [],
 
   setPlaybackState: (playbackState) => set({ playbackState }),
@@ -51,6 +54,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setCurrentCityLabelZh: (currentCityLabelZh) => set({ currentCityLabelZh }),
   setVisiblePhotos: (visiblePhotos) => set({ visiblePhotos }),
   setShowPhotoOverlay: (showPhotoOverlay) => set({ showPhotoOverlay }),
+  setPhotoOverlayOpacity: (photoOverlayOpacity) => set({ photoOverlayOpacity }),
   setTimeline: (timeline) => set({ timeline }),
   reset: () =>
     set({
@@ -63,5 +67,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       currentCityLabelZh: null,
       visiblePhotos: [],
       showPhotoOverlay: false,
+      photoOverlayOpacity: 1,
     }),
 }));

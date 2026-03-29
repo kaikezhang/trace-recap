@@ -37,6 +37,7 @@ function EditorContent() {
   const setCurrentCityLabelZh = useAnimationStore((s) => s.setCurrentCityLabelZh);
   const setVisiblePhotos = useAnimationStore((s) => s.setVisiblePhotos);
   const setShowPhotoOverlay = useAnimationStore((s) => s.setShowPhotoOverlay);
+  const setPhotoOverlayOpacity = useAnimationStore((s) => s.setPhotoOverlayOpacity);
   const setCurrentSegmentIndex = useAnimationStore((s) => s.setCurrentSegmentIndex);
   const setCurrentGroupSegmentIndices = useAnimationStore((s) => s.setCurrentGroupSegmentIndices);
   const setTimeline = useAnimationStore((s) => s.setTimeline);
@@ -51,6 +52,7 @@ function EditorContent() {
     : currentCityLabelEn;
   const visiblePhotos = useAnimationStore((s) => s.visiblePhotos);
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
+  const photoOverlayOpacity = useAnimationStore((s) => s.photoOverlayOpacity);
 
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const editingLocation = locations.find((l) => l.id === editingLocationId) ?? null;
@@ -82,11 +84,17 @@ function EditorContent() {
       setCurrentCityLabel(e.cityLabel);
       setCurrentCityLabelZh(e.cityLabelZh);
       setShowPhotoOverlay(e.showPhotos);
+      setPhotoOverlayOpacity(e.photoOpacity);
       if (e.showPhotos) {
-        const seg = segments[e.segmentIndex];
-        const toLoc = locations.find((l) => l.id === seg?.toId);
-        setVisiblePhotos(toLoc?.photos || []);
-        setVisiblePhotoLocationId(toLoc?.id ?? null);
+        // During ARRIVE: show current group's destination photos
+        // During HOVER/ZOOM_OUT fade-out: show previous group's destination photos
+        if (e.phase === "ARRIVE") {
+          const seg = segments[e.segmentIndex];
+          const toLoc = locations.find((l) => l.id === seg?.toId);
+          setVisiblePhotos(toLoc?.photos || []);
+          setVisiblePhotoLocationId(toLoc?.id ?? null);
+        }
+        // During fade-out (HOVER/ZOOM_OUT), keep the previous photos visible (don't update)
       } else {
         setVisiblePhotos([]);
         setVisiblePhotoLocationId(null);
@@ -369,7 +377,7 @@ function EditorContent() {
             )}
           </AnimatePresence>
           {/* Photo overlay */}
-          <PhotoOverlay photos={visiblePhotos} visible={showPhotoOverlay} photoLayout={visiblePhotoLocation?.photoLayout} />
+          <PhotoOverlay photos={visiblePhotos} visible={showPhotoOverlay} photoLayout={visiblePhotoLocation?.photoLayout} opacity={photoOverlayOpacity} />
           {/* Photo layout editor */}
           {editingLocation && editingLocation.photos.length > 0 && (
             <PhotoLayoutEditor
