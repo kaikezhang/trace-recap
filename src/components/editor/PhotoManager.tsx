@@ -98,62 +98,76 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
     void processImageFiles(files, remaining, addPhoto, locationId);
   };
 
+  const hasPhotos = location.photos.length > 0;
+  const canAddMore = location.photos.length < 9;
+
   return (
     <div className="space-y-2">
-      {location.photos.length > 0 && (
-        <div className="flex gap-1.5 flex-wrap">
-          {location.photos.map((photo) => (
-            <div key={photo.id} className="relative group">
-              <img
-                src={photo.url}
-                alt=""
-                className="h-16 max-w-[64px] rounded object-contain bg-muted"
-              />
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".jpg,.jpeg,.png,.webp,.gif"
+        capture="environment"
+        multiple
+        className="hidden"
+        onChange={(e) => { handleFiles(e.target.files); if (inputRef.current) inputRef.current.value = ""; }}
+      />
+
+      {hasPhotos ? (
+        <>
+          {/* Photo grid with add button */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {location.photos.map((photo) => (
+              <div key={photo.id} className="relative group aspect-square">
+                <img
+                  src={photo.url}
+                  alt=""
+                  className="w-full h-full rounded-lg object-cover bg-muted"
+                />
+                <button
+                  className="absolute -top-1 -right-1 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+                  onClick={() => removePhoto(locationId, photo.id)}
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </div>
+            ))}
+            {canAddMore && (
               <button
-                className="absolute -top-1 -right-1 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
-                onClick={() => removePhoto(locationId, photo.id)}
+                onClick={() => inputRef.current?.click()}
+                className="aspect-square rounded-lg border-2 border-dashed border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/50 flex flex-col items-center justify-center gap-1 transition-colors"
               >
-                <X className="h-2.5 w-2.5" />
+                <Upload className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-[10px] text-gray-400">Add</span>
               </button>
-            </div>
-          ))}
-        </div>
+            )}
+          </div>
+        </>
+      ) : (
+        /* Empty state — dashed upload zone */
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="w-full py-8 border-2 border-dashed border-gray-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50/50 flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer"
+        >
+          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+            <Upload className="w-5 h-5 text-gray-400" />
+          </div>
+          <span className="text-sm text-gray-500">Click or drag photos here</span>
+        </button>
       )}
-      <div className="flex gap-1.5">
-        {location.photos.length < 9 && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={() => inputRef.current?.click()}
-            >
-              <Upload className="h-3 w-3" />
-              Upload
-            </Button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".jpg,.jpeg,.png,.webp,.gif"
-              capture="environment"
-              multiple
-              className="hidden"
-              onChange={(e) => { handleFiles(e.target.files); if (inputRef.current) inputRef.current.value = ""; }}
-            />
-          </>
-        )}
-        {location.photos.length > 0 && onEditLayout && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={() => onEditLayout(locationId)}
-          >
-            <LayoutGrid className="h-3 w-3" />
-            Layout
-          </Button>
-        )}
-      </div>
+
+      {/* Layout button */}
+      {hasPhotos && onEditLayout && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs gap-1"
+          onClick={() => onEditLayout(locationId)}
+        >
+          <LayoutGrid className="h-3 w-3" />
+          Layout
+        </Button>
+      )}
     </div>
   );
 }

@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, GripVertical, ChevronRight, Pencil, LayoutGrid } from "lucide-react";
+import { X, GripVertical, ChevronRight, Image as ImageIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import PhotoManager, { usePhotoDropZone } from "./PhotoManager";
 import { useProjectStore } from "@/stores/projectStore";
@@ -200,19 +199,30 @@ export default function LocationCard({
           )}
         </div>
 
-        {/* Photo thumbnails (up to 3) */}
-        {photoThumbnails.length > 0 && (
-          <div className="flex gap-0.5 shrink-0">
-            {photoThumbnails.map((photo) => (
-              <img
-                key={photo.id}
-                src={photo.url}
-                alt=""
-                className="w-8 h-8 rounded-lg object-cover bg-muted"
-              />
-            ))}
-          </div>
-        )}
+        {/* Photo thumbnails (up to 3) + count badge or empty state */}
+        <div className="flex gap-0.5 shrink-0">
+          {photoThumbnails.length > 0 ? (
+            <>
+              {photoThumbnails.map((photo) => (
+                <img
+                  key={photo.id}
+                  src={photo.url}
+                  alt=""
+                  className="w-8 h-8 rounded-lg object-cover bg-muted"
+                />
+              ))}
+              {location.photos.length > 3 && (
+                <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-xs text-gray-500">
+                  +{location.photos.length - 3}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center">
+              <ImageIcon className="w-3 h-3 text-gray-300" />
+            </div>
+          )}
+        </div>
 
         {/* Chevron */}
         <ChevronRight
@@ -275,18 +285,6 @@ export default function LocationCard({
               {/* Photo manager */}
               <PhotoManager locationId={location.id} onEditLayout={onEditLayout} />
 
-              {/* Photo layout edit button */}
-              {location.photos.length > 0 && onEditLayout && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1 w-full"
-                  onClick={() => onEditLayout(location.id)}
-                >
-                  <LayoutGrid className="h-3 w-3" />
-                  Edit Photo Layout
-                </Button>
-              )}
             </div>
           </motion.div>
         )}
