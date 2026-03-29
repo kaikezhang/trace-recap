@@ -67,15 +67,12 @@ export class VideoExporter {
             const img = new Image();
             img.onload = () => {
               this.iconImages.set(key, img);
-              // Also store under the browser-resolved absolute URL so
-              // lookups via IconAnimator.getState().iconSrc (absolute) hit the cache.
               if (img.src !== key) {
                 this.iconImages.set(img.src, img);
               }
               resolve();
             };
             img.onerror = () => {
-              // Not fatal — icon just won't appear for this variant
               resolve();
             };
             img.src = src;
@@ -110,7 +107,6 @@ export class VideoExporter {
             resolve();
           };
           img.onerror = () => {
-            // Create a placeholder so layout stays stable
             const placeholder = this.createPlaceholderImage(240, 180);
             this.photoImages.set(url, {
               img: placeholder,
@@ -132,10 +128,8 @@ export class VideoExporter {
     c.width = w;
     c.height = h;
     const cx = c.getContext("2d")!;
-    // Gray background
     cx.fillStyle = "#d1d5db";
     cx.fillRect(0, 0, w, h);
-    // Draw an X
     const m = 40;
     cx.strokeStyle = "#9ca3af";
     cx.lineWidth = 6;
@@ -146,7 +140,6 @@ export class VideoExporter {
     cx.moveTo(w - m, m);
     cx.lineTo(m, h - m);
     cx.stroke();
-    // Camera icon (simple rectangle + circle)
     const iconW = 50;
     const iconH = 36;
     const ix = (w - iconW) / 2;
@@ -191,16 +184,11 @@ export class VideoExporter {
     }
   }
 
-  /**
-   * Apply route draw progress — replicates EditorLayout's routeDrawProgress handler.
-   * Called after each renderFrame to update segment source data on the map.
-   */
   private applyRouteDrawProgress(event: AnimationEvent): void {
     const segments = this.engine.getSegments();
     const fraction = event.routeDrawFraction ?? 0;
     const groupSegIndices = event.groupSegmentIndices;
 
-    // Show all segments from past groups (fully drawn)
     const firstGroupSegIdx = groupSegIndices[0];
     for (let i = 0; i < firstGroupSegIdx; i++) {
       const pastSeg = segments[i];
@@ -213,7 +201,6 @@ export class VideoExporter {
       setSegmentSourceData(this.map, pastSeg.id, pastSeg.geometry);
     }
 
-    // For the current group, compute how the merged fraction maps to individual segments
     const group = this.engine.getGroups()[event.groupIndex];
     if (!group) return;
     const mergedGeom = group.mergedGeometry;
@@ -236,7 +223,6 @@ export class VideoExporter {
       const segEnd = accumulatedLength + segLength;
       accumulatedLength = segEnd;
 
-      // Make layers visible
       const layerId = SEGMENT_LAYER_PREFIX + seg.id;
       const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
       if (this.map.getLayer(layerId))
@@ -245,19 +231,15 @@ export class VideoExporter {
         this.map.setLayoutProperty(glowLayerId, "visibility", "visible");
 
       if (drawnDistance >= segEnd) {
-        // Fully drawn
         setSegmentSourceData(this.map, seg.id, seg.geometry);
       } else if (drawnDistance > segStart) {
-        // Partially drawn
         const segFraction = (drawnDistance - segStart) / segLength;
         setSegmentSourceData(this.map, seg.id, seg.geometry, segFraction);
       } else {
-        // Not yet drawn
         setSegmentSourceData(this.map, seg.id, seg.geometry, 0);
       }
     }
 
-    // Hide future segments
     const lastGroupSegIdx = groupSegIndices[groupSegIndices.length - 1];
     for (let i = lastGroupSegIdx + 1; i < segments.length; i++) {
       const futureSeg = segments[i];
@@ -284,11 +266,10 @@ export class VideoExporter {
     const img = this.iconImages.get(state.iconSrc);
     if (!img) return;
 
-    // map.project() returns CSS pixels; scale to physical pixels
     const point = this.map.project(state.position);
     const px = point.x * scaleX;
     const py = point.y * scaleY;
-    const sz = state.size * scaleX; // uniform scale (scaleX ≈ scaleY)
+    const sz = state.size * scaleX;
 
     const prevAlpha = ctx.globalAlpha;
     ctx.globalAlpha = state.opacity;
@@ -304,7 +285,6 @@ export class VideoExporter {
     label: string,
     baseFontSize: number = 18
   ): void {
-    // Scale all dimensions from CSS to physical pixels
     const fontSize = baseFontSize * scaleX;
     const font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
     ctx.font = font;
@@ -321,26 +301,22 @@ export class VideoExporter {
     const y = 24 * scaleX;
     const radius = 8 * scaleX;
 
-    // Shadow
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.12)";
     ctx.shadowBlur = 8 * scaleX;
     ctx.shadowOffsetY = 2 * scaleX;
 
-    // Background rounded rect
     ctx.beginPath();
     ctx.roundRect(x, y, boxWidth, boxHeight, radius);
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.fill();
 
-    // Border
     ctx.shadowColor = "transparent";
     ctx.strokeStyle = "rgba(0,0,0,0.1)";
     ctx.lineWidth = 1 * scaleX;
     ctx.stroke();
     ctx.restore();
 
-    // Pin dot (indigo)
     const dotX = x + padH + dotRadius;
     const dotY = y + boxHeight / 2;
     ctx.beginPath();
@@ -348,7 +324,6 @@ export class VideoExporter {
     ctx.fillStyle = "#6366f1";
     ctx.fill();
 
-    // Text
     ctx.font = font;
     ctx.fillStyle = "#1e293b";
     ctx.textBaseline = "middle";
@@ -388,7 +363,6 @@ export class VideoExporter {
     const progress = captured.progress;
     if (!progress || !progress.showPhotos) return;
 
-    // Find the destination location's photos
     const groups = this.engine.getGroups();
     const group = groups[progress.groupIndex];
     if (!group) return;
@@ -401,7 +375,6 @@ export class VideoExporter {
     const gapPx = layout?.gap ?? 8;
     const borderRadiusPx = layout?.borderRadius ?? 8;
 
-    // Apply custom photo order if set
     const orderedPhotos = (() => {
       if (layout?.order && layout.order.length > 0) {
         const photoMap = new Map(photos.map((p) => [p.id, p]));
@@ -416,7 +389,6 @@ export class VideoExporter {
       return photos;
     })();
 
-    // Collect preloaded images for these photos
     const loaded: { photo: Photo; preloaded: PreloadedPhoto }[] = [];
     for (const photo of orderedPhotos) {
       const preloaded = this.photoImages.get(photo.url);
@@ -426,14 +398,13 @@ export class VideoExporter {
     }
     if (loaded.length === 0) return;
 
-    const pad = 6 * scaleX; // white frame padding
-    const radius = borderRadiusPx * scaleX; // rounded corner radius
+    const pad = 6 * scaleX;
+    const radius = borderRadiusPx * scaleX;
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
     const captionFontSize = 14 * scaleX;
-    const captionH = 28 * scaleX; // fixed height matching preview (PhotoOverlay)
+    const captionH = 28 * scaleX;
 
-    // Match preview's inset container (95vw × 88vh centered)
     const insetW = canvasWidth * 0.95;
     const insetH = canvasHeight * 0.88;
     const insetX = (canvasWidth - insetW) / 2;
@@ -446,7 +417,14 @@ export class VideoExporter {
     }));
     const widthPx = insetW / scaleX;
     const rects = layout?.mode === "manual" && layout.template
-      ? computeTemplateLayout(layoutMetas, containerAspect, layout.template, gapPx, widthPx, layout.customProportions)
+      ? computeTemplateLayout(
+          layoutMetas,
+          containerAspect,
+          layout.template,
+          gapPx,
+          widthPx,
+          layout.customProportions
+        )
       : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
     const count = loaded.length;
 
@@ -454,8 +432,8 @@ export class VideoExporter {
       const rect = rects[i];
       const { photo, preloaded } = loaded[i];
       const hasCaption = !!photo.caption;
+      const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
 
-      // Convert fractional rects to canvas pixel coordinates (within the inset)
       const rx = insetX + rect.x * insetW;
       const ry = insetY + rect.y * insetH;
       const rw = rect.width * insetW;
@@ -466,14 +444,14 @@ export class VideoExporter {
       const imgW = frameW - pad * 2;
       const imgH = frameH - pad * 2 - (hasCaption ? captionH : 0);
 
-      // Determine rotation — must match preview (PhotoOverlay)
       // Use scatter rotation if provided, otherwise default tilts
-      let rotation = 0;
+      let rotation: number;
       if (rect.rotation != null) {
         rotation = rect.rotation;
       } else if (count <= 3) {
         if (i === 0) rotation = -2;
         else if (i === count - 1) rotation = 2;
+        else rotation = 0;
       } else {
         rotation = i % 2 === 0 ? -1.5 : 1.5;
       }
@@ -487,7 +465,6 @@ export class VideoExporter {
         ctx.rotate((rotation * Math.PI) / 180);
       }
 
-      // Shadow rect
       this.drawRoundedRect(
         ctx,
         -frameW / 2 + shadowOffX,
@@ -498,7 +475,6 @@ export class VideoExporter {
         "rgba(0,0,0,0.25)"
       );
 
-      // White frame
       this.drawRoundedRect(
         ctx,
         -frameW / 2,
@@ -509,7 +485,6 @@ export class VideoExporter {
         "#ffffff"
       );
 
-      // Clip and draw photo with object-fit: cover
       ctx.save();
       ctx.beginPath();
       ctx.roundRect(
@@ -521,25 +496,24 @@ export class VideoExporter {
       );
       ctx.clip();
 
-      // Compute cover dimensions, respecting focal point
+      // Compute cover dimensions with focal point
       const imgAspect = preloaded.aspect;
       const targetAspect = imgW / imgH;
-      const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
       let sx: number, sy: number, sw: number, sh: number;
       if (imgAspect > targetAspect) {
-        // Image wider than target — crop sides, center on focal point X
+        // Image wider than target — crop sides using focal point X
         sh = preloaded.img.naturalHeight;
         sw = sh * targetAspect;
         const maxSx = preloaded.img.naturalWidth - sw;
-        sx = Math.max(0, Math.min(maxSx, fp.x * preloaded.img.naturalWidth - sw / 2));
+        sx = maxSx * fp.x;
         sy = 0;
       } else {
-        // Image taller than target — crop top/bottom, center on focal point Y
+        // Image taller than target — crop top/bottom using focal point Y
         sw = preloaded.img.naturalWidth;
         sh = sw / targetAspect;
         sx = 0;
         const maxSy = preloaded.img.naturalHeight - sh;
-        sy = Math.max(0, Math.min(maxSy, fp.y * preloaded.img.naturalHeight - sh / 2));
+        sy = maxSy * fp.y;
       }
       ctx.drawImage(
         preloaded.img,
@@ -548,7 +522,6 @@ export class VideoExporter {
       );
       ctx.restore();
 
-      // Caption
       if (hasCaption) {
         ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
         ctx.fillStyle = "#374151";
@@ -592,11 +565,9 @@ export class VideoExporter {
     const totalFrames = Math.ceil(totalDuration * fps);
     const canvas = this.map.getCanvas();
 
-    // Pre-load icon and photo images for canvas compositing
     await this.preloadIcons();
     await this.preloadPhotos();
 
-    // Pre-warm: render key positions to load tiles
     this.engine.renderFrame(0);
     await this.waitForMapIdle();
     await new Promise((r) => setTimeout(r, 1000));
@@ -611,30 +582,24 @@ export class VideoExporter {
     this.engine.renderFrame(0);
     await this.waitForMapIdle();
 
-    // Hide all segments before starting — progressive draw starts clean
     this.hideAllSegments();
 
-    // Capture route draw events from the engine during export.
-    // Events are populated synchronously by seekTo → renderFrame → emit.
     const captured = { routeDraw: null as AnimationEvent | null, progress: null as AnimationEvent | null };
     const onRouteDrawEvent = (e: AnimationEvent) => { captured.routeDraw = e; };
     const onProgressEvent = (e: AnimationEvent) => { captured.progress = e; };
     this.engine.on("routeDrawProgress", onRouteDrawEvent);
     this.engine.on("progress", onProgressEvent);
 
-    // Create an offscreen 2D canvas for compositing (WebGL canvas cannot getContext('2d'))
     const offscreen = document.createElement("canvas");
     offscreen.width = canvas.width;
     offscreen.height = canvas.height;
     const offCtx = offscreen.getContext("2d");
     if (!offCtx) throw new Error("Failed to create offscreen 2D context");
 
-    // HiDPI scaling: map.project() returns CSS pixels, canvas dimensions are physical
     const scaleX = canvas.width / canvas.clientWidth;
     const scaleY = canvas.height / canvas.clientHeight;
 
     try {
-      // Start a server session
       const startRes = await fetch("/api/encode-video/start", {
         method: "POST",
         signal,
@@ -644,26 +609,21 @@ export class VideoExporter {
       }
       const { sessionId } = (await startRes.json()) as { sessionId: string };
 
-      // Phase 1 & 2: Capture each frame and immediately upload it
       for (let i = 0; i < totalFrames; i++) {
         if (this.cancelled) return null;
 
         const time = i / fps;
         const progress = time / totalDuration;
 
-        // Reset event captures for this frame
         captured.routeDraw = null;
         captured.progress = null;
 
-        // seekTo → renderFrame → emit populates captured synchronously
         this.engine.seekTo(Math.min(progress, 1));
 
-        // Apply route draw state
         this.applyRouteDrawFromCapture(captured);
 
         await this.waitForMapIdle();
 
-        // Copy the WebGL map frame to the offscreen 2D canvas, then draw overlays
         offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
         offCtx.drawImage(canvas, 0, 0);
         this.drawVehicleIcon(offCtx, scaleX, scaleY);
@@ -679,7 +639,6 @@ export class VideoExporter {
           );
         });
 
-        // Upload this frame immediately — no buffering
         const formData = new FormData();
         formData.append("sessionId", sessionId);
         formData.append("frameIndex", String(i + 1));
@@ -708,7 +667,6 @@ export class VideoExporter {
 
       if (this.cancelled) return null;
 
-      // Phase 3: Trigger server-side encoding
       onProgress({ phase: "encoding", current: 0, total: 1 });
 
       const response = await fetch("/api/encode-video", {
@@ -730,11 +688,9 @@ export class VideoExporter {
 
       return mp4Blob;
     } finally {
-      // Cleanup: restore map to idle state
       this.restoreAllSegments();
       this.engine.getIconAnimator().hide();
 
-      // Remove our listeners to prevent leaks across repeated exports
       this.engine.off("routeDrawProgress", onRouteDrawEvent);
       this.engine.off("progress", onProgressEvent);
     }
@@ -742,7 +698,6 @@ export class VideoExporter {
 
   private waitForMapIdle(): Promise<void> {
     return new Promise((resolve) => {
-      // Force a repaint so tiles start loading
       this.map.triggerRepaint();
 
       const checkReady = () => {
@@ -757,7 +712,6 @@ export class VideoExporter {
         return;
       }
 
-      // Poll every 100ms until tiles loaded, with 5s max timeout
       let elapsed = 0;
       const interval = setInterval(() => {
         elapsed += 100;
@@ -767,7 +721,6 @@ export class VideoExporter {
         }
       }, 100);
 
-      // Also listen for idle event as a faster path
       const onIdle = () => {
         clearInterval(interval);
         resolve();
