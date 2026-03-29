@@ -67,12 +67,24 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
   const fromLoc = locations.find((l) => l.id === segment.fromId);
   const toLoc = locations.find((l) => l.id === segment.toId);
 
+  // Only show timing control on the first segment of each animation group.
+  // Non-leading segments in a waypoint group have a waypoint as their fromLoc.
+  const isGroupLeader = !fromLoc?.isWaypoint;
+
   // Find auto-computed duration from timeline for this segment
   const timelineEntry = timeline.find((t) => t.segmentId === segment.id);
   const autoDuration = timelineEntry?.duration ?? null;
   const override = timingOverrides[segment.id];
   const hasOverride = override !== undefined;
   const displayDuration = hasOverride ? override : autoDuration;
+
+  // Compute actual minimum duration from timeline phases: hover + arrive + 1s
+  const hoverDur = timelineEntry?.phases.find((p) => p.phase === "HOVER")?.duration ?? 1.5;
+  const arriveDur = timelineEntry?.phases.find((p) => p.phase === "ARRIVE")?.duration ?? 1.5;
+  const minDuration = Math.round((hoverDur + arriveDur + 1) * 2) / 2; // round to 0.5s step
+
+  // If override was clamped, show the effective (clamped) duration
+  const effectiveDuration = hasOverride && override < minDuration ? minDuration : null;
 
   const fetchGeometry = useCallback(
     async (mode: TransportMode) => {
@@ -156,8 +168,8 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
         <div className="w-px h-4 bg-border" />
       </div>
 
-      {/* Timing control */}
-      {autoDuration !== null && (
+      {/* Timing control — only for group-leading segments */}
+      {isGroupLeader && autoDuration !== null && (
         <div className="flex items-center gap-1.5 mt-0.5">
           <button
             className="flex items-center gap-1 text-[10px] tabular-nums hover:text-foreground transition-colors"
@@ -165,7 +177,12 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
           >
             <Clock className="h-3 w-3 text-muted-foreground" />
             {hasOverride ? (
-              <span className="text-foreground font-medium">{override.toFixed(1)}s</span>
+              <>
+                <span className="text-foreground font-medium">{override.toFixed(1)}s</span>
+                {effectiveDuration !== null && effectiveDuration > override && (
+                  <span className="text-amber-500 text-[9px]">(min {effectiveDuration.toFixed(1)}s)</span>
+                )}
+              </>
             ) : (
               <span className="text-muted-foreground">Auto ({autoDuration.toFixed(1)}s)</span>
             )}
@@ -173,12 +190,12 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
         </div>
       )}
 
-      {/* Timing slider */}
-      {showTiming && autoDuration !== null && (
+      {/* Timing slider — only for group-leading segments */}
+      {isGroupLeader && showTiming && autoDuration !== null && (
         <div className="flex items-center gap-1.5 mt-1 w-full max-w-[180px]">
           <input
             type="range"
-            min={2}
+            min={minDuration}
             max={30}
             step={0.5}
             value={displayDuration ?? 4}

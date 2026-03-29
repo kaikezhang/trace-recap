@@ -302,7 +302,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         transportMode: seg.transportMode,
       })),
       ...(Object.keys(segmentTimingOverrides).length > 0
-        ? { timingOverrides: { ...segmentTimingOverrides } }
+        ? {
+            timingOverrides: Object.fromEntries(
+              Object.entries(segmentTimingOverrides)
+                .map(([segId, duration]) => {
+                  const idx = segments.findIndex((s) => s.id === segId);
+                  return idx >= 0 ? [String(idx), duration] : null;
+                })
+                .filter(Boolean) as [string, number][]
+            ),
+          }
         : {}),
     };
   },
@@ -347,10 +356,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         geometry: null,
       }));
 
+      // Remap timing overrides from segment indices to new segment IDs
+      const segmentTimingOverrides: Record<string, number> = {};
+      if (data.timingOverrides) {
+        for (const [key, duration] of Object.entries(data.timingOverrides)) {
+          const idx = parseInt(key);
+          if (!isNaN(idx) && idx >= 0 && idx < segments.length) {
+            segmentTimingOverrides[segments[idx].id] = duration;
+          }
+        }
+      }
+
       return {
         locations,
         segments,
-        segmentTimingOverrides: data.timingOverrides ? { ...data.timingOverrides } : {},
+        segmentTimingOverrides,
       };
     }),
 
