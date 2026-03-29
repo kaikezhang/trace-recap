@@ -19,40 +19,53 @@ interface PhotoMeta extends Photo {
 }
 
 function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
-  const [dims, setDims] = useState<PhotoMeta[]>([]);
-  // Stable dependency: only re-run when photo URLs actually change
-  const photoKey = photos.map(p => p.url).join("|");
+  const aspectCacheRef = useRef(new Map<string, number>());
+  const photoKey = photos
+    .map((photo) => `${photo.id}:${photo.url}:${photo.caption ?? ""}:${photo.focalPoint?.x ?? ""}:${photo.focalPoint?.y ?? ""}`)
+    .join("|");
+  const buildMetas = () =>
+    photos.map((photo) => ({
+      ...photo,
+      aspect: aspectCacheRef.current.get(photo.url) ?? 4 / 3,
+    }));
+  const [dims, setDims] = useState<PhotoMeta[]>(() => buildMetas());
 
   useEffect(() => {
-    if (photos.length === 0) { setDims([]); return; }
-    const results: PhotoMeta[] = [];
-    let loaded = 0;
+    setDims(buildMetas());
+    if (photos.length === 0) {
+      return;
+    }
+
     let cancelled = false;
-    photos.forEach((photo, i) => {
+    photos.forEach((photo) => {
+      if (aspectCacheRef.current.has(photo.url)) {
+        return;
+      }
+
       const img = new Image();
       img.onload = () => {
         if (cancelled) return;
-        results[i] = { ...photo, aspect: img.naturalWidth / img.naturalHeight };
-        loaded++;
-        if (loaded === photos.length) setDims([...results]);
+        aspectCacheRef.current.set(photo.url, img.naturalWidth / img.naturalHeight);
+        setDims(buildMetas());
       };
       img.onerror = () => {
         if (cancelled) return;
-        results[i] = { ...photo, aspect: 4 / 3 };
-        loaded++;
-        if (loaded === photos.length) setDims([...results]);
+        aspectCacheRef.current.set(photo.url, 4 / 3);
+        setDims(buildMetas());
       };
       img.src = photo.url;
     });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
   }, [photoKey]);
+
   return dims;
 }
 
 export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1 }: PhotoOverlayProps) {
   const metas = usePhotoDimensions(photos);
-  const ready = metas.length === photos.length && photos.length > 0;
+  const hasPhotos = metas.length > 0;
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
 
@@ -74,7 +87,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
 
   // Apply custom photo order if set
   const orderedMetas: PhotoMeta[] = (() => {
-    if (!ready) return [];
+    if (!hasPhotos) return [];
     if (photoLayout?.order && photoLayout.order.length > 0) {
       const metaMap = new Map(metas.map((m) => [m.id, m]));
       const ordered = photoLayout.order
@@ -89,12 +102,12 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
     return metas;
   })();
 
-  const layoutMetas: LayoutPhotoMeta[] = ready
+  const layoutMetas: LayoutPhotoMeta[] = hasPhotos
     ? orderedMetas.map((m) => ({ id: m.id, aspect: m.aspect }))
     : [];
 
   const rects = (() => {
-    if (!ready) return [];
+    if (!hasPhotos) return [];
     const w = containerSize.w || 1000;
     if (photoLayout?.mode === "manual" && photoLayout.template) {
       return computeTemplateLayout(
@@ -127,11 +140,11 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
       }}
     >
       <AnimatePresence>
-        {visible && ready ? (
+        {visible && hasPhotos ? (
           <motion.div
             key="photo-group"
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity }}
             exit={{ opacity: 0, scale: 0.7, y: -50, filter: "blur(8px)", transition: { duration: 0.5, ease: [0.4, 0, 1, 1] } }}
             className="absolute inset-0"
           >
