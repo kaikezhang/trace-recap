@@ -175,7 +175,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
                   <img
                     src={photo.url}
                     alt={photo.caption || ""}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                     style={{
                       objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
                     }}

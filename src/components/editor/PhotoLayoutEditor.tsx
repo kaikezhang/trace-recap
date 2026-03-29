@@ -97,7 +97,7 @@ function SortablePhoto({
         <img
           src={url}
           alt=""
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           style={{
             borderRadius: `${borderRadius}px`,
             objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,

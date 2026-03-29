@@ -496,29 +496,26 @@ export class VideoExporter {
       );
       ctx.clip();
 
-      // Compute cover dimensions with focal point
+      // Compute contain dimensions (fit entire image, no crop)
       const imgAspect = preloaded.aspect;
       const targetAspect = imgW / imgH;
-      let sx: number, sy: number, sw: number, sh: number;
+      let drawW: number, drawH: number, drawX: number, drawY: number;
       if (imgAspect > targetAspect) {
-        // Image wider than target — crop sides using focal point X
-        sh = preloaded.img.naturalHeight;
-        sw = sh * targetAspect;
-        const maxSx = preloaded.img.naturalWidth - sw;
-        sx = maxSx * fp.x;
-        sy = 0;
+        // Image wider than target — fit by width
+        drawW = imgW;
+        drawH = imgW / imgAspect;
+        drawX = -frameW / 2 + pad;
+        drawY = -frameH / 2 + pad + (imgH - drawH) / 2;
       } else {
-        // Image taller than target — crop top/bottom using focal point Y
-        sw = preloaded.img.naturalWidth;
-        sh = sw / targetAspect;
-        sx = 0;
-        const maxSy = preloaded.img.naturalHeight - sh;
-        sy = maxSy * fp.y;
+        // Image taller than target — fit by height
+        drawH = imgH;
+        drawW = imgH * imgAspect;
+        drawX = -frameW / 2 + pad + (imgW - drawW) / 2;
+        drawY = -frameH / 2 + pad;
       }
       ctx.drawImage(
         preloaded.img,
-        sx, sy, sw, sh,
-        -frameW / 2 + pad, -frameH / 2 + pad, imgW, imgH
+        drawX, drawY, drawW, drawH
       );
       ctx.restore();
 
