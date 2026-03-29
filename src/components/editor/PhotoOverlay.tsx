@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout } from "@/types";
-import { useUIStore } from "@/stores/uiStore";
+
 
 interface PhotoOverlayProps {
   photos: Photo[];
@@ -66,9 +66,8 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
     return () => observer.disconnect();
   }, []);
 
-  // Use the export aspect ratio for layout calculation (ensures preview matches export)
-  const exportAspectRatio = useUIStore((s) => s.exportAspectRatio);
-  const containerAspect = exportAspectRatio === "9:16" ? 9 / 16 : 16 / 9;
+  // Use actual container dimensions for layout calculation
+  const containerAspect = containerSize.h > 0 ? containerSize.w / containerSize.h : 16 / 9;
   const gapPx = photoLayout?.gap ?? 8;
   const borderRadiusPx = photoLayout?.borderRadius ?? 8;
 

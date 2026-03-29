@@ -277,9 +277,18 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     aspect: photoAspects.get(p.id) ?? 4 / 3,
   }));
 
+  // Match the actual viewport aspect ratio so layout editor matches PhotoOverlay
+  const [viewportAspect, setViewportAspect] = useState(
+    typeof window !== "undefined" ? window.innerWidth / window.innerHeight : 16 / 9
+  );
+  useEffect(() => {
+    const onResize = () => setViewportAspect(window.innerWidth / window.innerHeight);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const previewW = 400;
-  const previewH = 300;
-  const containerAspect = previewW / previewH;
+  const previewH = Math.round(previewW / viewportAspect);
+  const containerAspect = viewportAspect;
 
   const rects =
     activeTemplate === "auto"
