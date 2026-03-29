@@ -107,7 +107,7 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
         ref={inputRef}
         type="file"
         accept=".jpg,.jpeg,.png,.webp,.gif"
-        capture="environment"
+
         multiple
         className="hidden"
         onChange={(e) => { handleFiles(e.target.files); if (inputRef.current) inputRef.current.value = ""; }}
