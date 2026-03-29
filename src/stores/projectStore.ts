@@ -19,12 +19,14 @@ export interface ImportRouteData {
     photoLayout?: PhotoLayout;
   }[];
   segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
+  timingOverrides?: Record<string, number>;
 }
 
 interface ProjectState {
   locations: Location[];
   segments: Segment[];
   mapStyle: MapStyle;
+  segmentTimingOverrides: Record<string, number>;
 
   addLocation: (location: Omit<Location, "id" | "photos" | "isWaypoint">) => void;
   removeLocation: (id: string) => void;
@@ -34,6 +36,9 @@ interface ProjectState {
 
   setTransportMode: (segmentId: string, mode: TransportMode) => void;
   setSegmentGeometry: (segmentId: string, geometry: GeoJSON.LineString) => void;
+
+  setSegmentTiming: (segmentId: string, duration: number | null) => void;
+  clearAllTimingOverrides: () => void;
 
   addPhoto: (locationId: string, photo: Omit<Photo, "id" | "locationId">) => void;
   removePhoto: (locationId: string, photoId: string) => void;
@@ -94,6 +99,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   locations: [],
   segments: [],
   mapStyle: "light",
+  segmentTimingOverrides: {},
 
   addLocation: (loc) =>
     set((state) => {
@@ -175,6 +181,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       ),
     })),
 
+  setSegmentTiming: (segmentId, duration) =>
+    set((state) => {
+      const overrides = { ...state.segmentTimingOverrides };
+      if (duration === null) {
+        delete overrides[segmentId];
+      } else {
+        overrides[segmentId] = duration;
+      }
+      return { segmentTimingOverrides: overrides };
+    }),
+
+  clearAllTimingOverrides: () => set({ segmentTimingOverrides: {} }),
+
   addPhoto: (locationId, photo) =>
     set((state) => ({
       locations: state.locations.map((l) =>
@@ -222,10 +241,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setMapStyle: (style) => set({ mapStyle: style }),
 
-  clearRoute: () => set({ locations: [], segments: [] }),
+  clearRoute: () => set({ locations: [], segments: [], segmentTimingOverrides: {} }),
 
   exportRoute: async () => {
-    const { locations, segments } = get();
+    const { locations, segments, segmentTimingOverrides } = get();
 
     // Convert blob URLs to base64 data URLs for persistence
     const toDataURL = async (url: string): Promise<string> => {
@@ -282,6 +301,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         toIndex: locations.findIndex((l) => l.id === seg.toId),
         transportMode: seg.transportMode,
       })),
+      ...(Object.keys(segmentTimingOverrides).length > 0
+        ? { timingOverrides: { ...segmentTimingOverrides } }
+        : {}),
     };
   },
 
@@ -325,7 +347,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         geometry: null,
       }));
 
-      return { locations, segments };
+      return {
+        locations,
+        segments,
+        segmentTimingOverrides: data.timingOverrides ? { ...data.timingOverrides } : {},
+      };
     }),
 
   enrichChineseNames: async () => {

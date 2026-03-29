@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as turf from "@turf/turf";
 import { useProjectStore } from "@/stores/projectStore";
+import { useAnimationStore } from "@/stores/animationStore";
 import { TRANSPORT_MODES } from "@/lib/constants";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import type { Segment, TransportMode } from "@/types";
@@ -19,6 +20,7 @@ import {
   Ship,
   Footprints,
   Bike,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 
@@ -55,11 +57,22 @@ function formatDistance(km: number): string {
 export default function TransportSelector({ segment }: TransportSelectorProps) {
   const setTransportMode = useProjectStore((s) => s.setTransportMode);
   const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
+  const setSegmentTiming = useProjectStore((s) => s.setSegmentTiming);
   const locations = useProjectStore((s) => s.locations);
+  const timingOverrides = useProjectStore((s) => s.segmentTimingOverrides);
+  const timeline = useAnimationStore((s) => s.timeline);
   const [expanded, setExpanded] = useState(false);
+  const [showTiming, setShowTiming] = useState(false);
 
   const fromLoc = locations.find((l) => l.id === segment.fromId);
   const toLoc = locations.find((l) => l.id === segment.toId);
+
+  // Find auto-computed duration from timeline for this segment
+  const timelineEntry = timeline.find((t) => t.segmentId === segment.id);
+  const autoDuration = timelineEntry?.duration ?? null;
+  const override = timingOverrides[segment.id];
+  const hasOverride = override !== undefined;
+  const displayDuration = hasOverride ? override : autoDuration;
 
   const fetchGeometry = useCallback(
     async (mode: TransportMode) => {
@@ -101,7 +114,7 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
       : null;
 
   return (
-    <div className="flex items-center justify-center py-1">
+    <div className="flex flex-col items-center py-1">
       {/* Vertical connecting line + pill */}
       <div className="flex items-center gap-2">
         <div className="w-px h-4 bg-border" />
@@ -142,6 +155,47 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
         )}
         <div className="w-px h-4 bg-border" />
       </div>
+
+      {/* Timing control */}
+      {autoDuration !== null && (
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <button
+            className="flex items-center gap-1 text-[10px] tabular-nums hover:text-foreground transition-colors"
+            onClick={() => setShowTiming((v) => !v)}
+          >
+            <Clock className="h-3 w-3 text-muted-foreground" />
+            {hasOverride ? (
+              <span className="text-foreground font-medium">{override.toFixed(1)}s</span>
+            ) : (
+              <span className="text-muted-foreground">Auto ({autoDuration.toFixed(1)}s)</span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Timing slider */}
+      {showTiming && autoDuration !== null && (
+        <div className="flex items-center gap-1.5 mt-1 w-full max-w-[180px]">
+          <input
+            type="range"
+            min={2}
+            max={30}
+            step={0.5}
+            value={displayDuration ?? 4}
+            onChange={(e) => setSegmentTiming(segment.id, parseFloat(e.target.value))}
+            className="flex-1 h-1 accent-indigo-500 cursor-pointer"
+          />
+          <button
+            className="text-[10px] px-1.5 py-0.5 rounded border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+            onClick={() => {
+              setSegmentTiming(segment.id, null);
+              setShowTiming(false);
+            }}
+          >
+            Auto
+          </button>
+        </div>
+      )}
     </div>
   );
 }

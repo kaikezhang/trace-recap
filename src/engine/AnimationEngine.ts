@@ -133,6 +133,7 @@ export class AnimationEngine {
 
   // Map from group index to the original segment indices
   private groupSegmentIndices: number[][];
+  private timingOverrides: Record<string, number>;
 
   private animFrameId: number | null = null;
   private startTime: number | null = null;
@@ -142,11 +143,13 @@ export class AnimationEngine {
   constructor(
     map: mapboxgl.Map,
     locations: Location[],
-    segments: Segment[]
+    segments: Segment[],
+    timingOverrides?: Record<string, number>
   ) {
     this.map = map;
     this.locations = locations;
     this.segments = segments;
+    this.timingOverrides = timingOverrides ?? {};
     this.listeners = new Map();
 
     // Build animation groups
@@ -224,20 +227,38 @@ export class AnimationEngine {
     for (let i = 0; i < n; i++) {
       const group = this.groups[i];
       const hasPhotos = group.toLoc.photos.length > 0;
-
-      // Distribute variable time proportionally to route length
-      const proportion = totalRouteLength > 0
-        ? groupLengths[i] / totalRouteLength
-        : 1 / n;
-      const variableForGroup = totalVariable * proportion;
-
       const hoverTime = this.camera.getHoverDuration(i);
-      // Minimum 1.5s for variable portion so short legs aren't invisible
-      const effectiveVariable = Math.max(variableForGroup, 1.5);
-      const zoomOutDur = effectiveVariable * 0.2;
-      const flyDur = effectiveVariable * 0.65;  // longer fly, zoom happens during fly
-      const zoomInDur = effectiveVariable * 0.15; // shorter, just final settle
       const arriveDur = arriveTime + (hasPhotos ? photoTime : 0);
+
+      // Check for timing override using the first segment's id
+      const overrideKey = group.segments[0].id;
+      const override = this.timingOverrides[overrideKey];
+
+      let zoomOutDur: number;
+      let flyDur: number;
+      let zoomInDur: number;
+
+      if (override !== undefined) {
+        // Enforce minimum: override must be >= hover + arrive + 1s
+        const minDuration = hoverTime + arriveDur + 1;
+        const effectiveOverride = Math.max(override, minDuration);
+        // Remaining time after fixed phases goes to travel phases
+        const travelTime = effectiveOverride - hoverTime - arriveDur;
+        zoomOutDur = travelTime * 0.2;
+        flyDur = travelTime * 0.65;
+        zoomInDur = travelTime * 0.15;
+      } else {
+        // Distribute variable time proportionally to route length
+        const proportion = totalRouteLength > 0
+          ? groupLengths[i] / totalRouteLength
+          : 1 / n;
+        const variableForGroup = totalVariable * proportion;
+        // Minimum 1.5s for variable portion so short legs aren't invisible
+        const effectiveVariable = Math.max(variableForGroup, 1.5);
+        zoomOutDur = effectiveVariable * 0.2;
+        flyDur = effectiveVariable * 0.65;  // longer fly, zoom happens during fly
+        zoomInDur = effectiveVariable * 0.15; // shorter, just final settle
+      }
 
       const phases: SegmentTiming["phases"] = [
         { phase: "HOVER", startTime: currentTime, duration: hoverTime },
@@ -269,7 +290,7 @@ export class AnimationEngine {
 
       // Use the first segment's id as the timeline entry id
       timeline.push({
-        segmentId: group.segments[0].id,
+        segmentId: overrideKey,
         startTime: currentTime,
         duration: segDuration,
         phases,
