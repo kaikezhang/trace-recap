@@ -422,17 +422,17 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   if (location.photos.length === 0) return null;
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+    <div className="absolute inset-0 z-30 flex items-start md:items-center justify-center pointer-events-none pt-12 md:pt-0">
       <div
-        className="bg-background/95 backdrop-blur rounded-xl shadow-2xl max-w-lg w-full mx-4 pointer-events-auto"
+        className="bg-background/95 backdrop-blur rounded-xl shadow-2xl max-w-lg w-full mx-4 pointer-events-auto max-h-[85vh] overflow-y-auto"
         onClick={(e) => {
           e.stopPropagation();
           // Clicking outside a photo deactivates focal point mode
           setFocalPointActive(null);
         }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+        {/* Header — sticky so close button always visible */}
+        <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 bg-background/95 backdrop-blur z-10">
           <h3 className="text-sm font-semibold truncate">
             {location.name} — Photo Layout
           </h3>
