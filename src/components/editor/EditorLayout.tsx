@@ -27,6 +27,7 @@ function EditorContent() {
   const { map } = useMap();
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
+  const segmentTimingOverrides = useProjectStore((s) => s.segmentTimingOverrides);
   const engineRef = useRef<AnimationEngine | null>(null);
 
   const setPlaybackState = useAnimationStore((s) => s.setPlaybackState);
@@ -38,6 +39,7 @@ function EditorContent() {
   const setShowPhotoOverlay = useAnimationStore((s) => s.setShowPhotoOverlay);
   const setCurrentSegmentIndex = useAnimationStore((s) => s.setCurrentSegmentIndex);
   const setCurrentGroupSegmentIndices = useAnimationStore((s) => s.setCurrentGroupSegmentIndices);
+  const setTimeline = useAnimationStore((s) => s.setTimeline);
   const reset = useAnimationStore((s) => s.reset);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
@@ -68,9 +70,10 @@ function EditorContent() {
     const allReady = segments.every((s) => s.geometry !== null);
     if (!allReady) return;
 
-    const engine = new AnimationEngine(map, locations, segments);
+    const engine = new AnimationEngine(map, locations, segments, segmentTimingOverrides);
     engineRef.current = engine;
     setTotalDuration(engine.getTotalDuration());
+    setTimeline(engine.getTimeline());
 
     engine.on("progress", (e) => {
       setCurrentTime(e.time);
@@ -158,7 +161,7 @@ function EditorContent() {
     return () => {
       engine.destroy();
     };
-  }, [map, locations, segments]);
+  }, [map, locations, segments, segmentTimingOverrides]);
 
   const handlePlay = useCallback(() => {
     // Immediately hide all future segment layers on the map
