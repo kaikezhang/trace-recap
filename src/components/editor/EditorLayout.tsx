@@ -86,10 +86,14 @@ function EditorContent() {
       setShowPhotoOverlay(e.showPhotos);
       setPhotoOverlayOpacity(e.photoOpacity);
       if (e.showPhotos) {
-        const seg = segments[e.segmentIndex];
-        const toLoc = locations.find((l) => l.id === seg?.toId);
-        setVisiblePhotos(toLoc?.photos || []);
-        setVisiblePhotoLocationId(toLoc?.id ?? null);
+        if (e.phase === "ARRIVE") {
+          // During ARRIVE: set current destination's photos
+          const seg = segments[e.segmentIndex];
+          const toLoc = locations.find((l) => l.id === seg?.toId);
+          setVisiblePhotos(toLoc?.photos || []);
+          setVisiblePhotoLocationId(toLoc?.id ?? null);
+        }
+        // During HOVER/ZOOM_OUT fade-out: keep previous photos (don't update)
       } else {
         setVisiblePhotos([]);
         setVisiblePhotoLocationId(null);

@@ -451,14 +451,25 @@ export class AnimationEngine {
       cityLabelZh = group.toLoc.nameZh ?? null;
     }
 
-    // Photos: show during ARRIVE. Fade out in the last 30% of ARRIVE phase.
-    const showPhotos = phase === "ARRIVE" && group.toLoc.photos.length > 0;
+    // Photos: show during ARRIVE at full opacity.
+    // Continue showing (fading out) during NEXT group's HOVER + ZOOM_OUT.
+    let showPhotos = false;
     let photoOpacity = 0;
-    if (showPhotos) {
-      if (phaseProgress < 0.7) {
-        photoOpacity = 1; // Full opacity for first 70%
-      } else {
-        photoOpacity = 1 - ((phaseProgress - 0.7) / 0.3); // Fade 1→0 in last 30%
+
+    if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
+      showPhotos = true;
+      photoOpacity = 1;
+    } else if ((phase === "HOVER" || phase === "ZOOM_OUT") && groupIndex > 0) {
+      const prevGroup = this.groups[groupIndex - 1];
+      if (prevGroup && prevGroup.toLoc.photos.length > 0) {
+        showPhotos = true;
+        if (phase === "HOVER") {
+          // HOVER: fade from 1 → 0.4
+          photoOpacity = 1 - phaseProgress * 0.6;
+        } else {
+          // ZOOM_OUT: fade from 0.4 → 0
+          photoOpacity = 0.4 * (1 - phaseProgress);
+        }
       }
     }
 
