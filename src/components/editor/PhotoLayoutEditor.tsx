@@ -138,37 +138,30 @@ function SortablePhoto({
   );
 }
 
-/** Detect divider positions between grid/hero cells */
+/** Detect vertical divider positions between grid/hero cells (no horizontal — Phase 3 only supports column-width dividers) */
 function computeDividers(
   rects: PhotoRect[],
   template: LayoutTemplate | "auto"
-): { orientation: "horizontal" | "vertical"; position: number; index: number }[] {
+): { orientation: "vertical"; position: number; index: number }[] {
   if (template !== "grid" && template !== "hero") return [];
   if (rects.length < 2) return [];
 
-  const dividers: { orientation: "horizontal" | "vertical"; position: number; index: number }[] = [];
+  const dividers: { orientation: "vertical"; position: number; index: number }[] = [];
   const eps = 0.02;
 
-  // Find unique row boundaries (horizontal dividers)
-  const yEnds = rects.map((r) => r.y + r.height);
-  const yStarts = rects.map((r) => r.y);
-  const uniqueYBounds: number[] = [];
-  for (const ye of yEnds) {
-    for (const ys of yStarts) {
-      if (Math.abs(ye - ys) < eps * 3 && ye > eps * 5 && ys < 1 - eps * 5) {
-        const mid = (ye + ys) / 2;
-        if (!uniqueYBounds.some((v) => Math.abs(v - mid) < eps)) {
-          uniqueYBounds.push(mid);
-        }
-      }
+  // For hero layout, only show the main vertical divider between hero and sidebar
+  if (template === "hero") {
+    const heroRect = rects[0];
+    if (heroRect && rects.length > 1) {
+      const heroRight = heroRect.x + heroRect.width;
+      const sidebarLeft = rects[1].x;
+      const mid = (heroRight + sidebarLeft) / 2;
+      dividers.push({ orientation: "vertical", position: mid, index: 0 });
     }
+    return dividers;
   }
-  uniqueYBounds.sort((a, b) => a - b);
-  uniqueYBounds.forEach((y, idx) => {
-    dividers.push({ orientation: "horizontal", position: y, index: idx });
-  });
 
-  // Find unique column boundaries (vertical dividers)
+  // For grid: find unique column boundaries (vertical dividers only)
   const xEnds = rects.map((r) => r.x + r.width);
   const xStarts = rects.map((r) => r.x);
   const uniqueXBounds: number[] = [];
@@ -337,9 +330,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     [location.id, setPhotoFocalPoint]
   );
 
-  // Divider drag handler
+  // Divider drag handler (vertical column dividers only)
   const handleDividerDrag = useCallback(
-    (orientation: "horizontal" | "vertical", dividerIndex: number, startEvent: React.MouseEvent) => {
+    (_orientation: "vertical", dividerIndex: number, startEvent: React.MouseEvent) => {
       startEvent.preventDefault();
       startEvent.stopPropagation();
 
@@ -349,56 +342,37 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
       const onMouseMove = (e: MouseEvent) => {
         const current = layout.customProportions ?? {};
-        if (orientation === "horizontal") {
-          // Compute row count from rects
-          const uniqueYs = new Set(rects.map((r) => Math.round(r.y * 1000)));
-          const rowCount = uniqueYs.size;
-          const rows = current.rows?.slice(0, rowCount) ?? new Array(rowCount).fill(1);
-          const totalWeight = rows.reduce((s: number, w: number) => s + w, 0);
+        // Only vertical column dividers are supported (horizontal removed in Phase 3)
+        // Compute col count from rects
+        const uniqueXs = new Set(rects.map((r) => Math.round(r.x * 1000)));
+        const colCount = uniqueXs.size;
+        const cols = current.cols?.slice(0, colCount) ?? new Array(colCount).fill(1);
+        const totalWeight = cols.reduce((s: number, w: number) => s + w, 0);
 
-          // Mouse position as fraction of container height
-          const fraction = Math.max(0.1, Math.min(0.9,
-            (e.clientY - containerRect.top) / containerRect.height
-          ));
+        const fraction = Math.max(0.05, Math.min(0.95,
+          (e.clientX - containerRect.left) / containerRect.width
+        ));
 
-          // Adjust weights for the row boundary at dividerIndex
-          const newRows = [...rows];
-          const weightBefore = fraction * totalWeight;
-          const weightAfter = (1 - fraction) * totalWeight;
-          // Distribute weights proportionally among rows before/after the divider
-          const rowsBefore = dividerIndex + 1;
-          const rowsAfter = rowCount - rowsBefore;
-          if (rowsBefore > 0 && rowsAfter > 0) {
-            const perBefore = weightBefore / rowsBefore;
-            const perAfter = weightAfter / rowsAfter;
-            for (let i = 0; i < rowCount; i++) {
-              newRows[i] = i < rowsBefore ? perBefore : perAfter;
-            }
-          }
-          updateLayout({ customProportions: { ...current, rows: newRows } });
-        } else {
-          // Compute col count from rects
-          const uniqueXs = new Set(rects.map((r) => Math.round(r.x * 1000)));
-          const colCount = uniqueXs.size;
-          const cols = current.cols?.slice(0, colCount) ?? new Array(colCount).fill(1);
-          const totalWeight = cols.reduce((s: number, w: number) => s + w, 0);
-
-          const fraction = Math.max(0.1, Math.min(0.9,
-            (e.clientX - containerRect.left) / containerRect.width
-          ));
-
+        // Only adjust the two cells adjacent to the divider
+        const leftIdx = dividerIndex;
+        const rightIdx = dividerIndex + 1;
+        if (leftIdx >= 0 && rightIdx < colCount) {
           const newCols = [...cols];
-          const weightBefore = fraction * totalWeight;
-          const weightAfter = (1 - fraction) * totalWeight;
-          const colsBefore = dividerIndex + 1;
-          const colsAfter = colCount - colsBefore;
-          if (colsBefore > 0 && colsAfter > 0) {
-            const perBefore = weightBefore / colsBefore;
-            const perAfter = weightAfter / colsAfter;
-            for (let i = 0; i < colCount; i++) {
-              newCols[i] = i < colsBefore ? perBefore : perAfter;
-            }
-          }
+          // Compute the start fraction of the left cell and end fraction of the right cell
+          const availW = 1; // total weight space
+          const weightPerUnit = availW / totalWeight;
+          let leftStart = 0;
+          for (let i = 0; i < leftIdx; i++) leftStart += cols[i] * weightPerUnit;
+          let rightEnd = 0;
+          for (let i = 0; i <= rightIdx; i++) rightEnd += cols[i] * weightPerUnit;
+
+          // The divider position maps to a split within [leftStart, rightEnd]
+          const pairTotal = cols[leftIdx] + cols[rightIdx];
+          const relFraction = Math.max(0.1, Math.min(0.9,
+            (fraction - leftStart) / (rightEnd - leftStart)
+          ));
+          newCols[leftIdx] = relFraction * pairTotal;
+          newCols[rightIdx] = (1 - relFraction) * pairTotal;
           updateLayout({ customProportions: { ...current, cols: newCols } });
         }
       };
@@ -521,57 +495,33 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                 </SortableContext>
               </DndContext>
 
-              {/* Divider drag handles */}
+              {/* Vertical divider drag handles (column-width only) */}
               {dividers.map((div, i) => (
                 <div
-                  key={`divider-${div.orientation}-${i}`}
+                  key={`divider-vertical-${i}`}
                   className="absolute z-10 group"
-                  style={
-                    div.orientation === "horizontal"
-                      ? {
-                          left: "0%",
-                          width: "100%",
-                          top: `${div.position * 100}%`,
-                          height: "8px",
-                          transform: "translateY(-50%)",
-                          cursor: "row-resize",
-                        }
-                      : {
-                          top: "0%",
-                          height: "100%",
-                          left: `${div.position * 100}%`,
-                          width: "8px",
-                          transform: "translateX(-50%)",
-                          cursor: "col-resize",
-                        }
-                  }
-                  onMouseDown={(e) => handleDividerDrag(div.orientation, div.index, e)}
+                  style={{
+                    top: "0%",
+                    height: "100%",
+                    left: `${div.position * 100}%`,
+                    width: "8px",
+                    transform: "translateX(-50%)",
+                    cursor: "col-resize",
+                  }}
+                  onMouseDown={(e) => handleDividerDrag("vertical", div.index, e)}
                 >
                   <div
                     className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    style={
-                      div.orientation === "horizontal"
-                        ? {
-                            position: "absolute",
-                            left: "10%",
-                            right: "10%",
-                            top: "50%",
-                            height: "2px",
-                            transform: "translateY(-50%)",
-                            backgroundColor: "rgba(99,102,241,0.6)",
-                            borderRadius: "1px",
-                          }
-                        : {
-                            position: "absolute",
-                            top: "10%",
-                            bottom: "10%",
-                            left: "50%",
-                            width: "2px",
-                            transform: "translateX(-50%)",
-                            backgroundColor: "rgba(99,102,241,0.6)",
-                            borderRadius: "1px",
-                          }
-                    }
+                    style={{
+                      position: "absolute",
+                      top: "10%",
+                      bottom: "10%",
+                      left: "50%",
+                      width: "2px",
+                      transform: "translateX(-50%)",
+                      backgroundColor: "rgba(99,102,241,0.6)",
+                      borderRadius: "1px",
+                    }}
                   />
                 </div>
               ))}
@@ -579,14 +529,61 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           </div>
         </div>
 
-        {/* Focal point hint */}
-        {focalPointActive && (
-          <div className="px-4 pb-2">
-            <p className="text-xs text-muted-foreground text-center">
-              Click and drag on the photo to set the crop focal point
-            </p>
-          </div>
-        )}
+        {/* Focal point modal: full uncropped photo overlay */}
+        {focalPointActive && (() => {
+          const activePhoto = location.photos.find((p) => p.id === focalPointActive);
+          if (!activePhoto) return null;
+          const fp = activePhoto.focalPoint ?? { x: 0.5, y: 0.5 };
+          return (
+            <div className="px-4 pb-3">
+              <p className="text-xs text-muted-foreground text-center mb-2">
+                Click on the full image below to set the crop focal point
+              </p>
+              <div
+                className="relative w-full rounded-lg overflow-hidden border border-border cursor-crosshair"
+                style={{ maxHeight: "300px" }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const updatePoint = (clientX: number, clientY: number) => {
+                    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+                    setPhotoFocalPoint(location.id, focalPointActive, { x, y });
+                  };
+                  updatePoint(e.clientX, e.clientY);
+                  const onMouseMove = (ev: MouseEvent) => updatePoint(ev.clientX, ev.clientY);
+                  const onMouseUp = () => {
+                    document.removeEventListener("mousemove", onMouseMove);
+                    document.removeEventListener("mouseup", onMouseUp);
+                  };
+                  document.addEventListener("mousemove", onMouseMove);
+                  document.addEventListener("mouseup", onMouseUp);
+                }}
+              >
+                <img
+                  src={activePhoto.url}
+                  alt=""
+                  className="w-full object-contain"
+                  style={{ maxHeight: "300px" }}
+                  draggable={false}
+                />
+                {/* Crosshair indicator on full image */}
+                <div
+                  className="absolute w-6 h-6 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{
+                    left: `${fp.x * 100}%`,
+                    top: `${fp.y * 100}%`,
+                  }}
+                >
+                  <div className="absolute inset-0 rounded-full border-2 border-white" style={{ boxShadow: "0 0 4px rgba(0,0,0,0.7)" }} />
+                  <div className="absolute top-1/2 left-0 w-full h-px bg-white" style={{ boxShadow: "0 0 2px rgba(0,0,0,0.5)" }} />
+                  <div className="absolute left-1/2 top-0 h-full w-px bg-white" style={{ boxShadow: "0 0 2px rgba(0,0,0,0.5)" }} />
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Sliders */}
         <div className="px-4 pb-3 space-y-3">

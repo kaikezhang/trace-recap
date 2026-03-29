@@ -15,7 +15,7 @@ export interface ImportRouteData {
     nameZh?: string;
     coordinates: [number, number];
     isWaypoint?: boolean;
-    photos?: { url: string; caption?: string }[];
+    photos?: { url: string; caption?: string; focalPoint?: { x: number; y: number } }[];
     photoLayout?: PhotoLayout;
   }[];
   segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
@@ -249,6 +249,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           loc.photos.map(async (p) => ({
             url: await toDataURL(p.url),
             caption: p.caption,
+            ...(p.focalPoint ? { focalPoint: p.focalPoint } : {}),
           }))
         );
         return {
@@ -293,6 +294,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           locationId: locId,
           url: p.url,
           caption: p.caption,
+          ...(p.focalPoint ? { focalPoint: p.focalPoint } : {}),
         }));
         return {
           id: locId,

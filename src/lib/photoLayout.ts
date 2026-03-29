@@ -299,8 +299,13 @@ function layoutScatter(photos: PhotoMeta[], gap: number): PhotoRect[] {
     rects.push({ x, y, width: w, height: h, rotation });
   }
 
-  // Basic collision relaxation: nudge overlapping photos apart (3 passes)
-  for (let pass = 0; pass < 3; pass++) {
+  // Collision relaxation: nudge overlapping photos apart (10 passes with decreasing threshold)
+  for (let pass = 0; pass < 10; pass++) {
+    // Reduce overlap threshold each pass: start at 30%, end near 15%
+    const thresholdFactor = 0.3 - (pass / 9) * 0.15;
+    // Increase nudge distance for stronger separation
+    const nudge = 0.04 - pass * 0.002; // 0.04 down to ~0.022
+
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) {
         const a = rects[i];
@@ -313,16 +318,18 @@ function layoutScatter(photos: PhotoMeta[], gap: number): PhotoRect[] {
         const overlapX = (a.width + b.width) / 2 - Math.abs(aCx - bCx);
         const overlapY = (a.height + b.height) / 2 - Math.abs(aCy - bCy);
 
-        // Only nudge if overlap > 30% of the smaller dimension
-        const threshold = Math.min(a.width, b.width) * 0.3;
-        if (overlapX > threshold && overlapY > threshold) {
-          const dx = aCx < bCx ? -1 : 1;
-          const dy = aCy < bCy ? -1 : 1;
-          const nudge = 0.02;
-          a.x += dx * nudge;
-          a.y += dy * nudge;
-          b.x -= dx * nudge;
-          b.y -= dy * nudge;
+        // Check if overlap area exceeds threshold of the smaller rect area
+        if (overlapX > 0 && overlapY > 0) {
+          const overlapArea = overlapX * overlapY;
+          const smallerArea = Math.min(a.width * a.height, b.width * b.height);
+          if (overlapArea > smallerArea * thresholdFactor) {
+            const dx = aCx < bCx ? -1 : 1;
+            const dy = aCy < bCy ? -1 : 1;
+            a.x += dx * nudge;
+            a.y += dy * nudge;
+            b.x -= dx * nudge;
+            b.y -= dy * nudge;
+          }
         }
       }
     }
