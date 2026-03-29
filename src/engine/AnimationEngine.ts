@@ -227,8 +227,8 @@ export class AnimationEngine {
     for (let i = 0; i < n; i++) {
       const group = this.groups[i];
       const hasPhotos = group.toLoc.photos.length > 0;
-      const hoverTime = this.camera.getHoverDuration(i);
-      const arriveDur = arriveTime + (hasPhotos ? photoTime : 0);
+      let hoverTime = this.camera.getHoverDuration(i);
+      let arriveDur = arriveTime + (hasPhotos ? photoTime : 0);
 
       // Check for timing override using the first segment's id
       const overrideKey = group.segments[0].id;
@@ -239,14 +239,24 @@ export class AnimationEngine {
       let zoomInDur: number;
 
       if (override !== undefined) {
-        // Enforce minimum: override must be >= hover + arrive + 1s
-        const minDuration = hoverTime + arriveDur + 1;
-        const effectiveOverride = Math.max(override, minDuration);
-        // Remaining time after fixed phases goes to travel phases
-        const travelTime = effectiveOverride - hoverTime - arriveDur;
-        zoomOutDur = travelTime * 0.2;
-        flyDur = travelTime * 0.65;
-        zoomInDur = travelTime * 0.15;
+        // Allow very short overrides (min 1.5s) — compress all phases proportionally
+        const effectiveOverride = Math.max(override, 1.5);
+        const totalFixed = hoverTime + arriveDur;
+        if (effectiveOverride <= totalFixed) {
+          // Ultra short: compress hover and arrive, minimal travel
+          const scale = effectiveOverride / (totalFixed + 0.5);
+          hoverTime = hoverTime * scale;
+          arriveDur = arriveDur * scale;
+          zoomOutDur = 0.1 * scale;
+          flyDur = 0.2 * scale;
+          zoomInDur = 0.1 * scale;
+        } else {
+          // Normal: fixed phases stay, remaining time for travel
+          const travelTime = effectiveOverride - hoverTime - arriveDur;
+          zoomOutDur = travelTime * 0.2;
+          flyDur = travelTime * 0.65;
+          zoomInDur = travelTime * 0.15;
+        }
       } else {
         // Distribute variable time proportionally to route length
         const proportion = totalRouteLength > 0

@@ -78,10 +78,8 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
   const hasOverride = override !== undefined;
   const displayDuration = hasOverride ? override : autoDuration;
 
-  // Compute actual minimum duration from timeline phases: hover + arrive + 1s
-  const hoverDur = timelineEntry?.phases.find((p) => p.phase === "HOVER")?.duration ?? 1.5;
-  const arriveDur = timelineEntry?.phases.find((p) => p.phase === "ARRIVE")?.duration ?? 1.5;
-  const minDuration = Math.round((hoverDur + arriveDur + 1) * 2) / 2; // round to 0.5s step
+  // Minimum duration: 1.5s (phases will compress proportionally)
+  const minDuration = 1.5;
 
   // If override was clamped, show the effective (clamped) duration
   const effectiveDuration = hasOverride && override < minDuration ? minDuration : null;
