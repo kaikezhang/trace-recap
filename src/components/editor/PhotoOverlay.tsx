@@ -66,6 +66,16 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
 export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1 }: PhotoOverlayProps) {
   const metas = usePhotoDimensions(photos);
   const hasPhotos = metas.length > 0;
+
+  // Keep a snapshot of the last visible state so photos persist during exit transition
+  const lastVisibleRef = useRef<{ metas: PhotoMeta[]; layout?: PhotoLayout }>({ metas: [], layout: undefined });
+  if (visible && hasPhotos) {
+    lastVisibleRef.current = { metas, layout: photoLayout };
+  }
+  // Use snapshot when transitioning out (visible=false but we still want to show photos fading)
+  const displayMetas = visible && hasPhotos ? metas : lastVisibleRef.current.metas;
+  const displayLayout = visible && hasPhotos ? photoLayout : lastVisibleRef.current.layout;
+  const hasDisplayPhotos = displayMetas.length > 0;
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
 
@@ -82,41 +92,41 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
 
   // Use actual container dimensions for layout calculation
   const containerAspect = containerSize.h > 0 ? containerSize.w / containerSize.h : 16 / 9;
-  const gapPx = photoLayout?.gap ?? 8;
-  const borderRadiusPx = photoLayout?.borderRadius ?? 8;
+  const gapPx = displayLayout?.gap ?? 8;
+  const borderRadiusPx = displayLayout?.borderRadius ?? 8;
 
   // Apply custom photo order if set
   const orderedMetas: PhotoMeta[] = (() => {
-    if (!hasPhotos) return [];
-    if (photoLayout?.order && photoLayout.order.length > 0) {
-      const metaMap = new Map(metas.map((m) => [m.id, m]));
-      const ordered = photoLayout.order
+    if (!hasDisplayPhotos) return [];
+    if (displayLayout?.order && displayLayout.order.length > 0) {
+      const metaMap = new Map(displayMetas.map((m) => [m.id, m]));
+      const ordered = displayLayout.order
         .map((id) => metaMap.get(id))
         .filter((m): m is PhotoMeta => !!m);
       // Add any photos not in order
-      for (const m of metas) {
+      for (const m of displayMetas) {
         if (!ordered.find((o) => o.id === m.id)) ordered.push(m);
       }
       return ordered;
     }
-    return metas;
+    return displayMetas;
   })();
 
-  const layoutMetas: LayoutPhotoMeta[] = hasPhotos
+  const layoutMetas: LayoutPhotoMeta[] = hasDisplayPhotos
     ? orderedMetas.map((m) => ({ id: m.id, aspect: m.aspect }))
     : [];
 
   const rects = (() => {
-    if (!hasPhotos) return [];
+    if (!hasDisplayPhotos) return [];
     const w = containerSize.w || 1000;
-    if (photoLayout?.mode === "manual" && photoLayout.template) {
+    if (displayLayout?.mode === "manual" && displayLayout.template) {
       return computeTemplateLayout(
         layoutMetas,
         containerAspect,
-        photoLayout.template,
+        displayLayout.template,
         gapPx,
         w,
-        photoLayout.customProportions
+        displayLayout.customProportions
       );
     }
     return computeAutoLayout(layoutMetas, containerAspect, gapPx, w);
@@ -142,14 +152,14 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
       <div
         className="absolute inset-0"
         style={{
-          opacity: visible && hasPhotos ? 1 : 0,
-          transform: visible && hasPhotos ? "scale(1) translateY(0)" : "scale(0.7) translateY(-50px)",
-          filter: visible && hasPhotos ? "blur(0px)" : "blur(8px)",
+          opacity: visible ? 1 : 0,
+          transform: visible ? "scale(1) translateY(0)" : "scale(0.7) translateY(-50px)",
+          filter: visible ? "blur(0px)" : "blur(8px)",
           transition: "opacity 0.5s ease-out, transform 0.5s ease-out, filter 0.5s ease-out",
           pointerEvents: "none",
         }}
       >
-        {hasPhotos && rects.map((rect, i) => {
+        {hasDisplayPhotos && rects.map((rect, i) => {
             const photo = orderedMetas[i];
             if (!photo) return null;
             const n = orderedMetas.length;
