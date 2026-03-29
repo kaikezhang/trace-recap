@@ -47,7 +47,7 @@ export default function PlaybackControls({
         "fixed left-0 right-0 z-[60] rounded-none transition-[bottom] duration-300 ease-out",
         bottomSheetExpanded ? "bottom-[60vh]" : "bottom-14",
         // Desktop: override to absolute, centered floating pill
-        "md:absolute md:z-10 md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:rounded-xl md:w-auto",
+        "md:absolute md:z-10 md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto md:rounded-2xl md:w-auto",
       ].join(" ")}
     >
       <Button
