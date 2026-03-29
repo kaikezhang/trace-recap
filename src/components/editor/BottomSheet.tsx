@@ -108,37 +108,11 @@ export default function BottomSheet({ onLocationClick, onEditLayout }: BottomShe
               {locations.length} {locations.length === 1 ? "stop" : "stops"}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-11 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                fileInputRef.current?.click();
-              }}
-            >
-              <Upload className="mr-1.5 h-3.5 w-3.5" />
-              Import
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-11 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleExportRoute();
-              }}
-            >
-              <Save className="mr-1.5 h-3.5 w-3.5" />
-              Save Route
-            </Button>
-            <ChevronUp
-              className={`h-4 w-4 text-muted-foreground transition-transform duration-300 ${
-                expanded ? "rotate-180" : ""
-              }`}
-            />
-          </div>
+          <ChevronUp
+            className={`h-4 w-4 text-muted-foreground transition-transform duration-300 ${
+              expanded ? "rotate-180" : ""
+            }`}
+          />
         </div>
         <input
           ref={fileInputRef}
@@ -150,7 +124,30 @@ export default function BottomSheet({ onLocationClick, onEditLayout }: BottomShe
 
         {/* Expanded content */}
         <div className="flex flex-col overflow-hidden" style={{ height: "calc(60vh - 56px)" }}>
-          <CitySearch />
+          {/* Import/Save buttons — top right of expanded area */}
+          <div className="flex items-center justify-between px-3 pt-1 pb-0">
+            <CitySearch />
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => fileInputRef.current?.click()}
+                title="Import Route"
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleExportRoute}
+                title="Save Route"
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
           <ScrollArea className="flex-1 min-h-0">
             <RouteList onLocationClick={onLocationClick} onEditLayout={onEditLayout} />
           </ScrollArea>
