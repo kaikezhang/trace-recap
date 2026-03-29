@@ -16,6 +16,7 @@ export interface ImportRouteData {
     coordinates: [number, number];
     isWaypoint?: boolean;
     photos?: { url: string; caption?: string }[];
+    photoLayout?: PhotoLayout;
   }[];
   segments: { fromIndex: number; toIndex: number; transportMode: TransportMode }[];
 }
@@ -241,6 +242,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           coordinates: loc.coordinates as [number, number],
           isWaypoint: loc.isWaypoint ?? false,
           ...(photos.length > 0 ? { photos } : {}),
+          ...(loc.photoLayout ? { photoLayout: loc.photoLayout } : {}),
         };
       })
     );
@@ -273,6 +275,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           coordinates: loc.coordinates,
           photos,
           isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
+          ...(loc.photoLayout ? { photoLayout: loc.photoLayout } : {}),
         };
       });
 

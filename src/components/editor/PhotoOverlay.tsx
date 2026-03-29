@@ -151,8 +151,8 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
                 }}
               >
                 <div
-                  className="w-full rounded-lg overflow-hidden"
-                  style={{ flex: 1, minHeight: 0 }}
+                  className="w-full overflow-hidden"
+                  style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
                 >
                   <img
                     src={photo.url}
