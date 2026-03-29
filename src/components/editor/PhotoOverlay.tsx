@@ -127,8 +127,15 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
       }}
     >
       <AnimatePresence>
-        {visible && ready &&
-          rects.map((rect, i) => {
+        {visible && ready ? (
+          <motion.div
+            key="photo-group"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.7, y: -50, filter: "blur(8px)", transition: { duration: 0.5, ease: [0.4, 0, 1, 1] } }}
+            className="absolute inset-0"
+          >
+          {rects.map((rect, i) => {
             const photo = orderedMetas[i];
             if (!photo) return null;
             const n = orderedMetas.length;
@@ -146,35 +153,13 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
             return (
               <motion.div
                 key={photo.id}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                variants={{
-                  hidden: { opacity: 0, scale: 0.6, y: 60, filter: "blur(8px)" },
-                  visible: {
-                    opacity: 1,
-                    scale: 1,
-                    y: 0,
-                    filter: "blur(0px)",
-                    transition: {
-                      type: "spring",
-                      stiffness: 300,
-                      damping: 25,
-                      delay: i * 0.08,
-                    },
-                  },
-                  exit: {
-                    opacity: 0,
-                    scale: 0.5,
-                    y: -80,
-                    filter: "blur(6px)",
-                    rotate: i % 2 === 0 ? -8 : 8,
-                    transition: {
-                      duration: 0.45,
-                      ease: [0.4, 0, 1, 1],
-                      delay: (n - 1 - i) * 0.06,
-                    },
-                  },
+                initial={{ opacity: 0, scale: 0.6, y: 60, filter: "blur(8px)" }}
+                animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 25,
+                  delay: i * 0.08,
                 }}
                 className="absolute overflow-hidden drop-shadow-xl"
                 style={{
@@ -212,6 +197,8 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
               </motion.div>
             );
           })}
+          </motion.div>
+        ) : null}
       </AnimatePresence>
     </div>
   );
