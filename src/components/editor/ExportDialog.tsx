@@ -36,7 +36,8 @@ export default function ExportDialog() {
   const setCityLabelSize = useUIStore((s) => s.setCityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const setCityLabelLang = useUIStore((s) => s.setCityLabelLang);
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
+  const aspectRatio = useUIStore((s) => s.exportAspectRatio) as AspectRatio;
+  const setAspectRatio = useUIStore((s) => s.setExportAspectRatio);
   const [resolution, setResolution] = useState("720");
 
   const [isExporting, setIsExporting] = useState(false);
