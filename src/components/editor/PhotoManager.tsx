@@ -25,7 +25,8 @@ async function processImageFiles(
   if (!files) return;
   const toAdd = Array.from(files).slice(0, maxCount);
   for (const file of toAdd) {
-    if (!file.type.startsWith("image/")) continue;
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) continue;
     if (file.size > MAX_FILE_SIZE) {
       console.warn(`Skipped "${file.name}": exceeds 10MB limit (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
       continue;
@@ -133,10 +134,11 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
             <input
               ref={inputRef}
               type="file"
-              accept="image/*"
+              accept=".jpg,.jpeg,.png,.webp,.gif"
+              capture="environment"
               multiple
               className="hidden"
-              onChange={(e) => handleFiles(e.target.files)}
+              onChange={(e) => { handleFiles(e.target.files); if (inputRef.current) inputRef.current.value = ""; }}
             />
           </>
         )}
