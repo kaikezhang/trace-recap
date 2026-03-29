@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout } from "@/types";
@@ -139,16 +139,17 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
         right: 0,
       }}
     >
-      <AnimatePresence>
-        {visible && hasPhotos ? (
-          <motion.div
-            key="photo-group"
-            initial={{ opacity: 0 }}
-            animate={{ opacity }}
-            exit={{ opacity: 0, scale: 0.7, y: -50, filter: "blur(8px)", transition: { duration: 0.5, ease: [0.4, 0, 1, 1] } }}
-            className="absolute inset-0"
-          >
-          {rects.map((rect, i) => {
+      <div
+        className="absolute inset-0"
+        style={{
+          opacity: visible && hasPhotos ? 1 : 0,
+          transform: visible && hasPhotos ? "scale(1) translateY(0)" : "scale(0.7) translateY(-50px)",
+          filter: visible && hasPhotos ? "blur(0px)" : "blur(8px)",
+          transition: "opacity 0.5s ease-out, transform 0.5s ease-out, filter 0.5s ease-out",
+          pointerEvents: "none",
+        }}
+      >
+        {hasPhotos && rects.map((rect, i) => {
             const photo = orderedMetas[i];
             if (!photo) return null;
             const n = orderedMetas.length;
@@ -210,9 +211,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
               </motion.div>
             );
           })}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }
