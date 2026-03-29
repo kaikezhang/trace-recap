@@ -465,59 +465,41 @@ export class VideoExporter {
         ctx.rotate((rotation * Math.PI) / 180);
       }
 
-      this.drawRoundedRect(
-        ctx,
-        -frameW / 2 + shadowOffX,
-        -frameH / 2 + shadowOffY,
-        frameW,
-        frameH,
-        radius,
-        "rgba(0,0,0,0.25)"
-      );
-
-      this.drawRoundedRect(
-        ctx,
-        -frameW / 2,
-        -frameH / 2,
-        frameW,
-        frameH,
-        radius,
-        "#ffffff"
-      );
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(
-        -frameW / 2 + pad,
-        -frameH / 2 + pad,
-        imgW,
-        imgH,
-        Math.max(0, radius - pad / 2)
-      );
-      ctx.clip();
-
       // Compute contain dimensions (fit entire image, no crop)
       const imgAspect = preloaded.aspect;
-      const targetAspect = imgW / imgH;
+      const targetAspect = frameW / frameH;
       let drawW: number, drawH: number, drawX: number, drawY: number;
       if (imgAspect > targetAspect) {
-        // Image wider than target — fit by width
-        drawW = imgW;
-        drawH = imgW / imgAspect;
-        drawX = -frameW / 2 + pad;
-        drawY = -frameH / 2 + pad + (imgH - drawH) / 2;
+        drawW = frameW;
+        drawH = frameW / imgAspect;
+        drawX = -frameW / 2;
+        drawY = -drawH / 2;
       } else {
-        // Image taller than target — fit by height
-        drawH = imgH;
-        drawW = imgH * imgAspect;
-        drawX = -frameW / 2 + pad + (imgW - drawW) / 2;
-        drawY = -frameH / 2 + pad;
+        drawH = frameH;
+        drawW = frameH * imgAspect;
+        drawX = -drawW / 2;
+        drawY = -frameH / 2;
       }
-      ctx.drawImage(
-        preloaded.img,
-        drawX, drawY, drawW, drawH
-      );
+
+      // Drop shadow
+      ctx.shadowColor = "rgba(0,0,0,0.3)";
+      ctx.shadowBlur = 12 * scaleX;
+      ctx.shadowOffsetX = shadowOffX;
+      ctx.shadowOffsetY = shadowOffY;
+
+      // Clip to rounded rect and draw
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(drawX, drawY, drawW, drawH, radius);
+      ctx.clip();
+      ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
       ctx.restore();
+
+      // Reset shadow
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
 
       if (hasCaption) {
         ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
@@ -527,8 +509,8 @@ export class VideoExporter {
         ctx.fillText(
           photo.caption!,
           0,
-          -frameH / 2 + pad + imgH + captionH / 2,
-          imgW
+          drawY + drawH + captionH / 2,
+          drawW
         );
       }
 

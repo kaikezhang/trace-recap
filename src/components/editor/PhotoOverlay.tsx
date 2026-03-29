@@ -155,7 +155,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
                   damping: 25,
                   delay: i * 0.08,
                 }}
-                className="absolute bg-white shadow-2xl overflow-hidden"
+                className="absolute overflow-hidden drop-shadow-xl"
                 style={{
                   left: `${rect.x * 100}%`,
                   top: `${rect.y * 100}%`,
@@ -163,7 +163,6 @@ export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOver
                   height: `${rect.height * 100}%`,
                   borderRadius: `${borderRadiusPx}px`,
                   rotate: rotation,
-                  padding: `${pad}px`,
                   display: "flex",
                   flexDirection: "column" as const,
                 }}
