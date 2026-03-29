@@ -634,8 +634,8 @@ function EditorContent() {
               onClose={() => setEditingLocationId(null)}
             />
           )}
-          {/* Playback controls — hidden when layout editor is open */}
-          {hasSegments && !editingLocation && (
+          {/* Playback controls — hidden when photo layout editor is open */}
+          {hasSegments && !(editingLocation && editingLocation.photos.length > 0) && (
             <PlaybackControls
               onPlay={handlePlay}
               onPause={handlePause}
