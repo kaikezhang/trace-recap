@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { computeAutoLayout } from "@/lib/photoLayout";
+import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
-import type { Photo } from "@/types";
+import type { Photo, PhotoLayout } from "@/types";
 
 interface PhotoOverlayProps {
   photos: Photo[];
   visible: boolean;
+  photoLayout?: PhotoLayout;
 }
 
 interface PhotoMeta extends Photo {
@@ -47,7 +48,7 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
   return dims;
 }
 
-export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
+export default function PhotoOverlay({ photos, visible, photoLayout }: PhotoOverlayProps) {
   const metas = usePhotoDimensions(photos);
   const ready = metas.length === photos.length && photos.length > 0;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -65,13 +66,38 @@ export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
   }, []);
 
   const containerAspect = containerSize.h > 0 ? containerSize.w / containerSize.h : 16 / 9;
+  const gapPx = photoLayout?.gap ?? 8;
+  const borderRadiusPx = photoLayout?.borderRadius ?? 8;
+
+  // Apply custom photo order if set
+  const orderedMetas: PhotoMeta[] = (() => {
+    if (!ready) return [];
+    if (photoLayout?.order && photoLayout.order.length > 0) {
+      const metaMap = new Map(metas.map((m) => [m.id, m]));
+      const ordered = photoLayout.order
+        .map((id) => metaMap.get(id))
+        .filter((m): m is PhotoMeta => !!m);
+      // Add any photos not in order
+      for (const m of metas) {
+        if (!ordered.find((o) => o.id === m.id)) ordered.push(m);
+      }
+      return ordered;
+    }
+    return metas;
+  })();
 
   const layoutMetas: LayoutPhotoMeta[] = ready
-    ? metas.map((m) => ({ id: m.id, aspect: m.aspect }))
+    ? orderedMetas.map((m) => ({ id: m.id, aspect: m.aspect }))
     : [];
-  const rects = ready
-    ? computeAutoLayout(layoutMetas, containerAspect, 8, containerSize.w || 1000)
-    : [];
+
+  const rects = (() => {
+    if (!ready) return [];
+    const w = containerSize.w || 1000;
+    if (photoLayout?.mode === "manual" && photoLayout.template) {
+      return computeTemplateLayout(layoutMetas, containerAspect, photoLayout.template, gapPx, w);
+    }
+    return computeAutoLayout(layoutMetas, containerAspect, gapPx, w);
+  })();
 
   // Caption sizing: match export constants (captionFontSize ~14px at 1000px width, plus gap)
   const captionH = 28; // space for caption text + gap below image
@@ -94,9 +120,9 @@ export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
       <AnimatePresence>
         {visible && ready &&
           rects.map((rect, i) => {
-            const photo = metas[i];
+            const photo = orderedMetas[i];
             if (!photo) return null;
-            const n = metas.length;
+            const n = orderedMetas.length;
             const hasCaption = !!photo.caption;
             const pad = 6; // px padding inside frame
             return (
@@ -111,12 +137,13 @@ export default function PhotoOverlay({ photos, visible }: PhotoOverlayProps) {
                   damping: 25,
                   delay: i * 0.08,
                 }}
-                className="absolute rounded-xl bg-white shadow-2xl overflow-hidden"
+                className="absolute bg-white shadow-2xl overflow-hidden"
                 style={{
                   left: `${rect.x * 100}%`,
                   top: `${rect.y * 100}%`,
                   width: `${rect.width * 100}%`,
                   height: `${rect.height * 100}%`,
+                  borderRadius: `${borderRadiusPx}px`,
                   rotate: n <= 3 ? (i === 0 ? -2 : i === n - 1 ? 2 : 0) : (i % 2 === 0 ? -1.5 : 1.5),
                   padding: `${pad}px`,
                   display: "flex",

@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { ImagePlus, X } from "lucide-react";
+import { ImagePlus, X, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useProjectStore } from "@/stores/projectStore";
 
 interface PhotoManagerProps {
   locationId: string;
+  onEditLayout?: (locationId: string) => void;
 }
 
 export function usePhotoDropZone(locationId: string) {
@@ -52,7 +53,7 @@ export function usePhotoDropZone(locationId: string) {
   return { isDragOver, dropProps, handleFiles };
 }
 
-export default function PhotoManager({ locationId }: PhotoManagerProps) {
+export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const location = useProjectStore((s) =>
     s.locations.find((l) => l.id === locationId)
@@ -95,27 +96,40 @@ export default function PhotoManager({ locationId }: PhotoManagerProps) {
           ))}
         </div>
       )}
-      {location.photos.length < 9 && (
-        <div>
+      <div className="flex gap-1.5">
+        {location.photos.length < 9 && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => inputRef.current?.click()}
+            >
+              <ImagePlus className="h-3 w-3" />
+              Add Photo
+            </Button>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+          </>
+        )}
+        {location.photos.length > 0 && onEditLayout && (
           <Button
             variant="outline"
             size="sm"
             className="h-7 text-xs gap-1"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => onEditLayout(locationId)}
           >
-            <ImagePlus className="h-3 w-3" />
-            Add Photo
+            <LayoutGrid className="h-3 w-3" />
+            Layout
           </Button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => handleFiles(e.target.files)}
-          />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

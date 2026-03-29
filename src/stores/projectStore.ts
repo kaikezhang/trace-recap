@@ -3,6 +3,7 @@ import type {
   Location,
   Segment,
   Photo,
+  PhotoLayout,
   TransportMode,
   MapStyle,
 } from "@/types";
@@ -35,6 +36,7 @@ interface ProjectState {
 
   addPhoto: (locationId: string, photo: Omit<Photo, "id" | "locationId">) => void;
   removePhoto: (locationId: string, photoId: string) => void;
+  setPhotoLayout: (locationId: string, layout: PhotoLayout) => void;
 
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
@@ -192,6 +194,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         l.id === locationId
           ? { ...l, photos: l.photos.filter((p) => p.id !== photoId) }
           : l
+      ),
+    })),
+
+  setPhotoLayout: (locationId, layout) =>
+    set((state) => ({
+      locations: state.locations.map((l) =>
+        l.id === locationId ? { ...l, photoLayout: layout } : l
       ),
     })),
 

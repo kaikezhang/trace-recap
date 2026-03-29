@@ -12,9 +12,10 @@ import RouteList from "./RouteList";
 
 interface BottomSheetProps {
   onLocationClick?: (index: number) => void;
+  onEditLayout?: (locationId: string) => void;
 }
 
-export default function BottomSheet({ onLocationClick }: BottomSheetProps) {
+export default function BottomSheet({ onLocationClick, onEditLayout }: BottomSheetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importRoute = useProjectStore((s) => s.importRoute);
   const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
@@ -151,7 +152,7 @@ export default function BottomSheet({ onLocationClick }: BottomSheetProps) {
         <div className="flex flex-col overflow-hidden" style={{ height: "calc(60vh - 56px)" }}>
           <CitySearch />
           <ScrollArea className="flex-1 min-h-0">
-            <RouteList onLocationClick={onLocationClick} />
+            <RouteList onLocationClick={onLocationClick} onEditLayout={onEditLayout} />
           </ScrollArea>
         </div>
       </div>
