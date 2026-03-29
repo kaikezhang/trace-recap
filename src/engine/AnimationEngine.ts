@@ -459,16 +459,17 @@ export class AnimationEngine {
     if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
       showPhotos = true;
       photoOpacity = 1;
-    } else if ((phase === "HOVER" || phase === "ZOOM_OUT") && groupIndex > 0) {
+    } else if (groupIndex > 0) {
       const prevGroup = this.groups[groupIndex - 1];
       if (prevGroup && prevGroup.toLoc.photos.length > 0) {
-        showPhotos = true;
         if (phase === "HOVER") {
-          // HOVER: fade from 1 → 0.4
-          photoOpacity = 1 - phaseProgress * 0.6;
-        } else {
-          // ZOOM_OUT: fade from 0.4 → 0
-          photoOpacity = 0.4 * (1 - phaseProgress);
+          // HOVER: keep photos at full opacity
+          showPhotos = true;
+          photoOpacity = 1;
+        } else if (phase === "ZOOM_OUT") {
+          // ZOOM_OUT: fade from 1 → 0
+          showPhotos = true;
+          photoOpacity = 1 - phaseProgress;
         }
       }
     }
