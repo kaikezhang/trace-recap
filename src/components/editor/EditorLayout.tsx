@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
@@ -11,6 +11,8 @@ import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
 import PhotoLayoutEditor from "./PhotoLayoutEditor";
 import ExportDialog from "./ExportDialog";
+import MapEmptyState from "./MapEmptyState";
+import type { CitySearchHandle } from "./CitySearch";
 import {
   SEGMENT_LAYER_PREFIX,
   SEGMENT_GLOW_LAYER_PREFIX,
@@ -127,6 +129,8 @@ function EditorContent() {
   const visiblePhotos = useAnimationStore((s) => s.visiblePhotos);
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
   const photoOverlayOpacity = useAnimationStore((s) => s.photoOverlayOpacity);
+
+  const searchRef = useRef<CitySearchHandle>(null);
 
   const [editingLocationId, setEditingLocationId] = useState<string | null>(
     null,
@@ -533,8 +537,16 @@ function EditorContent() {
     }
   }, [searchHintMessage, setBottomSheetExpanded]);
 
+  const handleFocusSearch = useCallback(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  const handleLoadDemo = useCallback(() => {
+    window.location.href = "?demo=true";
+  }, []);
+
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col bg-[#FAFAFA]">
       <TopToolbar />
       <div className="flex flex-1 overflow-hidden">
         <LeftPanel
@@ -542,10 +554,18 @@ function EditorContent() {
           onEditLayout={handleEditLayout}
           searchHintMessage={searchHintMessage}
           onDismissSearchHint={handleSearchHintDismiss}
+          searchRef={searchRef}
         />
         {/* Map area: full width on mobile, flex-1 on desktop */}
         <div className="flex-1 relative">
           <MapCanvas />
+          {/* Empty state overlay */}
+          {locations.length === 0 && (
+            <MapEmptyState
+              onSearchClick={handleFocusSearch}
+              onLoadDemo={handleLoadDemo}
+            />
+          )}
           {/* City label overlay */}
           <AnimatePresence>
             {currentCityLabel && (

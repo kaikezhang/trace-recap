@@ -74,7 +74,7 @@ export default function RouteList({ onLocationClick, onEditLayout }: RouteListPr
         items={locations.map((l) => l.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="flex flex-col gap-1 p-3">
+        <div className="flex flex-col gap-4 p-3">
           {locations.map((loc, i) => (
             <div key={loc.id}>
               <LocationCard

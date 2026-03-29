@@ -118,7 +118,7 @@ export default function LocationCard({
       ref={setNodeRef}
       style={style}
       {...dropProps}
-      className={`rounded-lg border bg-card p-3 shadow-sm space-y-2 ${
+      className={`rounded-xl border bg-card p-3 md:p-4 shadow-sm space-y-2 ${
         isWaypoint ? "opacity-60" : ""
       } ${isDragging ? "shadow-lg" : ""} ${
         isDragOver ? "ring-2 ring-primary ring-offset-1 bg-primary/5" : ""
