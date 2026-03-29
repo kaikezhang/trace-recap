@@ -195,6 +195,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const photoOrder = layout.order ?? location.photos.map((p) => p.id);
 
   const [focalPointActive, setFocalPointActive] = useState<string | null>(null);
+  const [focalImgNatural, setFocalImgNatural] = useState<{ w: number; h: number } | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Photo dimensions for layout computation
@@ -541,14 +542,38 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
               </p>
               <div
                 className="relative w-full rounded-lg overflow-hidden border border-border cursor-crosshair"
+                data-focal-wrapper
                 style={{ maxHeight: "300px" }}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  const rect = e.currentTarget.getBoundingClientRect();
+                  const wrapperRect = e.currentTarget.getBoundingClientRect();
+                  const img = e.currentTarget.querySelector("img") as HTMLImageElement | null;
                   const updatePoint = (clientX: number, clientY: number) => {
-                    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-                    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+                    // Compute actual rendered image bounds within the object-fit:contain wrapper
+                    let imgLeft = wrapperRect.left;
+                    let imgTop = wrapperRect.top;
+                    let imgW = wrapperRect.width;
+                    let imgH = wrapperRect.height;
+                    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                      const containerW = wrapperRect.width;
+                      const containerH = wrapperRect.height;
+                      const imgAspect = img.naturalWidth / img.naturalHeight;
+                      const containerAspect = containerW / containerH;
+                      if (imgAspect > containerAspect) {
+                        // Pillarbox: image fills width, letterboxed vertically
+                        imgW = containerW;
+                        imgH = containerW / imgAspect;
+                      } else {
+                        // Letterbox: image fills height, pillarboxed horizontally
+                        imgH = containerH;
+                        imgW = containerH * imgAspect;
+                      }
+                      imgLeft = wrapperRect.left + (containerW - imgW) / 2;
+                      imgTop = wrapperRect.top + (containerH - imgH) / 2;
+                    }
+                    const x = Math.max(0, Math.min(1, (clientX - imgLeft) / imgW));
+                    const y = Math.max(0, Math.min(1, (clientY - imgTop) / imgH));
                     setPhotoFocalPoint(location.id, focalPointActive, { x, y });
                   };
                   updatePoint(e.clientX, e.clientY);
@@ -567,19 +592,47 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   className="w-full object-contain"
                   style={{ maxHeight: "300px" }}
                   draggable={false}
-                />
-                {/* Crosshair indicator on full image */}
-                <div
-                  className="absolute w-6 h-6 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{
-                    left: `${fp.x * 100}%`,
-                    top: `${fp.y * 100}%`,
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
+                    setFocalImgNatural({ w: img.naturalWidth, h: img.naturalHeight });
                   }}
-                >
-                  <div className="absolute inset-0 rounded-full border-2 border-white" style={{ boxShadow: "0 0 4px rgba(0,0,0,0.7)" }} />
-                  <div className="absolute top-1/2 left-0 w-full h-px bg-white" style={{ boxShadow: "0 0 2px rgba(0,0,0,0.5)" }} />
-                  <div className="absolute left-1/2 top-0 h-full w-px bg-white" style={{ boxShadow: "0 0 2px rgba(0,0,0,0.5)" }} />
-                </div>
+                />
+                {/* Crosshair indicator — positioned relative to rendered image area */}
+                {(() => {
+                  let leftPct = fp.x * 100;
+                  let topPct = fp.y * 100;
+                  if (focalImgNatural && focalImgNatural.w > 0 && focalImgNatural.h > 0) {
+                    const imgAspect = focalImgNatural.w / focalImgNatural.h;
+                    const wrapperEl = document.querySelector<HTMLElement>("[data-focal-wrapper]");
+                    if (wrapperEl) {
+                      const cw = wrapperEl.clientWidth;
+                      const ch = wrapperEl.clientHeight;
+                      const containerAspect = cw / ch;
+                      let imgW: number, imgH: number;
+                      if (imgAspect > containerAspect) {
+                        imgW = cw;
+                        imgH = cw / imgAspect;
+                      } else {
+                        imgH = ch;
+                        imgW = ch * imgAspect;
+                      }
+                      const offX = (cw - imgW) / 2;
+                      const offY = (ch - imgH) / 2;
+                      leftPct = ((offX + fp.x * imgW) / cw) * 100;
+                      topPct = ((offY + fp.y * imgH) / ch) * 100;
+                    }
+                  }
+                  return (
+                    <div
+                      className="absolute w-6 h-6 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                      style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                    >
+                      <div className="absolute inset-0 rounded-full border-2 border-white" style={{ boxShadow: "0 0 4px rgba(0,0,0,0.7)" }} />
+                      <div className="absolute top-1/2 left-0 w-full h-px bg-white" style={{ boxShadow: "0 0 2px rgba(0,0,0,0.5)" }} />
+                      <div className="absolute left-1/2 top-0 h-full w-px bg-white" style={{ boxShadow: "0 0 2px rgba(0,0,0,0.5)" }} />
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );

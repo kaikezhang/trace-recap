@@ -335,6 +335,58 @@ function layoutScatter(photos: PhotoMeta[], gap: number): PhotoRect[] {
     }
   }
 
+  // Final validation pass: guarantee no pair overlaps more than 20% of the smaller rect
+  const maxOverlapRatio = 0.2;
+  for (let i = 0; i < rects.length; i++) {
+    for (let j = i + 1; j < rects.length; j++) {
+      const a = rects[i];
+      const b = rects[j];
+      const aCx = a.x + a.width / 2;
+      const aCy = a.y + a.height / 2;
+      const bCx = b.x + b.width / 2;
+      const bCy = b.y + b.height / 2;
+
+      const overlapX = (a.width + b.width) / 2 - Math.abs(aCx - bCx);
+      const overlapY = (a.height + b.height) / 2 - Math.abs(aCy - bCy);
+
+      if (overlapX > 0 && overlapY > 0) {
+        const overlapArea = overlapX * overlapY;
+        const smallerArea = Math.min(a.width * a.height, b.width * b.height);
+        if (overlapArea > smallerArea * maxOverlapRatio) {
+          // Force-separate along center-to-center vector
+          let dx = bCx - aCx;
+          let dy = bCy - aCy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 1e-6) {
+            // Coincident centers — pick arbitrary direction
+            dx = 1;
+            dy = 0;
+          } else {
+            dx /= dist;
+            dy /= dist;
+          }
+          // Iteratively push apart until overlap <= 20%
+          const step = 0.005;
+          for (let iter = 0; iter < 200; iter++) {
+            a.x -= dx * step;
+            a.y -= dy * step;
+            b.x += dx * step;
+            b.y += dy * step;
+            const newACx = a.x + a.width / 2;
+            const newACy = a.y + a.height / 2;
+            const newBCx = b.x + b.width / 2;
+            const newBCy = b.y + b.height / 2;
+            const newOX = (a.width + b.width) / 2 - Math.abs(newACx - newBCx);
+            const newOY = (a.height + b.height) / 2 - Math.abs(newACy - newBCy);
+            if (newOX <= 0 || newOY <= 0 || newOX * newOY <= smallerArea * maxOverlapRatio) {
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Clamp all positions to keep within bounds
   for (const r of rects) {
     r.x = Math.max(margin, Math.min(r.x, 1 - r.width - margin));
