@@ -9,6 +9,8 @@ import {
   PanelLeftClose,
   PanelLeft,
   Trash2,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +25,7 @@ import {
 import MapStyleSelector from "./MapStyleSelector";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
+import { useHistoryStore } from "@/stores/historyStore";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,6 +37,10 @@ export default function TopToolbar() {
   const loadRouteData = useProjectStore((s) => s.loadRouteData);
   const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
   const clearRoute = useProjectStore((s) => s.clearRoute);
+  const undo = useHistoryStore((s) => s.undo);
+  const redo = useHistoryStore((s) => s.redo);
+  const canUndo = useHistoryStore((s) => s.canUndo);
+  const canRedo = useHistoryStore((s) => s.canRedo);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -87,6 +94,26 @@ export default function TopToolbar() {
           </Link>
         </div>
         <div className="flex items-center gap-1.5 md:gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={undo}
+            disabled={!canUndo}
+            aria-label="Undo"
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={redo}
+            disabled={!canRedo}
+            aria-label="Redo"
+          >
+            <Redo2 className="h-4 w-4" />
+          </Button>
           <MapStyleSelector />
           <Button
             variant="outline"
