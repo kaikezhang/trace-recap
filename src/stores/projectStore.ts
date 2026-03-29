@@ -242,7 +242,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           coordinates: loc.coordinates as [number, number],
           isWaypoint: loc.isWaypoint ?? false,
           ...(photos.length > 0 ? { photos } : {}),
-          ...(loc.photoLayout ? { photoLayout: loc.photoLayout } : {}),
+          ...(loc.photoLayout ? {
+            photoLayout: {
+              ...loc.photoLayout,
+              // Convert order from photo IDs to indices for portable serialization
+              order: loc.photoLayout.order
+                ? loc.photoLayout.order
+                    .map((id) => loc.photos.findIndex((p) => p.id === id))
+                    .filter((idx) => idx >= 0)
+                    .map(String)
+                : undefined,
+            },
+          } : {}),
         };
       })
     );
@@ -275,7 +286,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           coordinates: loc.coordinates,
           photos,
           isWaypoint: i > 0 && i < data.locations.length - 1 && (loc.isWaypoint ?? false),
-          ...(loc.photoLayout ? { photoLayout: loc.photoLayout } : {}),
+          ...(loc.photoLayout ? {
+            photoLayout: {
+              ...loc.photoLayout,
+              // Order was exported as index strings — remap to new photo IDs
+              order: loc.photoLayout.order
+                ? loc.photoLayout.order
+                    .map((idxStr) => photos[parseInt(idxStr)]?.id)
+                    .filter(Boolean)
+                : undefined,
+            },
+          } : {}),
         };
       });
 

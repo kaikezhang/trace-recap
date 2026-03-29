@@ -12,6 +12,7 @@ export interface Photo {
   locationId: string;
   url: string;
   caption?: string;
+  focalPoint?: { x: number; y: number }; // 0-1 range, default center (0.5, 0.5)
 }
 
 export interface Location {
@@ -87,6 +88,10 @@ export interface PhotoLayout {
   order?: string[];        // photo IDs in custom order
   gap?: number;            // gap in px (0-20), default 8
   borderRadius?: number;   // border radius in px (0-20), default 8
+  customProportions?: {
+    rows?: number[];       // relative row heights (e.g. [2, 1] = first row 2x the second)
+    cols?: number[];       // relative column widths
+  };
 }
 
 export type MapStyle = "light" | "dark" | "satellite";
