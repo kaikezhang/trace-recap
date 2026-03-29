@@ -125,8 +125,6 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
         left: 0,
         right: 0,
         visibility: visible && ready ? "visible" : "hidden",
-        opacity: opacity,
-        transition: "opacity 0.3s ease-out",
       }}
     >
       <AnimatePresence>
@@ -149,14 +147,35 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
             return (
               <motion.div
                 key={photo.id}
-                initial={{ opacity: 0, scale: 0.8, y: 40 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: -20 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 25,
-                  delay: i * 0.08,
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                variants={{
+                  hidden: { opacity: 0, scale: 0.6, y: 60, filter: "blur(8px)" },
+                  visible: {
+                    opacity: 1,
+                    scale: 1,
+                    y: 0,
+                    filter: "blur(0px)",
+                    transition: {
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 25,
+                      delay: i * 0.08,
+                    },
+                  },
+                  exit: {
+                    opacity: 0,
+                    scale: 0.5,
+                    y: -80,
+                    filter: "blur(6px)",
+                    rotate: i % 2 === 0 ? -8 : 8,
+                    transition: {
+                      duration: 0.45,
+                      ease: [0.4, 0, 1, 1],
+                      delay: (n - 1 - i) * 0.06,
+                    },
+                  },
                 }}
                 className="absolute overflow-hidden drop-shadow-xl"
                 style={{
