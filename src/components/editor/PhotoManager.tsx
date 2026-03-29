@@ -1,9 +1,43 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { ImagePlus, X, LayoutGrid } from "lucide-react";
+import { Upload, X, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useProjectStore } from "@/stores/projectStore";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function processImageFiles(
+  files: FileList | null,
+  maxCount: number,
+  addPhoto: (locationId: string, photo: { url: string }) => void,
+  locationId: string
+) {
+  if (!files) return;
+  const toAdd = Array.from(files).slice(0, maxCount);
+  for (const file of toAdd) {
+    if (!file.type.startsWith("image/")) continue;
+    if (file.size > MAX_FILE_SIZE) {
+      console.warn(`Skipped "${file.name}": exceeds 10MB limit (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      continue;
+    }
+    try {
+      const url = await readFileAsDataURL(file);
+      addPhoto(locationId, { url });
+    } catch (err) {
+      console.warn(`Failed to read "${file.name}":`, err);
+    }
+  }
+}
 
 interface PhotoManagerProps {
   locationId: string;
@@ -21,13 +55,7 @@ export function usePhotoDropZone(locationId: string) {
     (files: FileList | null) => {
       if (!files || !location) return;
       const remaining = 9 - location.photos.length;
-      const toAdd = Array.from(files).slice(0, remaining);
-      for (const file of toAdd) {
-        if (file.type.startsWith("image/")) {
-          const url = URL.createObjectURL(file);
-          addPhoto(locationId, { url });
-        }
-      }
+      void processImageFiles(files, remaining, addPhoto, locationId);
     },
     [locationId, location, addPhoto]
   );
@@ -66,13 +94,7 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
     const remaining = 9 - location.photos.length;
-    const toAdd = Array.from(files).slice(0, remaining);
-    for (const file of toAdd) {
-      if (file.type.startsWith("image/")) {
-        const url = URL.createObjectURL(file);
-        addPhoto(locationId, { url });
-      }
-    }
+    void processImageFiles(files, remaining, addPhoto, locationId);
   };
 
   return (
@@ -105,8 +127,8 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
               className="h-7 text-xs gap-1"
               onClick={() => inputRef.current?.click()}
             >
-              <ImagePlus className="h-3 w-3" />
-              Add Photo
+              <Upload className="h-3 w-3" />
+              Upload
             </Button>
             <input
               ref={inputRef}
