@@ -10,11 +10,13 @@ import {
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
+import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
   current: number;
   total: number;
+  encodingMethod?: "webcodecs" | "server";
 };
 
 type ProgressCallback = (progress: ExportProgress) => void;
@@ -534,6 +536,17 @@ export class VideoExporter {
     ctx.fill();
   }
 
+  /** Calculate target export dimensions from aspect ratio and resolution settings */
+  private getTargetDimensions(): { width: number; height: number } {
+    const res = this.settings.resolution; // height in pixels (720 or 1080)
+    const ar = this.settings.aspectRatio;
+    if (ar === "9:16") {
+      return { width: Math.round(res * 9 / 16), height: res };
+    }
+    // 16:9 (default)
+    return { width: Math.round(res * 16 / 9), height: res };
+  }
+
   async export(onProgress: ProgressCallback): Promise<Blob | null> {
     const { fps } = this.settings;
     this.cancelled = false;
@@ -543,23 +556,12 @@ export class VideoExporter {
     const totalDuration = this.engine.getTotalDuration();
     const totalFrames = Math.ceil(totalDuration * fps);
     const canvas = this.map.getCanvas();
+    const useWebCodecs = isWebCodecsSupported();
+
+    const { width: targetW, height: targetH } = this.getTargetDimensions();
 
     await this.preloadIcons();
     await this.preloadPhotos();
-
-    this.engine.renderFrame(0);
-    await this.waitForMapIdle();
-    await new Promise((r) => setTimeout(r, 1000));
-    this.engine.renderFrame(totalDuration * 0.25);
-    await this.waitForMapIdle();
-    this.engine.renderFrame(totalDuration * 0.5);
-    await this.waitForMapIdle();
-    this.engine.renderFrame(totalDuration * 0.75);
-    await this.waitForMapIdle();
-    this.engine.renderFrame(totalDuration);
-    await this.waitForMapIdle();
-    this.engine.renderFrame(0);
-    await this.waitForMapIdle();
 
     this.hideAllSegments();
 
@@ -570,13 +572,133 @@ export class VideoExporter {
     this.engine.on("progress", onProgressEvent);
 
     const offscreen = document.createElement("canvas");
-    offscreen.width = canvas.width;
-    offscreen.height = canvas.height;
+    offscreen.width = targetW;
+    offscreen.height = targetH;
     const offCtx = offscreen.getContext("2d");
     if (!offCtx) throw new Error("Failed to create offscreen 2D context");
 
-    const scaleX = canvas.width / canvas.clientWidth;
-    const scaleY = canvas.height / canvas.clientHeight;
+    const scaleX = targetW / canvas.clientWidth;
+    const scaleY = targetH / canvas.clientHeight;
+
+    try {
+      if (useWebCodecs) {
+        return await this.exportWithWebCodecs(
+          offscreen, offCtx, canvas, scaleX, scaleY,
+          targetW, targetH, totalFrames, totalDuration, fps, onProgress
+        );
+      } else {
+        return await this.exportWithServer(
+          offscreen, offCtx, canvas, scaleX, scaleY,
+          totalFrames, totalDuration, fps, signal, onProgress
+        );
+      }
+    } finally {
+      this.restoreAllSegments();
+      this.engine.getIconAnimator().hide();
+
+      this.engine.off("routeDrawProgress", onRouteDrawEvent);
+      this.engine.off("progress", onProgressEvent);
+    }
+  }
+
+  /** Capture a single frame onto the offscreen canvas */
+  private async captureFrame(
+    offCtx: CanvasRenderingContext2D,
+    offscreen: HTMLCanvasElement,
+    canvas: HTMLCanvasElement,
+    scaleX: number,
+    scaleY: number,
+    captured: { routeDraw: AnimationEvent | null; progress: AnimationEvent | null },
+    frameIndex: number,
+    fps: number,
+    totalDuration: number
+  ): Promise<void> {
+    const time = frameIndex / fps;
+    const progress = time / totalDuration;
+
+    captured.routeDraw = null;
+    captured.progress = null;
+
+    this.engine.seekTo(Math.min(progress, 1));
+    this.applyRouteDrawFromCapture(captured);
+    await this.waitForMapIdle();
+
+    offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
+    offCtx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height);
+    this.drawVehicleIcon(offCtx, scaleX, scaleY);
+    this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
+    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured);
+  }
+
+  private async exportWithWebCodecs(
+    offscreen: HTMLCanvasElement,
+    offCtx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    scaleX: number,
+    scaleY: number,
+    targetW: number,
+    targetH: number,
+    totalFrames: number,
+    totalDuration: number,
+    fps: number,
+    onProgress: ProgressCallback
+  ): Promise<Blob | null> {
+    const captured = { routeDraw: null as AnimationEvent | null, progress: null as AnimationEvent | null };
+    const onRouteDrawEvent = (e: AnimationEvent) => { captured.routeDraw = e; };
+    const onProgressEvent = (e: AnimationEvent) => { captured.progress = e; };
+    this.engine.on("routeDrawProgress", onRouteDrawEvent);
+    this.engine.on("progress", onProgressEvent);
+
+    const webCodecsExporter = new WebCodecsExporter({
+      width: targetW,
+      height: targetH,
+      fps,
+    });
+
+    try {
+      for (let i = 0; i < totalFrames; i++) {
+        if (this.cancelled) return null;
+
+        await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
+        webCodecsExporter.addFrame(offscreen, i);
+
+        onProgress({
+          phase: "capturing",
+          current: i + 1,
+          total: totalFrames,
+          encodingMethod: "webcodecs",
+        });
+      }
+
+      if (this.cancelled) return null;
+
+      onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "webcodecs" });
+      const blob = await webCodecsExporter.finalize();
+      onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "webcodecs" });
+      return blob;
+    } finally {
+      this.engine.off("routeDrawProgress", onRouteDrawEvent);
+      this.engine.off("progress", onProgressEvent);
+    }
+  }
+
+  private async exportWithServer(
+    offscreen: HTMLCanvasElement,
+    offCtx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    scaleX: number,
+    scaleY: number,
+    totalFrames: number,
+    totalDuration: number,
+    fps: number,
+    signal: AbortSignal,
+    onProgress: ProgressCallback
+  ): Promise<Blob | null> {
+    const captured = { routeDraw: null as AnimationEvent | null, progress: null as AnimationEvent | null };
+    const onRouteDrawEvent = (e: AnimationEvent) => { captured.routeDraw = e; };
+    const onProgressEvent = (e: AnimationEvent) => { captured.progress = e; };
+    this.engine.on("routeDrawProgress", onRouteDrawEvent);
+    this.engine.on("progress", onProgressEvent);
 
     try {
       const startRes = await fetch("/api/encode-video/start", {
@@ -591,23 +713,7 @@ export class VideoExporter {
       for (let i = 0; i < totalFrames; i++) {
         if (this.cancelled) return null;
 
-        const time = i / fps;
-        const progress = time / totalDuration;
-
-        captured.routeDraw = null;
-        captured.progress = null;
-
-        this.engine.seekTo(Math.min(progress, 1));
-
-        this.applyRouteDrawFromCapture(captured);
-
-        await this.waitForMapIdle();
-
-        offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
-        offCtx.drawImage(canvas, 0, 0);
-        this.drawVehicleIcon(offCtx, scaleX, scaleY);
-        this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
-        this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured);
+        await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
 
         const blob = await new Promise<Blob>((resolve, reject) => {
           offscreen.toBlob(
@@ -641,12 +747,13 @@ export class VideoExporter {
           phase: "capturing",
           current: i + 1,
           total: totalFrames,
+          encodingMethod: "server",
         });
       }
 
       if (this.cancelled) return null;
 
-      onProgress({ phase: "encoding", current: 0, total: 1 });
+      onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "server" });
 
       const response = await fetch("/api/encode-video", {
         method: "POST",
@@ -660,16 +767,13 @@ export class VideoExporter {
         throw new Error(`Server encoding failed: ${text}`);
       }
 
-      onProgress({ phase: "encoding", current: 1, total: 1 });
+      onProgress({ phase: "encoding", current: 1, total: 1, encodingMethod: "server" });
 
       const mp4Blob = await response.blob();
-      onProgress({ phase: "done", current: 1, total: 1 });
+      onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "server" });
 
       return mp4Blob;
     } finally {
-      this.restoreAllSegments();
-      this.engine.getIconAnimator().hide();
-
       this.engine.off("routeDrawProgress", onRouteDrawEvent);
       this.engine.off("progress", onProgressEvent);
     }

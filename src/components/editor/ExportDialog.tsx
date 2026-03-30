@@ -84,6 +84,7 @@ export default function ExportDialog() {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadSize, setDownloadSize] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [encodingMethod, setEncodingMethod] = useState<"webcodecs" | "server" | null>(null);
   const exporterRef = useRef<VideoExporter | null>(null);
 
   const startExport = useCallback(async (settings: ExportSettings) => {
@@ -94,6 +95,7 @@ export default function ExportDialog() {
     setDownloadSize(null);
     setProgress(null);
     setExportError(null);
+    setEncodingMethod(null);
 
     const engine = new AnimationEngine(map, locations, segments);
     const exporter = new VideoExporter(engine, map, {
@@ -103,8 +105,13 @@ export default function ExportDialog() {
     });
     exporterRef.current = exporter;
 
+    const handleProgress = (p: ExportProgress) => {
+      setProgress(p);
+      if (p.encodingMethod) setEncodingMethod(p.encodingMethod);
+    };
+
     try {
-      const blob = await exporter.export(setProgress);
+      const blob = await exporter.export(handleProgress);
 
       if (blob) {
         const url = URL.createObjectURL(blob);
@@ -212,6 +219,13 @@ export default function ExportDialog() {
                 Close
               </Button>
             </div>
+            {encodingMethod && (
+              <p className="text-xs text-muted-foreground text-center">
+                {encodingMethod === "webcodecs"
+                  ? "Encoded locally with WebCodecs"
+                  : "Encoded on server"}
+              </p>
+            )}
           </div>
         </DialogContent>
       </Dialog>

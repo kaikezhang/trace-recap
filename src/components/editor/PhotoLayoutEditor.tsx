@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   X,
   LayoutGrid,
   LayoutTemplate,
   Image as ImageIcon,
   Images,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
+import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo } from "@/types";
 
 interface PhotoLayoutEditorProps {
@@ -28,136 +27,65 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
 ];
 
-/* ── Preview renderers for each layout style ── */
+/* ── Unified preview using actual layout functions ── */
 
-function GridPreview({ photos, borderRadius }: { photos: Photo[]; borderRadius: number }) {
-  const visible = photos.slice(0, 4);
-  return (
-    <div className="grid grid-cols-2 grid-rows-2 gap-2 w-full h-full p-3">
-      {visible.map((photo) => (
-        <div key={photo.id} className="relative overflow-hidden" style={{ borderRadius: `${borderRadius}px` }}>
-          <img
-            src={photo.url}
-            alt=""
-            className="w-full h-full object-cover"
-            style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CollagePreview({ photos, borderRadius }: { photos: Photo[]; borderRadius: number }) {
-  const main = photos[0];
-  const others = photos.slice(1, 4);
-  if (!main) return null;
-  return (
-    <div className="relative w-full h-full p-3">
-      <div className="absolute inset-3 overflow-hidden" style={{ borderRadius: `${borderRadius}px` }}>
-        <img
-          src={main.url}
-          alt=""
-          className="w-full h-full object-cover"
-          style={{ objectPosition: `${(main.focalPoint?.x ?? 0.5) * 100}% ${(main.focalPoint?.y ?? 0.5) * 100}%` }}
-        />
-      </div>
-      {others.map((photo, i) => (
-        <div
-          key={photo.id}
-          className="absolute overflow-hidden shadow-lg border-2 border-white"
-          style={{
-            borderRadius: `${borderRadius}px`,
-            width: "35%",
-            height: "35%",
-            bottom: `${12 + i * 4}%`,
-            right: `${8 + i * 18}%`,
-          }}
-        >
-          <img
-            src={photo.url}
-            alt=""
-            className="w-full h-full object-cover"
-            style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SinglePreview({ photos, borderRadius, selectedIndex }: { photos: Photo[]; borderRadius: number; selectedIndex: number }) {
-  const photo = photos[selectedIndex] ?? photos[0];
-  if (!photo) return null;
-  return (
-    <div className="flex items-center justify-center w-full h-full p-6">
-      <div className="w-3/4 h-3/4 overflow-hidden" style={{ borderRadius: `${borderRadius}px` }}>
-        <img
-          src={photo.url}
-          alt=""
-          className="w-full h-full object-cover"
-          style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function CarouselPreview({
+function LayoutPreview({
   photos,
   borderRadius,
-  carouselIndex,
-  onPrev,
-  onNext,
+  template,
+  gap,
+  customProportions,
 }: {
   photos: Photo[];
   borderRadius: number;
-  carouselIndex: number;
-  onPrev: () => void;
-  onNext: () => void;
+  template: LayoutTemplateType | "auto";
+  gap: number;
+  customProportions?: { rows?: number[]; cols?: number[] };
 }) {
-  const photo = photos[carouselIndex] ?? photos[0];
-  if (!photo) return null;
+  const containerAspect = 16 / 10; // approximate preview container aspect
+  const containerWidthPx = 500; // reference width for gap calculation
+
+  const metas = useMemo(
+    () => photos.map((p) => ({ id: p.id, aspect: 1 })),
+    [photos]
+  );
+
+  const rects = useMemo(() => {
+    if (template === "auto") {
+      return computeAutoLayout(metas, containerAspect, gap, containerWidthPx);
+    }
+    return computeTemplateLayout(metas, containerAspect, template, gap, containerWidthPx, customProportions);
+  }, [metas, containerAspect, template, gap, containerWidthPx, customProportions]);
+
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full p-4">
-      <div className="relative flex-1 w-full flex items-center justify-center">
-        {photos.length > 1 && (
-          <button
-            onClick={onPrev}
-            className="absolute left-2 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white shadow flex items-center justify-center transition-colors"
+    <div className="relative w-full h-full">
+      {rects.map((rect, i) => {
+        if (i >= photos.length) return null;
+        const photo = photos[i];
+        return (
+          <div
+            key={photo.id}
+            className="absolute overflow-hidden"
+            style={{
+              left: `${rect.x * 100}%`,
+              top: `${rect.y * 100}%`,
+              width: `${rect.width * 100}%`,
+              height: `${rect.height * 100}%`,
+              borderRadius: `${borderRadius}px`,
+              transform: rect.rotation ? `rotate(${rect.rotation}deg)` : undefined,
+            }}
           >
-            <ChevronLeft className="w-4 h-4 text-gray-700" />
-          </button>
-        )}
-        <div className="w-3/4 h-full overflow-hidden" style={{ borderRadius: `${borderRadius}px` }}>
-          <img
-            src={photo.url}
-            alt=""
-            className="w-full h-full object-cover"
-            style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
-          />
-        </div>
-        {photos.length > 1 && (
-          <button
-            onClick={onNext}
-            className="absolute right-2 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white shadow flex items-center justify-center transition-colors"
-          >
-            <ChevronRight className="w-4 h-4 text-gray-700" />
-          </button>
-        )}
-      </div>
-      {photos.length > 1 && (
-        <div className="flex gap-1.5 mt-3">
-          {photos.map((p, i) => (
-            <div
-              key={p.id}
-              className={`w-2 h-2 rounded-full transition-colors ${
-                i === carouselIndex ? "bg-indigo-500" : "bg-gray-300"
-              }`}
+            <img
+              src={photo.url}
+              alt=""
+              className="w-full h-full object-cover"
+              style={{
+                objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%`,
+              }}
             />
-          ))}
-        </div>
-      )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -169,10 +97,10 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const activeTemplate: LayoutTemplateType | "auto" =
     layout.mode === "manual" && layout.template ? layout.template : "auto";
   const borderRadiusValue = layout.borderRadius ?? 8;
+  const gapValue = layout.gap ?? 8;
   const photoOrder = layout.order ?? location.photos.map((p) => p.id);
 
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
-  const [carouselIndex, setCarouselIndex] = useState(0);
 
   const activeStyle: LayoutStyle = (() => {
     if (activeTemplate === "grid") return "grid";
@@ -265,31 +193,16 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
               ))}
             </div>
 
-            {/* CENTER — Live preview */}
+            {/* CENTER — Live preview using actual layout functions */}
             <div className="flex-1 bg-gray-100 flex items-center justify-center p-6">
               <div className="w-full h-full bg-gray-200/50 rounded-xl overflow-hidden relative">
-                {activeStyle === "grid" && (
-                  <GridPreview photos={orderedPhotos} borderRadius={borderRadiusValue} />
-                )}
-                {activeStyle === "collage" && (
-                  <CollagePreview photos={orderedPhotos} borderRadius={borderRadiusValue} />
-                )}
-                {activeStyle === "single" && (
-                  <SinglePreview
-                    photos={orderedPhotos}
-                    borderRadius={borderRadiusValue}
-                    selectedIndex={selectedPhotoIndex}
-                  />
-                )}
-                {activeStyle === "carousel" && (
-                  <CarouselPreview
-                    photos={orderedPhotos}
-                    borderRadius={borderRadiusValue}
-                    carouselIndex={carouselIndex}
-                    onPrev={() => setCarouselIndex((i) => (i - 1 + orderedPhotos.length) % orderedPhotos.length)}
-                    onNext={() => setCarouselIndex((i) => (i + 1) % orderedPhotos.length)}
-                  />
-                )}
+                <LayoutPreview
+                  photos={orderedPhotos}
+                  borderRadius={borderRadiusValue}
+                  template={activeTemplate}
+                  gap={gapValue}
+                  customProportions={layout.customProportions}
+                />
               </div>
             </div>
 
@@ -304,10 +217,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                     key={photo.id}
                     onClick={() => {
                       setSelectedPhotoIndex(i);
-                      setCarouselIndex(i);
                     }}
                     className={`w-full aspect-square rounded-lg overflow-hidden transition-all ${
-                      (activeStyle === "single" ? selectedPhotoIndex === i : carouselIndex === i)
+                      selectedPhotoIndex === i
                         ? "ring-2 ring-indigo-500 ring-offset-2"
                         : "hover:ring-2 hover:ring-gray-300 hover:ring-offset-1"
                     }`}
