@@ -1,81 +1,78 @@
 import mapboxgl from "mapbox-gl";
 import * as turf from "@turf/turf";
+import lottie from "lottie-web";
+import type { AnimationItem } from "lottie-web";
 import type { AnimationGroup, AnimationPhase, TransportMode } from "@/types";
 
-// 4 direction variants per transport mode
-// Bearing ranges: right (315-45°), down (45-135°), left (135-225°), up (225-315°)
-type Direction = "right" | "down" | "left" | "up";
-
-function bearingToDirection(bearing: number): Direction {
-  // turf.bearing: 0°=North, 90°=East, 180°=South, 270°=West
-  // Map to icon direction:
-  //   North (315°-45°)  → up icon
-  //   East  (45°-135°)  → right icon
-  //   South (135°-225°) → down icon
-  //   West  (225°-315°) → left icon
-  const b = ((bearing % 360) + 360) % 360;
-  if (b >= 315 || b < 45) return "up";
-  if (b >= 45 && b < 135) return "right";
-  if (b >= 135 && b < 225) return "down";
-  return "left";
-}
-
-function getIconPath(mode: TransportMode, direction: Direction): string {
-  return `/icons/${mode}-${direction}.png`;
-}
-
 const BASE_SIZE = 52;
+
+/** All Lottie animations face right (east = 90°). Rotation offset to convert bearing to CSS rotation. */
+const LOTTIE_FACING_OFFSET = 90;
 
 export interface IconState {
   visible: boolean;
   position: [number, number] | null;
-  iconSrc: string;
+  /** Current transport mode (used by VideoExporter to identify the active Lottie) */
+  mode: TransportMode | null;
   size: number;
   opacity: number;
+  /** Current bearing in degrees (0 = north). Used for rotation during canvas compositing. */
+  bearing: number;
 }
 
 export class IconAnimator {
   private map: mapboxgl.Map;
   private groups: AnimationGroup[];
   private marker: mapboxgl.Marker | null = null;
-  private iconEl: HTMLDivElement;
-  private imgEl: HTMLImageElement;
-  private currentIconKey: string = "";
+  private containerEl: HTMLDivElement;
+  private lottieEl: HTMLDivElement;
+
+  private currentMode: TransportMode | null = null;
+  private currentBearing: number = 0;
+  private lottieInstances: Map<TransportMode, AnimationItem> = new Map();
+  private activeInstance: AnimationItem | null = null;
+  private lottieFrame: number = 0;
+
+  /** Offscreen canvas + Lottie instances for video export compositing */
+  private canvasEl: HTMLCanvasElement | null = null;
+  private canvasInstances: Map<TransportMode, AnimationItem> = new Map();
+
   private lastState: IconState = {
     visible: false,
     position: null,
-    iconSrc: "",
+    mode: null,
     size: BASE_SIZE,
     opacity: 1,
+    bearing: 0,
   };
 
   constructor(map: mapboxgl.Map, groups: AnimationGroup[]) {
     this.map = map;
     this.groups = groups;
 
-    this.iconEl = document.createElement("div");
-    this.iconEl.style.cssText = `
+    // Container for the Mapbox marker
+    this.containerEl = document.createElement("div");
+    this.containerEl.style.cssText = `
       width:${BASE_SIZE}px;height:${BASE_SIZE}px;
       pointer-events:none;
       transition:opacity 0.3s ease;
       display:flex;align-items:center;justify-content:center;
     `;
 
-    this.imgEl = document.createElement("img");
-    this.imgEl.style.cssText = `
+    // Inner element that holds the Lottie SVG and gets rotated for direction
+    this.lottieEl = document.createElement("div");
+    this.lottieEl.style.cssText = `
       width:100%;height:100%;
-      object-fit:contain;
       filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));
     `;
-    this.iconEl.appendChild(this.imgEl);
+    this.containerEl.appendChild(this.lottieEl);
   }
 
   private ensureMarker() {
     if (!this.marker) {
       this.marker = new mapboxgl.Marker({
-        element: this.iconEl,
+        element: this.containerEl,
         anchor: "center",
-        // No rotation — we use directional icon variants instead
         rotationAlignment: "viewport",
         pitchAlignment: "viewport",
       })
@@ -84,11 +81,46 @@ export class IconAnimator {
     }
   }
 
-  private setIcon(mode: TransportMode, direction: Direction) {
-    const key = `${mode}-${direction}`;
-    if (key === this.currentIconKey) return;
-    this.currentIconKey = key;
-    this.imgEl.src = getIconPath(mode, direction);
+  /** Load (or retrieve cached) Lottie animation for a transport mode in the SVG marker */
+  private loadLottie(mode: TransportMode): AnimationItem {
+    const existing = this.lottieInstances.get(mode);
+    if (existing) return existing;
+
+    const instance = lottie.loadAnimation({
+      container: this.lottieEl,
+      renderer: "svg",
+      loop: true,
+      autoplay: false,
+      path: `/lottie/${mode}.json`,
+    });
+
+    this.lottieInstances.set(mode, instance);
+    return instance;
+  }
+
+  /** Switch to a different transport mode's Lottie animation */
+  private setMode(mode: TransportMode) {
+    if (mode === this.currentMode) return;
+
+    // Hide current animation's SVG
+    if (this.activeInstance) {
+      this.activeInstance.stop();
+      const wrapper = (this.activeInstance as AnimationItem & { wrapper?: HTMLElement }).wrapper;
+      if (wrapper) wrapper.style.display = "none";
+    }
+
+    this.currentMode = mode;
+    this.activeInstance = this.loadLottie(mode);
+    const wrapper = (this.activeInstance as AnimationItem & { wrapper?: HTMLElement }).wrapper;
+    if (wrapper) wrapper.style.display = "block";
+    this.activeInstance.play();
+  }
+
+  /** Rotate the Lottie element to match the travel bearing */
+  private setDirection(bearing: number) {
+    this.currentBearing = bearing;
+    // Lottie icons face right (90°), so offset by 90 to align with map bearing
+    this.lottieEl.style.transform = `rotate(${bearing - LOTTIE_FACING_OFFSET}deg)`;
   }
 
   update(groupIndex: number, phase: AnimationPhase, progress: number) {
@@ -99,7 +131,7 @@ export class IconAnimator {
 
     const routeLine = group.mergedGeometry;
     if (!routeLine || routeLine.coordinates.length < 2) {
-      this.iconEl.style.display = "none";
+      this.containerEl.style.display = "none";
       return;
     }
 
@@ -110,11 +142,10 @@ export class IconAnimator {
     const startPt = coords[0] as [number, number];
     const endPt = coords[coords.length - 1] as [number, number];
 
-    // Determine which sub-segment the current position is on for the correct icon
     const mode = this.getTransportModeAtProgress(group, totalLength, phase, progress);
+    this.setMode(mode);
 
-    // Only flights use mid-point direction change (great circle routes curve significantly)
-    // All other transport modes use fixed start→end bearing
+    // Compute bearing for direction
     let bearing: number;
     if (mode === "flight") {
       const midIdx = Math.floor(coords.length / 2);
@@ -126,8 +157,7 @@ export class IconAnimator {
     } else {
       bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
     }
-    const direction = bearingToDirection(bearing);
-    this.setIcon(mode, direction);
+    this.setDirection(bearing);
 
     let position: [number, number];
     let showIcon = true;
@@ -168,27 +198,89 @@ export class IconAnimator {
     }
 
     this.marker!.setLngLat(position);
-    // NO rotation — directional variant handles it
     this.marker!.setRotation(0);
 
     const size = Math.round(BASE_SIZE * scale);
-    this.iconEl.style.width = `${size}px`;
-    this.iconEl.style.height = `${size}px`;
-    this.iconEl.style.opacity = showIcon ? String(opacity) : "0";
-    this.iconEl.style.display = showIcon ? "block" : "none";
+    this.containerEl.style.width = `${size}px`;
+    this.containerEl.style.height = `${size}px`;
+    this.containerEl.style.opacity = showIcon ? String(opacity) : "0";
+    this.containerEl.style.display = showIcon ? "block" : "none";
 
-    // Store state for canvas compositing (video export)
     this.lastState = {
       visible: showIcon && opacity > 0,
       position,
-      iconSrc: this.imgEl.src,
+      mode: this.currentMode,
       size,
       opacity: showIcon ? opacity : 0,
+      bearing,
     };
   }
 
   getState(): IconState {
     return { ...this.lastState };
+  }
+
+  /**
+   * Ensure the offscreen canvas Lottie renderer is ready for a given mode.
+   * Used by VideoExporter for frame-accurate canvas compositing.
+   */
+  ensureCanvasRenderer(mode: TransportMode): HTMLCanvasElement {
+    if (!this.canvasEl) {
+      this.canvasEl = document.createElement("canvas");
+      this.canvasEl.width = BASE_SIZE * 2;
+      this.canvasEl.height = BASE_SIZE * 2;
+    }
+
+    if (!this.canvasInstances.has(mode)) {
+      // Clear any prior content from the canvas for this new mode load
+      const ctx = this.canvasEl.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
+
+      const instance = lottie.loadAnimation({
+        container: this.canvasEl,
+        renderer: "canvas",
+        loop: true,
+        autoplay: false,
+        path: `/lottie/${mode}.json`,
+        rendererSettings: {
+          preserveAspectRatio: "xMidYMid meet",
+        },
+      });
+      this.canvasInstances.set(mode, instance);
+    }
+
+    return this.canvasEl;
+  }
+
+  /**
+   * Draw the current Lottie frame onto an export canvas context.
+   * Called by VideoExporter instead of drawing a static PNG.
+   */
+  drawToCanvas(
+    ctx: CanvasRenderingContext2D,
+    px: number,
+    py: number,
+    size: number,
+  ): void {
+    const state = this.lastState;
+    if (!state.visible || !state.position || state.opacity <= 0 || !state.mode) return;
+
+    const canvasInstance = this.canvasInstances.get(state.mode);
+    if (!canvasInstance || !this.canvasEl) return;
+
+    // Advance the Lottie frame on the canvas renderer
+    this.lottieFrame = (this.lottieFrame + 1) % Math.max(canvasInstance.totalFrames, 1);
+    canvasInstance.goToAndStop(this.lottieFrame, true);
+
+    const prev = ctx.globalAlpha;
+    ctx.save();
+    ctx.globalAlpha = state.opacity;
+    ctx.translate(px, py);
+    // Rotate to match bearing (Lottie faces right = 90°)
+    ctx.rotate((state.bearing - LOTTIE_FACING_OFFSET) * Math.PI / 180);
+    ctx.drawImage(this.canvasEl, -size / 2, -size / 2, size, size);
+    ctx.restore();
+    ctx.globalAlpha = prev;
   }
 
   private getTransportModeAtProgress(
@@ -197,7 +289,6 @@ export class IconAnimator {
     phase: AnimationPhase,
     progress: number
   ): TransportMode {
-    // For single-segment groups or non-FLY phases, use the first/last segment
     if (group.segments.length <= 1) return group.segments[0].transportMode;
     if (phase === "ARRIVE" || phase === "ZOOM_IN") {
       return group.segments[group.segments.length - 1].transportMode;
@@ -206,7 +297,6 @@ export class IconAnimator {
       return group.segments[0].transportMode;
     }
 
-    // For FLY and ZOOM_OUT, determine position along the merged route
     const distance = phase === "ZOOM_OUT"
       ? progress * 0.05 * totalLength
       : progress * totalLength;
@@ -225,10 +315,25 @@ export class IconAnimator {
   }
 
   hide() {
-    this.iconEl.style.display = "none";
+    this.containerEl.style.display = "none";
   }
 
   destroy() {
+    // Destroy SVG marker instances
+    for (const instance of this.lottieInstances.values()) {
+      instance.destroy();
+    }
+    this.lottieInstances.clear();
+    this.activeInstance = null;
+    this.currentMode = null;
+
+    // Destroy canvas renderer instances
+    for (const instance of this.canvasInstances.values()) {
+      instance.destroy();
+    }
+    this.canvasInstances.clear();
+    this.canvasEl = null;
+
     if (this.marker) {
       this.marker.remove();
       this.marker = null;

@@ -32,7 +32,6 @@ interface PreloadedPhoto {
 const TRANSPORT_MODES: TransportMode[] = [
   "flight", "car", "train", "bus", "ferry", "walk", "bicycle",
 ];
-const DIRECTIONS = ["right", "down", "left", "up"] as const;
 
 export class VideoExporter {
   private engine: AnimationEngine;
@@ -40,7 +39,6 @@ export class VideoExporter {
   private settings: ExportSettings;
   private cancelled = false;
   private abortController: AbortController | null = null;
-  private iconImages: Map<string, HTMLImageElement> = new Map();
   private photoImages: Map<string, PreloadedPhoto> = new Map();
   /** Track when photos first appeared (frame index) per group, for enter animation timing */
   private photoShowStartFrame: Map<number, number> = new Map();
@@ -60,33 +58,12 @@ export class VideoExporter {
     this.abortController?.abort();
   }
 
-  /** Pre-load all vehicle icon images so they're ready for canvas compositing */
-  private async preloadIcons(): Promise<void> {
-    const promises: Promise<void>[] = [];
+  /** Initialize Lottie canvas renderers for all transport modes (for video export compositing) */
+  private preloadIcons(): void {
+    const iconAnimator = this.engine.getIconAnimator();
     for (const mode of TRANSPORT_MODES) {
-      for (const dir of DIRECTIONS) {
-        const src = `/icons/${mode}-${dir}.png`;
-        const key = src;
-        if (this.iconImages.has(key)) continue;
-        promises.push(
-          new Promise<void>((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              this.iconImages.set(key, img);
-              if (img.src !== key) {
-                this.iconImages.set(img.src, img);
-              }
-              resolve();
-            };
-            img.onerror = () => {
-              resolve();
-            };
-            img.src = src;
-          })
-        );
-      }
+      iconAnimator.ensureCanvasRenderer(mode);
     }
-    await Promise.all(promises);
   }
 
   /** Pre-load all photo images so they're ready for canvas compositing */
@@ -258,7 +235,7 @@ export class VideoExporter {
     }
   }
 
-  /** Composite the vehicle icon onto the offscreen 2D canvas */
+  /** Composite the Lottie vehicle icon onto the offscreen 2D canvas */
   private drawVehicleIcon(
     ctx: CanvasRenderingContext2D,
     scaleX: number,
@@ -269,18 +246,12 @@ export class VideoExporter {
 
     if (!state.visible || !state.position || state.opacity <= 0) return;
 
-    const img = this.iconImages.get(state.iconSrc);
-    if (!img) return;
-
     const point = this.map.project(state.position);
     const px = point.x * scaleX;
     const py = point.y * scaleY;
     const sz = state.size * scaleX;
 
-    const prevAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = state.opacity;
-    ctx.drawImage(img, px - sz / 2, py - sz / 2, sz, sz);
-    ctx.globalAlpha = prevAlpha;
+    iconAnimator.drawToCanvas(ctx, px, py, sz);
   }
 
   /** Draw city name label on the offscreen 2D canvas, matching the preview style */
@@ -879,7 +850,7 @@ export class VideoExporter {
       canvas.height,
     );
 
-    await this.preloadIcons();
+    this.preloadIcons();
     await this.preloadPhotos();
 
     this.hideAllSegments();
