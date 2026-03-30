@@ -10,6 +10,8 @@ import {
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
 import { resolvePhotoAnimations } from "@/lib/photoAnimation";
+import { isSolidStyle } from "@/lib/transportIcons";
+import type { IconDirection } from "@/lib/transportIcons";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import { getExportViewportSize } from "@/lib/viewportRatio";
 import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
@@ -54,7 +56,7 @@ export class VideoExporter {
     this.abortController?.abort();
   }
 
-  /** Initialize Lottie canvas renderers for all transport modes (for video export compositing) */
+  /** Initialize icon renderers for all transport modes (Lottie for outline/soft, PNG for solid) */
   private async preloadIcons(): Promise<void> {
     const iconAnimator = this.engine.getIconAnimator();
     const seen = new Set<string>();
@@ -65,14 +67,26 @@ export class VideoExporter {
       return true;
     });
 
-    await Promise.all(
-      iconVariants.map((segment) =>
-        iconAnimator.ensureCanvasRenderer(
-          segment.transportMode,
-          segment.iconStyle,
-        ),
-      )
-    );
+    const directions: IconDirection[] = ["up", "down", "left", "right"];
+
+    const promises: Promise<unknown>[] = [];
+    for (const segment of iconVariants) {
+      if (isSolidStyle(segment.iconStyle)) {
+        // Solid style: preload all 4 directional PNG variants
+        for (const dir of directions) {
+          promises.push(iconAnimator.ensurePngImage(segment.transportMode, dir));
+        }
+      } else {
+        // Lottie styles: preload canvas renderer
+        promises.push(
+          iconAnimator.ensureCanvasRenderer(
+            segment.transportMode,
+            segment.iconStyle,
+          ),
+        );
+      }
+    }
+    await Promise.all(promises);
   }
 
   /** Pre-load all photo images so they're ready for canvas compositing */
@@ -244,7 +258,7 @@ export class VideoExporter {
     }
   }
 
-  /** Composite the Lottie vehicle icon onto the offscreen 2D canvas */
+  /** Composite the vehicle icon (PNG or Lottie) onto the offscreen 2D canvas */
   private drawVehicleIcon(
     ctx: CanvasRenderingContext2D,
     scaleX: number,
