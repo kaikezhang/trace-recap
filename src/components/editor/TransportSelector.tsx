@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import * as turf from "@turf/turf";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
+import { useSegmentEndpoints } from "@/stores/selectors";
 import { useAnimationStore } from "@/stores/animationStore";
 import { TRANSPORT_MODES } from "@/lib/constants";
 import { TRANSPORT_ICON_STYLES } from "@/lib/transportIcons";
@@ -111,12 +112,12 @@ function StylePreview({
   );
 }
 
-export default function TransportSelector({ segment }: TransportSelectorProps) {
+export default memo(function TransportSelector({ segment }: TransportSelectorProps) {
   const setTransportMode = useProjectStore((s) => s.setTransportMode);
   const setSegmentIconStyle = useProjectStore((s) => s.setSegmentIconStyle);
   const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
   const setSegmentTiming = useProjectStore((s) => s.setSegmentTiming);
-  const locations = useProjectStore((s) => s.locations);
+  const endpoints = useSegmentEndpoints(segment.fromId, segment.toId);
   const timingOverrides = useProjectStore((s) => s.segmentTimingOverrides);
   const timeline = useAnimationStore((s) => s.timeline);
   const [expanded, setExpanded] = useState(false);
@@ -124,8 +125,8 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
   const selectorRef = useRef<HTMLDivElement>(null);
   const timingRef = useRef<HTMLDivElement>(null);
 
-  const fromLoc = locations.find((l) => l.id === segment.fromId);
-  const toLoc = locations.find((l) => l.id === segment.toId);
+  const fromLoc = endpoints.from;
+  const toLoc = endpoints.to;
 
   // Show timing control for every segment (each segment is its own animation group now)
   const isGroupLeader = true;
@@ -365,4 +366,4 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
       )}
     </div>
   );
-}
+});

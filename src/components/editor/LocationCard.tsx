@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { memo, useState, useRef, useEffect } from "react";
 import { X, GripVertical, ChevronRight, Image as ImageIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
@@ -8,10 +8,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { Input } from "@/components/ui/input";
 import PhotoManager, { usePhotoDropZone } from "./PhotoManager";
 import { useProjectStore } from "@/stores/projectStore";
-import type { Location } from "@/types";
+import { useLocation } from "@/stores/selectors";
 
 interface LocationCardProps {
-  location: Location;
+  locationId: string;
   index: number;
   total: number;
   onRemove: (id: string) => void;
@@ -106,8 +106,8 @@ function WaypointSwitch({
   );
 }
 
-export default function LocationCard({
-  location,
+export default memo(function LocationCard({
+  locationId,
   index,
   total,
   onRemove,
@@ -115,9 +115,8 @@ export default function LocationCard({
   onClick,
   onEditLayout,
 }: LocationCardProps) {
+  const location = useLocation(locationId);
   const [isExpanded, setIsExpanded] = useState(false);
-  const isFirst = index === 0;
-  const isWaypoint = location.isWaypoint;
   const updateLocation = useProjectStore((s) => s.updateLocation);
 
   const {
@@ -127,9 +126,9 @@ export default function LocationCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: location.id });
+  } = useSortable({ id: locationId });
 
-  const { isDragOver, dropProps } = usePhotoDropZone(location.id);
+  const { isDragOver, dropProps } = usePhotoDropZone(locationId);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -138,6 +137,10 @@ export default function LocationCard({
     opacity: isDragging ? 0.5 : undefined,
   };
 
+  if (!location) return null;
+
+  const isFirst = index === 0;
+  const isWaypoint = location.isWaypoint;
   const photoThumbnails = location.photos.slice(0, 3);
 
   return (
@@ -237,7 +240,7 @@ export default function LocationCard({
           className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-red-500 hover:bg-red-50"
           onClick={(e) => {
             e.stopPropagation();
-            onRemove(location.id);
+            onRemove(locationId);
           }}
         >
           <X className="h-4 w-4" />
@@ -260,13 +263,13 @@ export default function LocationCard({
                 <EditableName
                   value={location.name}
                   placeholder="English name"
-                  onSave={(val) => updateLocation(location.id, { name: val })}
+                  onSave={(val) => updateLocation(locationId, { name: val })}
                   className="text-sm font-medium"
                 />
                 <EditableName
                   value={location.nameZh ?? ""}
                   placeholder="中文名"
-                  onSave={(val) => updateLocation(location.id, { nameZh: val || undefined })}
+                  onSave={(val) => updateLocation(locationId, { nameZh: val || undefined })}
                   className="text-xs text-muted-foreground"
                 />
               </div>
@@ -277,13 +280,13 @@ export default function LocationCard({
                   <span className="text-xs text-muted-foreground">Stop by (waypoint)</span>
                   <WaypointSwitch
                     isWaypoint={!!isWaypoint}
-                    onToggle={() => onToggleWaypoint(location.id)}
+                    onToggle={() => onToggleWaypoint(locationId)}
                   />
                 </div>
               )}
 
               {/* Photo manager */}
-              <PhotoManager locationId={location.id} onEditLayout={onEditLayout} />
+              <PhotoManager locationId={locationId} onEditLayout={onEditLayout} />
 
             </div>
           </motion.div>
@@ -291,4 +294,4 @@ export default function LocationCard({
       </AnimatePresence>
     </div>
   );
-}
+});

@@ -51,6 +51,7 @@ export interface ImportRouteData {
 }
 
 type PersistedProjectData = ImportRouteData;
+type SerializedLocation = PersistedProjectData["locations"][number];
 
 const DEFAULT_ROUTE_NAME = "My Trip";
 const DEFAULT_MAP_STYLE: MapStyle = "light";
@@ -139,6 +140,38 @@ function isBrowser(): boolean {
 /** Cache for blob→dataURL conversions to avoid redundant work on repeated saves */
 const blobToDataUrlCache = new Map<string, string>();
 
+/**
+ * Dirty tracking for incremental serialization.
+ * Only locations whose photos changed need re-serialization (the expensive blob→dataURL step).
+ * Non-photo changes (name, coordinates, waypoint) are cheap to serialize.
+ */
+const dirtyLocationIds = new Set<string>();
+const serializedLocationCache = new Map<string, SerializedLocation>();
+
+function markLocationDirty(locationId: string): void {
+  dirtyLocationIds.add(locationId);
+  serializedLocationCache.delete(locationId);
+  locationDirtyVersion.set(locationId, (locationDirtyVersion.get(locationId) ?? 0) + 1);
+}
+
+function clearDirtyTracking(): void {
+  dirtyLocationIds.clear();
+  serializedLocationCache.clear();
+  locationDirtyVersion.clear();
+}
+
+/** Invalidate all serialization caches and mark all locations dirty (e.g. after undo/redo) */
+export function invalidateSerializationCache(): void {
+  const { locations } = useProjectStore.getState();
+  serializedLocationCache.clear();
+  dirtyLocationIds.clear();
+  locationDirtyVersion.clear();
+  for (const loc of locations) {
+    dirtyLocationIds.add(loc.id);
+    locationDirtyVersion.set(loc.id, (locationDirtyVersion.get(loc.id) ?? 0) + 1);
+  }
+}
+
 /** Convert a blob: URL to a data: URL for persistence (cached) */
 async function blobUrlToDataUrl(url: string): Promise<string> {
   if (!url.startsWith("blob:")) return url;
@@ -159,14 +192,8 @@ async function blobUrlToDataUrl(url: string): Promise<string> {
   }
 }
 
-async function serializeProjectState(
-  locations: Location[],
-  segments: Segment[],
-  mapStyle: MapStyle,
-  segmentTimingOverrides: Record<string, number>,
-  name?: string,
-): Promise<PersistedProjectData> {
-  const exportedLocations = await Promise.all(locations.map(async (loc) => ({
+async function serializeLocation(loc: Location): Promise<SerializedLocation> {
+  return {
     name: loc.name,
     nameZh: loc.nameZh,
     coordinates: loc.coordinates as [number, number],
@@ -195,7 +222,52 @@ async function serializeProjectState(
           },
         }
       : {}),
-  })));
+  };
+}
+
+/** Version counter per location — incremented on each markLocationDirty() call */
+const locationDirtyVersion = new Map<string, number>();
+
+async function serializeProjectState(
+  locations: Location[],
+  segments: Segment[],
+  mapStyle: MapStyle,
+  segmentTimingOverrides: Record<string, number>,
+  name?: string,
+): Promise<PersistedProjectData> {
+  // Snapshot dirty versions at save start to detect concurrent edits
+  const dirtySnapshotVersions = new Map<string, number>();
+  for (const locId of dirtyLocationIds) {
+    dirtySnapshotVersions.set(locId, locationDirtyVersion.get(locId) ?? 0);
+  }
+
+  const exportedLocations = await Promise.all(locations.map(async (loc) => {
+    // Use cached serialization for clean locations (no photo changes)
+    const cached = serializedLocationCache.get(loc.id);
+    if (cached && !dirtySnapshotVersions.has(loc.id)) {
+      // Re-serialize cheap fields (name, coords, waypoint) but reuse photo data
+      const updated: SerializedLocation = {
+        ...cached,
+        name: loc.name,
+        nameZh: loc.nameZh,
+        coordinates: loc.coordinates as [number, number],
+        isWaypoint: loc.isWaypoint ?? false,
+      };
+      serializedLocationCache.set(loc.id, updated);
+      return updated;
+    }
+
+    // Full serialization (expensive blob→dataURL for photos)
+    const serialized = await serializeLocation(loc);
+    // Only update cache/clear dirty if version hasn't changed during async save
+    const snapshotVersion = dirtySnapshotVersions.get(loc.id);
+    const currentVersion = locationDirtyVersion.get(loc.id) ?? 0;
+    if (snapshotVersion === undefined || snapshotVersion === currentVersion) {
+      serializedLocationCache.set(loc.id, serialized);
+      dirtyLocationIds.delete(loc.id);
+    }
+    return serialized;
+  }));
 
   return {
     name: name ?? DEFAULT_ROUTE_NAME,
@@ -412,6 +484,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   addPhoto: (locationId, photo) => {
     useHistoryStore.getState().pushState();
+    markLocationDirty(locationId);
     return set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
@@ -426,6 +499,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   removePhoto: (locationId, photoId) => {
     useHistoryStore.getState().pushState();
+    markLocationDirty(locationId);
     return set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
@@ -435,15 +509,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }));
   },
 
-  setPhotoLayout: (locationId, layout) =>
-    set((state) => ({
+  setPhotoLayout: (locationId, layout) => {
+    markLocationDirty(locationId);
+    return set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId ? { ...l, photoLayout: layout } : l,
       ),
-    })),
+    }));
+  },
 
-  setPhotoFocalPoint: (locationId, photoId, point) =>
-    set((state) => ({
+  setPhotoFocalPoint: (locationId, photoId, point) => {
+    markLocationDirty(locationId);
+    return set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
           ? {
@@ -454,7 +531,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             }
           : l,
       ),
-    })),
+    }));
+  },
 
   setMapStyle: (style) => set({ mapStyle: style }),
 
@@ -776,6 +854,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await saveProject(meta, data);
     // Clear current state and switch to new project
     skipNextPersist = true;
+    clearDirtyTracking();
     set({
       currentProjectId: id,
       currentProjectName: projectName,
@@ -818,6 +897,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const projects = await listProjectsFromDB();
     const meta = projects.find((p) => p.id === projectId);
     skipNextPersist = true;
+    clearDirtyTracking();
     set({
       currentProjectId: projectId,
       currentProjectName: meta?.name ?? data.name ?? DEFAULT_ROUTE_NAME,

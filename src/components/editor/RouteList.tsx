@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import {
   DndContext,
   closestCenter,
@@ -16,6 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useProjectStore } from "@/stores/projectStore";
+import { useLocationIds, useLocationCount } from "@/stores/selectors";
 import LocationCard from "./LocationCard";
 import TransportSelector from "./TransportSelector";
 
@@ -24,8 +26,12 @@ interface RouteListProps {
   onEditLayout?: (locationId: string) => void;
 }
 
-export default function RouteList({ onLocationClick, onEditLayout }: RouteListProps) {
-  const locations = useProjectStore((s) => s.locations);
+export default memo(function RouteList({
+  onLocationClick,
+  onEditLayout,
+}: RouteListProps) {
+  const locationIds = useLocationIds();
+  const locationCount = useLocationCount();
   const segments = useProjectStore((s) => s.segments);
   const removeLocation = useProjectStore((s) => s.removeLocation);
   const reorderLocations = useProjectStore((s) => s.reorderLocations);
@@ -40,21 +46,21 @@ export default function RouteList({ onLocationClick, onEditLayout }: RouteListPr
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = locations.findIndex((l) => l.id === active.id);
-    const newIndex = locations.findIndex((l) => l.id === over.id);
+    const oldIndex = locationIds.indexOf(String(active.id));
+    const newIndex = locationIds.indexOf(String(over.id));
     if (oldIndex !== -1 && newIndex !== -1) {
       reorderLocations(oldIndex, newIndex);
     }
   };
 
-  if (locations.length === 0) {
+  if (locationCount === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
         <p className="text-sm text-muted-foreground text-center">
@@ -71,16 +77,16 @@ export default function RouteList({ onLocationClick, onEditLayout }: RouteListPr
       onDragEnd={handleDragEnd}
     >
       <SortableContext
-        items={locations.map((l) => l.id)}
+        items={locationIds}
         strategy={verticalListSortingStrategy}
       >
         <div className="flex flex-col gap-4 p-3">
-          {locations.map((loc, i) => (
-            <div key={loc.id}>
+          {locationIds.map((id, i) => (
+            <div key={id}>
               <LocationCard
-                location={loc}
+                locationId={id}
                 index={i}
-                total={locations.length}
+                total={locationCount}
                 onRemove={removeLocation}
                 onToggleWaypoint={toggleWaypoint}
                 onClick={onLocationClick}
@@ -95,4 +101,4 @@ export default function RouteList({ onLocationClick, onEditLayout }: RouteListPr
       </SortableContext>
     </DndContext>
   );
-}
+});

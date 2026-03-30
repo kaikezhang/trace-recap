@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { memo, useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Search, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -205,4 +205,4 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
   }
 );
 
-export default CitySearch;
+export default memo(CitySearch);
