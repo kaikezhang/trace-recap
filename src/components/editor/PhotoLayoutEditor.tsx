@@ -702,7 +702,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="hidden md:flex flex-col bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 overflow-hidden"
+          className="hidden md:flex flex-col bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 overflow-hidden max-h-[85vh]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -719,7 +719,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           </div>
 
           {/* 3-column body */}
-          <div className="flex h-[500px]">
+          <div className="flex flex-1 min-h-0">
             {/* LEFT — Layout style selector */}
             <div className="w-72 min-h-0 overflow-y-auto border-r border-gray-100 p-4 space-y-2">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Layout</p>
