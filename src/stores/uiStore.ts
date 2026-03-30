@@ -11,6 +11,8 @@ interface UIState {
   bottomSheetState: BottomSheetState;
   cityLabelSize: number; // CSS font size in px (default 18)
   cityLabelLang: "en" | "zh"; // City label language
+  cityLabelTopPercent: number; // City label top position as % of container (default 5)
+  routeLabelBottomPercent: number; // Route label bottom position as % of container (default 15)
   viewportRatio: AspectRatio; // WYSIWYG viewport aspect ratio
 
   setLeftPanelOpen: (open: boolean) => void;
@@ -20,6 +22,8 @@ interface UIState {
   setBottomSheetState: (state: BottomSheetState) => void;
   setCityLabelSize: (size: number) => void;
   setCityLabelLang: (lang: "en" | "zh") => void;
+  setCityLabelTopPercent: (percent: number) => void;
+  setRouteLabelBottomPercent: (percent: number) => void;
   setViewportRatio: (ratio: AspectRatio) => void;
 }
 
@@ -31,6 +35,8 @@ export const useUIStore = create<UIState>((set) => ({
   bottomSheetState: "collapsed",
   cityLabelSize: 18,
   cityLabelLang: "en",
+  cityLabelTopPercent: 5,
+  routeLabelBottomPercent: 15,
   viewportRatio: "free",
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
@@ -40,5 +46,7 @@ export const useUIStore = create<UIState>((set) => ({
   setBottomSheetState: (bottomSheetState) => set({ bottomSheetState }),
   setCityLabelSize: (cityLabelSize) => set({ cityLabelSize }),
   setCityLabelLang: (cityLabelLang) => set({ cityLabelLang }),
+  setCityLabelTopPercent: (cityLabelTopPercent) => set({ cityLabelTopPercent }),
+  setRouteLabelBottomPercent: (routeLabelBottomPercent) => set({ routeLabelBottomPercent }),
   setViewportRatio: (viewportRatio) => set({ viewportRatio }),
 }));
