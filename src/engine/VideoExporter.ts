@@ -582,10 +582,22 @@ export class VideoExporter {
 
     try {
       if (useWebCodecs) {
-        return await this.exportWithWebCodecs(
-          offscreen, offCtx, canvas, scaleX, scaleY,
-          targetW, targetH, totalFrames, totalDuration, fps, onProgress
-        );
+        try {
+          return await this.exportWithWebCodecs(
+            offscreen, offCtx, canvas, scaleX, scaleY,
+            targetW, targetH, totalFrames, totalDuration, fps, onProgress
+          );
+        } catch (webCodecsError) {
+          console.warn("WebCodecs export failed, falling back to server:", webCodecsError);
+          // Fallback will report "server" encoding method via progress callbacks
+          // Reset state for server fallback
+          this.engine.seekTo(0);
+          this.hideAllSegments();
+          return await this.exportWithServer(
+            offscreen, offCtx, canvas, scaleX, scaleY,
+            totalFrames, totalDuration, fps, signal, onProgress
+          );
+        }
       } else {
         return await this.exportWithServer(
           offscreen, offCtx, canvas, scaleX, scaleY,
