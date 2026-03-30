@@ -82,12 +82,24 @@ export interface ExportSettings {
   photoAnimation?: PhotoAnimation;
 }
 
-export type LayoutTemplate = "grid" | "hero" | "masonry" | "filmstrip" | "scatter" | "polaroid" | "overlap" | "full";
+export type LayoutTemplate =
+  | "grid"
+  | "hero"
+  | "masonry"
+  | "filmstrip"
+  | "scatter"
+  | "polaroid"
+  | "overlap"
+  | "full"
+  | "diagonal"
+  | "rows"
+  | "magazine";
 
 export interface PhotoLayout {
   mode: "auto" | "manual";
   template?: LayoutTemplate;
   order?: string[];        // photo IDs in custom order
+  layoutSeed?: number;     // random seed for layouts with randomness
   gap?: number;            // gap in px (0-20), default 8
   borderRadius?: number;   // border radius in px (0-20), default 8
   enterAnimation?: PhotoAnimation; // per-location enter animation, falls back to global default

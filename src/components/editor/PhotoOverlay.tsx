@@ -270,7 +270,8 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
         displayLayout.template,
         gapPx,
         w,
-        displayLayout.customProportions
+        displayLayout.customProportions,
+        displayLayout.layoutSeed
       );
     }
     return computeAutoLayout(layoutMetas, containerAspect, gapPx, w);
