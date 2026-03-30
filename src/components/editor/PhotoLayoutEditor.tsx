@@ -91,6 +91,7 @@ function PhotoThumbnail({
   orientation,
   overlay = false,
   dragHandleProps,
+  onDelete,
 }: {
   photo: Photo;
   index: number;
@@ -98,6 +99,7 @@ function PhotoThumbnail({
   orientation: SortablePhotoListOrientation;
   overlay?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
+  onDelete?: (photoId: string) => void;
 }) {
   return (
     <div
@@ -117,12 +119,24 @@ function PhotoThumbnail({
       />
       <div className="pointer-events-none absolute inset-x-1 top-1 flex items-center justify-between rounded-md bg-black/45 px-1.5 py-1 text-white backdrop-blur-sm">
         <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">{index + 1}</span>
-        <div
-          data-drag-handle
-          className={`${dragHandleProps ? "pointer-events-auto cursor-grab active:cursor-grabbing touch-none" : ""}`}
-          {...dragHandleProps}
-        >
-          <GripVertical className="h-3.5 w-3.5 opacity-80" />
+        <div className="flex items-center gap-1">
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(photo.id); }}
+              className="pointer-events-auto flex h-4 w-4 items-center justify-center rounded-full bg-red-500/80 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-600"
+              aria-label={`Delete photo ${index + 1}`}
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          )}
+          <div
+            data-drag-handle
+            className={`${dragHandleProps ? "pointer-events-auto cursor-grab active:cursor-grabbing touch-none" : ""}`}
+            {...dragHandleProps}
+          >
+            <GripVertical className="h-3.5 w-3.5 opacity-80" />
+          </div>
         </div>
       </div>
     </div>
@@ -135,12 +149,14 @@ function SortablePhotoThumbnail({
   selected,
   orientation,
   onSelect,
+  onDelete,
 }: {
   photo: Photo;
   index: number;
   selected: boolean;
   orientation: SortablePhotoListOrientation;
   onSelect: () => void;
+  onDelete?: (photoId: string) => void;
 }) {
   const {
     attributes,
@@ -171,6 +187,7 @@ function SortablePhotoThumbnail({
         selected={selected}
         orientation={orientation}
         dragHandleProps={{ ...attributes, ...listeners }}
+        onDelete={onDelete}
       />
     </button>
   );
@@ -253,8 +270,20 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const defaultPhotoAnimation = useUIStore((s) => s.photoAnimation);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
+  const removePhoto = useProjectStore((s) => s.removePhoto);
   const { map } = useMap();
   const layout = location.photoLayout ?? { mode: "auto" as const };
+
+  const handleDeletePhoto = useCallback(
+    (photoId: string) => {
+      removePhoto(location.id, photoId);
+      if (layout.order) {
+        const newOrder = layout.order.filter((id) => id !== photoId);
+        setPhotoLayout(location.id, { ...layout, order: newOrder });
+      }
+    },
+    [location.id, layout, removePhoto, setPhotoLayout]
+  );
 
   const activeTemplate: LayoutTemplateType | "auto" =
     layout.mode === "manual" && layout.template ? layout.template : "auto";
@@ -633,6 +662,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                         selected={selectedPhotoId === photo.id}
                         orientation="horizontal"
                         onSelect={() => setSelectedPhotoId(photo.id)}
+                        onDelete={handleDeletePhoto}
                       />
                     ))}
                   </div>
@@ -756,6 +786,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                         selected={selectedPhotoId === photo.id}
                         orientation="vertical"
                         onSelect={() => setSelectedPhotoId(photo.id)}
+                        onDelete={handleDeletePhoto}
                       />
                     ))}
                   </div>
