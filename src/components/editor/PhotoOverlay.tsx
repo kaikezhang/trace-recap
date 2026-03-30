@@ -1,11 +1,137 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { motion } from "framer-motion";
+import { motion, type Transition, type TargetAndTransition } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
-import type { Photo, PhotoLayout } from "@/types";
+import type { Photo, PhotoLayout, PhotoAnimation } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
+
+/** Compute framer-motion initial/animate values for a given animation style */
+function getEnterAnimation(
+  style: PhotoAnimation,
+  index: number,
+  total: number,
+): { initial: TargetAndTransition; animate: TargetAndTransition; transition: Transition } {
+  switch (style) {
+    case "none":
+      return { initial: { opacity: 1 }, animate: { opacity: 1 }, transition: { duration: 0 } };
+    case "fade":
+      return {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        transition: { duration: 0.5, delay: index * 0.1, ease: "easeOut" as const },
+      };
+    case "slide":
+      return {
+        initial: { opacity: 0, x: index % 2 === 0 ? -80 : 80 },
+        animate: { opacity: 1, x: 0 },
+        transition: { type: "spring", stiffness: 200, damping: 25, delay: index * 0.08 },
+      };
+    case "flip":
+      return {
+        initial: { opacity: 0, rotateY: 90 },
+        animate: { opacity: 1, rotateY: 0 },
+        transition: { duration: 0.6, delay: index * 0.1, ease: "easeOut" as const },
+      };
+    case "scatter": {
+      const angle = (index / Math.max(total, 1)) * 2 * Math.PI;
+      const dist = 200;
+      return {
+        initial: {
+          opacity: 0,
+          x: Math.cos(angle) * dist,
+          y: Math.sin(angle) * dist,
+          rotate: (index % 2 === 0 ? -30 : 30),
+          scale: 0.4,
+        },
+        animate: { opacity: 1, x: 0, y: 0, rotate: 0, scale: 1 },
+        transition: { type: "spring", stiffness: 150, damping: 20, delay: index * 0.06 },
+      };
+    }
+    case "typewriter":
+      return {
+        initial: { opacity: 0, scale: 0.8, y: 20 },
+        animate: { opacity: 1, scale: 1, y: 0 },
+        transition: { duration: 0.3, delay: index * 0.2, ease: "easeOut" as const },
+      };
+    case "scale":
+    default:
+      return {
+        initial: { opacity: 0, scale: 0.6, y: 60, filter: "blur(8px)" },
+        animate: { opacity: 1, scale: 1, y: 0, filter: "blur(0px)" },
+        transition: { type: "spring", stiffness: 300, damping: 25, delay: index * 0.08 },
+      };
+  }
+}
+
+/** Compute exit transform values for a given animation style */
+function getExitValues(
+  style: PhotoAnimation,
+  exitProgress: number,
+  photoExitT: number,
+  index: number,
+) {
+  if (exitProgress <= 0) {
+    return { exitOpacity: 1, exitScale: 1, exitX: 0, exitY: 0, exitBlur: 0, exitRotate: 0, exitRotateY: 0 };
+  }
+  switch (style) {
+    case "none":
+      return {
+        exitOpacity: 1 - exitProgress,
+        exitScale: 1, exitX: 0, exitY: 0, exitBlur: 0, exitRotate: 0, exitRotateY: 0,
+      };
+    case "fade":
+      return {
+        exitOpacity: 1 - photoExitT,
+        exitScale: 1, exitX: 0, exitY: 0, exitBlur: 0, exitRotate: 0, exitRotateY: 0,
+      };
+    case "slide":
+      return {
+        exitOpacity: 1 - photoExitT,
+        exitScale: 1,
+        exitX: (index % 2 === 0 ? -1 : 1) * photoExitT * 120,
+        exitY: 0, exitBlur: 0, exitRotate: 0, exitRotateY: 0,
+      };
+    case "flip":
+      return {
+        exitOpacity: 1 - photoExitT * 0.8,
+        exitScale: 1, exitX: 0, exitY: 0, exitBlur: 0, exitRotate: 0,
+        exitRotateY: photoExitT * -90,
+      };
+    case "scatter": {
+      const angle = (index / 4) * 2 * Math.PI;
+      const dist = 200;
+      return {
+        exitOpacity: 1 - photoExitT,
+        exitScale: 1 - photoExitT * 0.5,
+        exitX: Math.cos(angle) * dist * photoExitT,
+        exitY: Math.sin(angle) * dist * photoExitT,
+        exitBlur: photoExitT * 4,
+        exitRotate: (index % 2 === 0 ? -25 : 25) * photoExitT,
+        exitRotateY: 0,
+      };
+    }
+    case "typewriter":
+      return {
+        exitOpacity: 1 - photoExitT,
+        exitScale: 1 - photoExitT * 0.2,
+        exitX: 0, exitY: photoExitT * -30,
+        exitBlur: 0, exitRotate: 0, exitRotateY: 0,
+      };
+    case "scale":
+    default:
+      return {
+        exitOpacity: 1 - photoExitT,
+        exitScale: 1 - photoExitT * 0.4,
+        exitX: 0,
+        exitY: -photoExitT * 60,
+        exitBlur: photoExitT * 6,
+        exitRotate: photoExitT * (index % 2 === 0 ? -12 : 12),
+        exitRotateY: 0,
+      };
+  }
+}
 
 
 interface PhotoOverlayProps {
@@ -67,6 +193,7 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
 
 export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1, containerMode = "viewport" }: PhotoOverlayProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
+  const photoAnimation = useUIStore((s) => s.photoAnimation);
   const metas = usePhotoDimensions(photos);
   const hasPhotos = metas.length > 0;
 
@@ -185,21 +312,33 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
             const exitProgress = 1 - opacity; // 0 = fully visible, 1 = fully gone
             const staggerOffset = n > 1 ? (n - 1 - i) / (n - 1) * 0.4 : 0;
             const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
-            
-            const exitOpacity = exitProgress > 0 ? 1 - photoExitT : 1;
-            const exitScale = exitProgress > 0 ? 1 - photoExitT * 0.4 : 1; // shrink to 60%
-            const exitY = exitProgress > 0 ? -photoExitT * 60 : 0; // float up 60px
-            const exitBlur = exitProgress > 0 ? photoExitT * 6 : 0; // blur to 6px
-            const exitRotate = exitProgress > 0 ? photoExitT * (i % 2 === 0 ? -12 : 12) : 0;
+
+            const enter = getEnterAnimation(photoAnimation, i, n);
+            const exit = getExitValues(photoAnimation, exitProgress, photoExitT, i);
+
+            const enterRotate = typeof (enter.animate as { rotate?: number }).rotate === "number"
+              ? (enter.animate as { rotate?: number }).rotate! + rotation
+              : rotation;
+            const animateValues: TargetAndTransition = exitProgress > 0
+              ? {
+                  opacity: exit.exitOpacity,
+                  scale: exit.exitScale,
+                  x: exit.exitX,
+                  y: exit.exitY,
+                  filter: exit.exitBlur > 0 ? `blur(${exit.exitBlur}px)` : undefined,
+                  rotate: exit.exitRotate + rotation,
+                  rotateY: exit.exitRotateY || undefined,
+                }
+              : { ...enter.animate, rotate: enterRotate };
 
             return (
               <motion.div
                 key={photo.id}
-                initial={{ opacity: 0, scale: 0.6, y: 60, filter: "blur(8px)" }}
-                animate={{ opacity: exitOpacity, scale: exitScale, y: exitY, filter: `blur(${exitBlur}px)`, rotate: exitRotate + rotation }}
+                initial={enter.initial}
+                animate={animateValues}
                 transition={exitProgress > 0
                   ? { duration: 0.15, ease: "easeOut" }
-                  : { type: "spring", stiffness: 300, damping: 25, delay: i * 0.08 }
+                  : enter.transition
                 }
                 className="absolute overflow-hidden drop-shadow-xl"
                 style={{

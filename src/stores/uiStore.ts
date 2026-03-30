@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AspectRatio } from "@/types";
+import type { AspectRatio, PhotoAnimation } from "@/types";
 
 export type BottomSheetState = "collapsed" | "half" | "full";
 
@@ -15,6 +15,7 @@ interface UIState {
   routeLabelBottomPercent: number; // Route label bottom position as % of container (default 15)
   routeLabelSize: number; // Route label font size in px (default 14)
   viewportRatio: AspectRatio; // WYSIWYG viewport aspect ratio
+  photoAnimation: PhotoAnimation; // Photo enter/exit animation style
 
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -27,6 +28,7 @@ interface UIState {
   setRouteLabelBottomPercent: (percent: number) => void;
   setRouteLabelSize: (size: number) => void;
   setViewportRatio: (ratio: AspectRatio) => void;
+  setPhotoAnimation: (animation: PhotoAnimation) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -41,6 +43,7 @@ export const useUIStore = create<UIState>((set) => ({
   routeLabelBottomPercent: 15,
   routeLabelSize: 14,
   viewportRatio: "free",
+  photoAnimation: "scale",
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
@@ -53,4 +56,5 @@ export const useUIStore = create<UIState>((set) => ({
   setRouteLabelBottomPercent: (routeLabelBottomPercent) => set({ routeLabelBottomPercent }),
   setRouteLabelSize: (routeLabelSize) => set({ routeLabelSize }),
   setViewportRatio: (viewportRatio) => set({ viewportRatio }),
+  setPhotoAnimation: (photoAnimation) => set({ photoAnimation }),
 }));
