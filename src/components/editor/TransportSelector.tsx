@@ -6,8 +6,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
 import { TRANSPORT_MODES } from "@/lib/constants";
+import { TRANSPORT_ICON_STYLES } from "@/lib/transportIcons";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
-import type { Segment, TransportMode } from "@/types";
+import type { Segment, TransportIconStyle, TransportMode } from "@/types";
 import {
   Tooltip,
   TooltipContent,
@@ -49,14 +50,70 @@ const MODE_COLORS: Record<TransportMode, string> = {
   bicycle: "bg-teal-100 text-teal-700 border-teal-300",
 };
 
+const MODE_ACCENTS: Record<
+  TransportMode,
+  { solid: string; soft: string }
+> = {
+  flight: { solid: "#4f7df5", soft: "#dbe8ff" },
+  car: { solid: "#d97706", soft: "#fce7bf" },
+  train: { solid: "#059669", soft: "#d4f4e6" },
+  bus: { solid: "#8b5cf6", soft: "#ede4ff" },
+  ferry: { solid: "#0891b2", soft: "#d2f4fb" },
+  walk: { solid: "#db2777", soft: "#fbd7e8" },
+  bicycle: { solid: "#0f766e", soft: "#d3f3ee" },
+};
+
 function formatDistance(km: number): string {
   if (km < 1) return `${Math.round(km * 1000)} m`;
   if (km < 100) return `${km.toFixed(1)} km`;
   return `${Math.round(km)} km`;
 }
 
+function StylePreview({
+  mode,
+  iconStyle,
+}: {
+  mode: TransportMode;
+  iconStyle: TransportIconStyle;
+}) {
+  const accent = MODE_ACCENTS[mode];
+
+  if (iconStyle === "outline") {
+    return (
+      <span
+        className="block h-3.5 w-3.5 rounded-full border-2 bg-white"
+        style={{ borderColor: accent.solid }}
+      />
+    );
+  }
+
+  if (iconStyle === "soft") {
+    return (
+      <span
+        className="flex h-3.5 w-3.5 items-center justify-center rounded-full"
+        style={{ backgroundColor: accent.soft }}
+      >
+        <span
+          className="block h-1.5 w-1.5 rounded-full"
+          style={{ backgroundColor: accent.solid }}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="flex h-3.5 w-3.5 items-center justify-center rounded-full"
+      style={{ backgroundColor: accent.solid }}
+    >
+      <span className="block h-1.5 w-1.5 rounded-full bg-white" />
+    </span>
+  );
+}
+
 export default function TransportSelector({ segment }: TransportSelectorProps) {
   const setTransportMode = useProjectStore((s) => s.setTransportMode);
+  const setSegmentIconStyle = useProjectStore((s) => s.setSegmentIconStyle);
   const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
   const setSegmentTiming = useProjectStore((s) => s.setSegmentTiming);
   const locations = useProjectStore((s) => s.locations);
@@ -64,6 +121,7 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
   const timeline = useAnimationStore((s) => s.timeline);
   const [expanded, setExpanded] = useState(false);
   const [showTiming, setShowTiming] = useState(false);
+  const selectorRef = useRef<HTMLDivElement>(null);
   const timingRef = useRef<HTMLDivElement>(null);
 
   const fromLoc = locations.find((l) => l.id === segment.fromId);
@@ -94,6 +152,17 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showTiming]);
 
+  useEffect(() => {
+    if (!expanded) return;
+    const handleClick = (e: MouseEvent) => {
+      if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
+        setExpanded(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [expanded]);
+
   const fetchGeometry = useCallback(
     async (mode: TransportMode) => {
       if (!fromLoc || !toLoc) return;
@@ -121,7 +190,10 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
   const handleModeChange = (mode: TransportMode) => {
     setTransportMode(segment.id, mode);
     fetchGeometry(mode);
-    setExpanded(false);
+  };
+
+  const handleStyleChange = (iconStyle: TransportIconStyle) => {
+    setSegmentIconStyle(segment.id, iconStyle);
   };
 
   const ActiveIcon = MODE_ICONS[segment.transportMode];
@@ -134,34 +206,64 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
       : null;
 
   return (
-    <div className="flex flex-col items-center py-1">
+    <div className="flex flex-col items-center py-1" ref={selectorRef}>
       {/* Vertical connecting line + pill */}
       <div className="flex items-center gap-2 w-full px-2">
         {expanded ? (
           <>
             <div className="w-px h-4 bg-border" />
-            <div className="flex items-center gap-1 rounded-full border bg-card px-1.5 py-0.5 shadow-sm">
-              {TRANSPORT_MODES.map((mode) => {
-                const isActive = segment.transportMode === mode.id;
-                const Icon = MODE_ICONS[mode.id];
-                return (
-                  <Tooltip key={mode.id}>
-                    <TooltipTrigger
-                      className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
-                        isActive
-                          ? MODE_COLORS[mode.id]
-                          : "text-muted-foreground hover:bg-accent"
-                      }`}
-                      onClick={() => handleModeChange(mode.id)}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      <p>{mode.label}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
+            <div className="rounded-2xl border bg-card px-2 py-1.5 shadow-sm">
+              <div className="flex items-center gap-1">
+                {TRANSPORT_MODES.map((mode) => {
+                  const isActive = segment.transportMode === mode.id;
+                  const Icon = MODE_ICONS[mode.id];
+                  return (
+                    <Tooltip key={mode.id}>
+                      <TooltipTrigger
+                        className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+                          isActive
+                            ? MODE_COLORS[mode.id]
+                            : "text-muted-foreground hover:bg-accent"
+                        }`}
+                        onClick={() => handleModeChange(mode.id)}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>{mode.label}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+              <div className="mt-1 flex items-center justify-center gap-1 border-t border-border/70 pt-1">
+                {TRANSPORT_ICON_STYLES.map((style) => {
+                  const isActive = segment.iconStyle === style.id;
+                  return (
+                    <Tooltip key={style.id}>
+                      <TooltipTrigger
+                        className={`flex h-7 min-w-7 items-center justify-center rounded-full border px-2 transition-colors ${
+                          isActive
+                            ? "border-foreground/20 bg-accent text-foreground"
+                            : "border-transparent text-muted-foreground hover:bg-accent"
+                        }`}
+                        onClick={() => handleStyleChange(style.id)}
+                      >
+                        <StylePreview
+                          mode={segment.transportMode}
+                          iconStyle={style.id}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>{style.label}</p>
+                        <p className="max-w-40 text-[11px] text-muted-foreground">
+                          {style.description}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
             </div>
             <div className="w-px h-4 bg-border" />
           </>
@@ -176,6 +278,10 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
               {distance !== null && (
                 <span className="tabular-nums">{formatDistance(distance)}</span>
               )}
+              <StylePreview
+                mode={segment.transportMode}
+                iconStyle={segment.iconStyle}
+              />
             </button>
             <div className="flex-1 h-px bg-border" />
           </>
