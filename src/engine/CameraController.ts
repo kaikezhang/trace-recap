@@ -200,14 +200,19 @@ export class CameraController {
       }
 
       case "FLY": {
-        // Camera uses smooth straight-line lerp for stable motion
         const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
-        // Start pre-zooming in the last 30% of FLY to preload destination tiles
-        // This prevents black screen on long flights (e.g. Hawaii→Tokyo)
+        // Smooth zoom transition during FLY:
+        // - First 20%: transition from prevArriveZoom to flyZoom (replaces missing ZOOM_OUT for waypoints)
+        // - Middle 50%: hold at flyZoom
+        // - Last 30%: pre-zoom toward arriveZoom (preload destination tiles)
         let zoom = gc.flyZoom;
-        if (eased > 0.7) {
-          const preZoomProgress = (eased - 0.7) / 0.3; // 0→1 over last 30%
-          const midZoom = gc.flyZoom + (gc.arriveZoom - gc.flyZoom) * 0.3; // zoom 30% of the way
+        if (eased < 0.2 && prevArriveZoom !== gc.flyZoom) {
+          // Smooth zoom-out at start of FLY
+          const zoomOutProgress = eased / 0.2;
+          zoom = lerp(prevArriveZoom, gc.flyZoom, zoomOutProgress);
+        } else if (eased > 0.7) {
+          const preZoomProgress = (eased - 0.7) / 0.3;
+          const midZoom = gc.flyZoom + (gc.arriveZoom - gc.flyZoom) * 0.3;
           zoom = lerp(gc.flyZoom, midZoom, preZoomProgress);
         }
         return { center, zoom, bearing: 0, pitch: 0 };
