@@ -1,4 +1,4 @@
-import type { TransportIconStyle, TransportMode } from "@/types";
+import type { IconVariant, TransportIconStyle, TransportMode } from "@/types";
 
 // 4 direction variants for static PNG icons (solid style)
 export type IconDirection = "right" | "down" | "left" | "up";
@@ -58,13 +58,78 @@ export function resolveTransportIconStyle(
 export function getTransportIconAssetKey(
   mode: TransportMode,
   style: TransportIconStyle,
+  variant?: IconVariant,
 ): string {
-  return `${mode}:${style}`;
+  const v = variant && variant !== getDefaultVariant(mode) ? variant : "";
+  return v ? `${mode}:${v}:${style}` : `${mode}:${style}`;
 }
 
 export function getTransportIconAssetPath(
   mode: TransportMode,
   style: TransportIconStyle,
+  variant?: IconVariant,
 ): string {
-  return `/lottie/${mode}-${style}.json`;
+  const v = variant && variant !== getDefaultVariant(mode) ? variant : "";
+  return v ? `/lottie/${mode}-${v}-${style}.json` : `/lottie/${mode}-${style}.json`;
 }
+
+/** Get the default variant ID for a transport mode */
+export function getDefaultVariant(mode: TransportMode): string {
+  return ICON_VARIANTS[mode][0].id;
+}
+
+/** Resolve variant to a valid value, falling back to the mode's default */
+export function resolveIconVariant(
+  mode: TransportMode,
+  variant?: IconVariant | null,
+): string {
+  if (!variant) return getDefaultVariant(mode);
+  const valid = ICON_VARIANTS[mode].some((v) => v.id === variant);
+  return valid ? variant : getDefaultVariant(mode);
+}
+
+export interface IconVariantConfig {
+  id: string;
+  label: string;
+  /** Short description shown in tooltip */
+  description: string;
+}
+
+/** Available icon variants per transport mode */
+export const ICON_VARIANTS: Record<TransportMode, IconVariantConfig[]> = {
+  flight: [
+    { id: "airplane", label: "Airplane", description: "Classic commercial airplane" },
+    { id: "jet", label: "Jet", description: "Sleek private jet" },
+    { id: "balloon", label: "Balloon", description: "Hot air balloon" },
+  ],
+  car: [
+    { id: "sedan", label: "Sedan", description: "Standard sedan car" },
+    { id: "suv", label: "SUV", description: "Sport utility vehicle" },
+    { id: "sports", label: "Sports", description: "Low-profile sports car" },
+  ],
+  train: [
+    { id: "bullet", label: "Bullet", description: "High-speed bullet train" },
+    { id: "steam", label: "Steam", description: "Classic steam locomotive" },
+    { id: "metro", label: "Metro", description: "Modern metro train" },
+  ],
+  bus: [
+    { id: "city", label: "City", description: "Standard city bus" },
+    { id: "coach", label: "Coach", description: "Long-distance coach" },
+    { id: "double", label: "Double", description: "Double-decker bus" },
+  ],
+  ferry: [
+    { id: "ship", label: "Ship", description: "Passenger ferry ship" },
+    { id: "sailboat", label: "Sailboat", description: "Classic sailboat" },
+    { id: "speedboat", label: "Speedboat", description: "Fast speedboat" },
+  ],
+  walk: [
+    { id: "person", label: "Person", description: "Walking person" },
+    { id: "hiker", label: "Hiker", description: "Hiker with backpack" },
+    { id: "runner", label: "Runner", description: "Running person" },
+  ],
+  bicycle: [
+    { id: "bike", label: "Bike", description: "Standard bicycle" },
+    { id: "scooter", label: "Scooter", description: "Electric scooter" },
+    { id: "motorcycle", label: "Motorcycle", description: "Motorcycle" },
+  ],
+};

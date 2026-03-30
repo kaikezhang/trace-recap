@@ -82,6 +82,7 @@ export class VideoExporter {
           iconAnimator.ensureCanvasRenderer(
             segment.transportMode,
             segment.iconStyle,
+            segment.iconVariant,
           ),
         );
       }

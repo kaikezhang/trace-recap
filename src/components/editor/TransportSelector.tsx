@@ -7,9 +7,13 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useSegmentEndpoints } from "@/stores/selectors";
 import { useAnimationStore } from "@/stores/animationStore";
 import { TRANSPORT_MODES } from "@/lib/constants";
-import { TRANSPORT_ICON_STYLES } from "@/lib/transportIcons";
+import {
+  TRANSPORT_ICON_STYLES,
+  ICON_VARIANTS,
+  resolveIconVariant,
+} from "@/lib/transportIcons";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
-import type { Segment, TransportIconStyle, TransportMode } from "@/types";
+import type { Segment, TransportIconStyle, TransportMode, IconVariant } from "@/types";
 import {
   Tooltip,
   TooltipContent,
@@ -115,6 +119,7 @@ function StylePreview({
 export default memo(function TransportSelector({ segment }: TransportSelectorProps) {
   const setTransportMode = useProjectStore((s) => s.setTransportMode);
   const setSegmentIconStyle = useProjectStore((s) => s.setSegmentIconStyle);
+  const setSegmentIconVariant = useProjectStore((s) => s.setSegmentIconVariant);
   const setSegmentGeometry = useProjectStore((s) => s.setSegmentGeometry);
   const setSegmentTiming = useProjectStore((s) => s.setSegmentTiming);
   const endpoints = useSegmentEndpoints(segment.fromId, segment.toId);
@@ -197,6 +202,13 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
     setSegmentIconStyle(segment.id, iconStyle);
   };
 
+  const handleVariantChange = (variant: IconVariant) => {
+    setSegmentIconVariant(segment.id, variant);
+  };
+
+  const activeVariant = resolveIconVariant(segment.transportMode, segment.iconVariant);
+  const variants = ICON_VARIANTS[segment.transportMode];
+
   const ActiveIcon = MODE_ICONS[segment.transportMode];
   const activeColor = MODE_COLORS[segment.transportMode];
 
@@ -265,6 +277,33 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
                   );
                 })}
               </div>
+              {variants.length > 1 && (
+                <div className="mt-1 flex items-center justify-center gap-1 border-t border-border/70 pt-1">
+                  {variants.map((v) => {
+                    const isActive = activeVariant === v.id;
+                    return (
+                      <Tooltip key={v.id}>
+                        <TooltipTrigger
+                          className={`flex h-6 items-center justify-center rounded-full border px-2 text-[10px] font-medium transition-colors ${
+                            isActive
+                              ? "border-foreground/20 bg-accent text-foreground"
+                              : "border-transparent text-muted-foreground hover:bg-accent"
+                          }`}
+                          onClick={() => handleVariantChange(v.id)}
+                        >
+                          {v.label}
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p>{v.label}</p>
+                          <p className="max-w-40 text-[11px] text-muted-foreground">
+                            {v.description}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="w-px h-4 bg-border" />
           </>

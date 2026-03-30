@@ -9,6 +9,9 @@ export type TransportMode =
 
 export type TransportIconStyle = "solid" | "outline" | "soft";
 
+/** Vehicle icon variant within a transport mode (e.g. "jet" for flight, "suv" for car) */
+export type IconVariant = string;
+
 export interface Photo {
   id: string;
   locationId: string;
@@ -33,6 +36,7 @@ export interface Segment {
   toId: string;
   transportMode: TransportMode;
   iconStyle: TransportIconStyle;
+  iconVariant?: IconVariant;
   geometry: GeoJSON.LineString | null;
 }
 
