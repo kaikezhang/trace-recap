@@ -250,5 +250,14 @@ function lerp2d(
   b: [number, number],
   t: number
 ): [number, number] {
-  return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)];
+  // Handle anti-meridian crossing: take the shorter path around the globe
+  let lngA = a[0];
+  let lngB = b[0];
+  const diff = lngB - lngA;
+  if (diff > 180) {
+    lngB -= 360; // wrap B westward
+  } else if (diff < -180) {
+    lngB += 360; // wrap B eastward
+  }
+  return [lerp(lngA, lngB, t), lerp(a[1], b[1], t)];
 }
