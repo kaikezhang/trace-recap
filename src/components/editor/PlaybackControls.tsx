@@ -35,9 +35,13 @@ export default function PlaybackControls({
   const currentTime = useAnimationStore((s) => s.currentTime);
   const totalDuration = useAnimationStore((s) => s.totalDuration);
   const bottomSheetState = useUIStore((s) => s.bottomSheetState);
+  const exportDialogOpen = useUIStore((s) => s.exportDialogOpen);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
+
+  // Hide controls when export dialog is open
+  if (exportDialogOpen) return null;
 
   // During playback, BottomSheet is hidden → controls go to bottom
   // Otherwise, position above the BottomSheet
