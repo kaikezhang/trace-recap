@@ -224,32 +224,41 @@ export class IconAnimator {
    * Ensure the offscreen canvas Lottie renderer is ready for a given mode.
    * Used by VideoExporter for frame-accurate canvas compositing.
    */
-  ensureCanvasRenderer(mode: TransportMode): HTMLCanvasElement {
+  ensureCanvasRenderer(mode: TransportMode): Promise<HTMLCanvasElement> {
     if (!this.canvasEl) {
       this.canvasEl = document.createElement("canvas");
       this.canvasEl.width = BASE_SIZE * 2;
       this.canvasEl.height = BASE_SIZE * 2;
     }
 
-    if (!this.canvasInstances.has(mode)) {
-      // Clear any prior content from the canvas for this new mode load
-      const ctx = this.canvasEl.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
+    if (this.canvasInstances.has(mode)) {
+      return Promise.resolve(this.canvasEl);
+    }
 
+    // Clear any prior content from the canvas for this new mode load
+    const ctx = this.canvasEl.getContext("2d");
+    if (ctx) ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
+
+    const canvas = this.canvasEl;
+
+    return new Promise<HTMLCanvasElement>((resolve) => {
+      // Cast needed: lottie-web types don't expose the canvas `context` option
+      // in their overload signatures, but lottie-web supports it at runtime.
       const instance = lottie.loadAnimation({
-        container: this.canvasEl,
         renderer: "canvas",
         loop: true,
         autoplay: false,
         path: `/lottie/${mode}.json`,
         rendererSettings: {
+          context: canvas.getContext("2d")!,
           preserveAspectRatio: "xMidYMid meet",
         },
-      });
+      } as Parameters<typeof lottie.loadAnimation>[0]);
       this.canvasInstances.set(mode, instance);
-    }
-
-    return this.canvasEl;
+      instance.addEventListener("DOMLoaded", () => {
+        resolve(canvas);
+      });
+    });
   }
 
   /**
@@ -315,12 +324,16 @@ export class IconAnimator {
   }
 
   hide() {
+    if (this.activeInstance) {
+      this.activeInstance.pause();
+    }
     this.containerEl.style.display = "none";
   }
 
   destroy() {
     // Destroy SVG marker instances
     for (const instance of this.lottieInstances.values()) {
+      instance.stop();
       instance.destroy();
     }
     this.lottieInstances.clear();
@@ -329,6 +342,7 @@ export class IconAnimator {
 
     // Destroy canvas renderer instances
     for (const instance of this.canvasInstances.values()) {
+      instance.stop();
       instance.destroy();
     }
     this.canvasInstances.clear();

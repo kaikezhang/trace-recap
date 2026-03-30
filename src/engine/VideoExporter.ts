@@ -59,11 +59,11 @@ export class VideoExporter {
   }
 
   /** Initialize Lottie canvas renderers for all transport modes (for video export compositing) */
-  private preloadIcons(): void {
+  private async preloadIcons(): Promise<void> {
     const iconAnimator = this.engine.getIconAnimator();
-    for (const mode of TRANSPORT_MODES) {
-      iconAnimator.ensureCanvasRenderer(mode);
-    }
+    await Promise.all(
+      TRANSPORT_MODES.map((mode) => iconAnimator.ensureCanvasRenderer(mode))
+    );
   }
 
   /** Pre-load all photo images so they're ready for canvas compositing */
@@ -850,7 +850,7 @@ export class VideoExporter {
       canvas.height,
     );
 
-    this.preloadIcons();
+    await this.preloadIcons();
     await this.preloadPhotos();
 
     this.hideAllSegments();
