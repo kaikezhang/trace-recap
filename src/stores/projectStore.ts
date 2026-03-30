@@ -648,8 +648,28 @@ export function initializeProjectPersistence(
         return;
       }
 
-      window.localStorage.setItem(PROJECT_STORAGE_KEY, nextProjectJson);
-      lastSavedProjectJson = nextProjectJson;
+      try {
+        window.localStorage.setItem(PROJECT_STORAGE_KEY, nextProjectJson);
+        lastSavedProjectJson = nextProjectJson;
+      } catch (e) {
+        // QuotaExceededError — localStorage is full (likely due to base64 photo data)
+        // Try saving without photo data as fallback
+        try {
+          const stripped = JSON.stringify(
+            serializeProjectState(
+              state.locations.map((loc) => ({ ...loc, photos: [] })),
+              state.segments,
+              state.mapStyle,
+              state.segmentTimingOverrides,
+            ),
+          );
+          window.localStorage.setItem(PROJECT_STORAGE_KEY, stripped);
+          lastSavedProjectJson = stripped;
+          console.warn("Project saved without photos (localStorage quota exceeded)");
+        } catch {
+          console.error("Failed to save project to localStorage", e);
+        }
+      }
     }, PROJECT_SAVE_DEBOUNCE_MS);
   });
 

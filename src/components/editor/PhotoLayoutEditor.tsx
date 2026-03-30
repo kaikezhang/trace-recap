@@ -602,87 +602,89 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           </div>
 
           {/* Bottom controls */}
-          <div className="shrink-0 border-t border-gray-100 bg-white">
-            {/* Layout style selector — horizontal pills */}
-            <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
-              {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => handleStyleSelect(id)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-colors ${
-                    activeStyle === id
-                      ? "bg-indigo-500 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
+          <div className="max-h-[50vh] shrink-0 border-t border-gray-100 bg-white flex min-h-0 flex-col">
+            <div className="min-h-0 overflow-y-auto">
+              {/* Layout style selector — horizontal pills */}
+              <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
+                {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => handleStyleSelect(id)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-colors ${
+                      activeStyle === id
+                        ? "bg-indigo-500 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-            <div className="border-t border-gray-100 px-4 py-3">
-              <div className="space-y-4">
-                <AnimationSelectorSection
-                  title="In Animation"
-                  selectedAnimation={selectedEnterAnimation}
-                  options={animationOptions}
-                  defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
-                  onSelect={handleEnterAnimationSelect}
-                />
-                <AnimationSelectorSection
-                  title="Out Animation"
-                  selectedAnimation={selectedExitAnimation}
-                  options={animationOptions}
-                  defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
-                  onSelect={handleExitAnimationSelect}
-                />
+              <div className="border-t border-gray-100 px-4 py-3">
+                <div className="space-y-4">
+                  <AnimationSelectorSection
+                    title="In Animation"
+                    selectedAnimation={selectedEnterAnimation}
+                    options={animationOptions}
+                    defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                    onSelect={handleEnterAnimationSelect}
+                  />
+                  <AnimationSelectorSection
+                    title="Out Animation"
+                    selectedAnimation={selectedExitAnimation}
+                    options={animationOptions}
+                    defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                    onSelect={handleExitAnimationSelect}
+                  />
+                </div>
+              </div>
+
+              {/* Photo thumbnails — horizontal scroll */}
+              <div className="px-4 pb-3 overflow-x-auto">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragCancel={handleDragCancel}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={orderedPhotoIds}
+                    strategy={horizontalListSortingStrategy}
+                  >
+                    <div className="flex gap-2">
+                      {orderedPhotos.map((photo, i) => (
+                        <SortablePhotoThumbnail
+                          key={photo.id}
+                          photo={photo}
+                          index={i}
+                          selected={selectedPhotoId === photo.id}
+                          orientation="horizontal"
+                          onSelect={() => setSelectedPhotoId(photo.id)}
+                          onDelete={handleDeletePhoto}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                  <DragOverlay>
+                    {activeDragPhoto ? (
+                      <PhotoThumbnail
+                        photo={activeDragPhoto}
+                        index={activeDragPhotoIndex}
+                        selected={selectedPhotoId === activeDragPhoto.id}
+                        orientation="horizontal"
+                        overlay
+                      />
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
               </div>
             </div>
 
-            {/* Photo thumbnails — horizontal scroll */}
-            <div className="px-4 pb-3 overflow-x-auto">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragStart={handleDragStart}
-                onDragCancel={handleDragCancel}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={orderedPhotoIds}
-                  strategy={horizontalListSortingStrategy}
-                >
-                  <div className="flex gap-2">
-                    {orderedPhotos.map((photo, i) => (
-                      <SortablePhotoThumbnail
-                        key={photo.id}
-                        photo={photo}
-                        index={i}
-                        selected={selectedPhotoId === photo.id}
-                        orientation="horizontal"
-                        onSelect={() => setSelectedPhotoId(photo.id)}
-                        onDelete={handleDeletePhoto}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-                <DragOverlay>
-                  {activeDragPhoto ? (
-                    <PhotoThumbnail
-                      photo={activeDragPhoto}
-                      index={activeDragPhotoIndex}
-                      selected={selectedPhotoId === activeDragPhoto.id}
-                      orientation="horizontal"
-                      overlay
-                    />
-                  ) : null}
-                </DragOverlay>
-              </DndContext>
-            </div>
-
             {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-t border-gray-100">
               <p className="text-xs text-gray-400">Changes are applied automatically</p>
               <button
                 onClick={onClose}
@@ -719,7 +721,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           {/* 3-column body */}
           <div className="flex h-[500px]">
             {/* LEFT — Layout style selector */}
-            <div className="w-72 border-r border-gray-100 p-4 space-y-2">
+            <div className="w-72 min-h-0 overflow-y-auto border-r border-gray-100 p-4 space-y-2">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Layout</p>
               {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
                 <button
