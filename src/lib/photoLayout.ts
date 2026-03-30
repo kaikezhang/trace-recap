@@ -446,6 +446,12 @@ export function computeTemplateLayout(
       return layoutFilmstrip(photos, g);
     case "scatter":
       return layoutScatter(photos, g);
+    case "polaroid":
+      return layoutPolaroid(photos, g);
+    case "overlap":
+      return layoutOverlap(photos.length, g);
+    case "full":
+      return layoutFull(photos.length);
     default:
       return computeAutoLayout(photos, containerAspect, gapPx, widthPx);
   }
@@ -575,6 +581,120 @@ function layoutMasonry(photos: PhotoMeta[], gap: number): PhotoRect[] {
   }
 
   return rects;
+}
+
+/** Polaroid: photos as Polaroid-style cards with white borders, slight rotation, scattered */
+function layoutPolaroid(photos: PhotoMeta[], gap: number): PhotoRect[] {
+  const n = photos.length;
+  if (n === 0) return [];
+
+  const seed = photos.map((p) => p.id).join(",");
+  const rand = seededRandom(seed);
+
+  if (n === 1) {
+    const w = 0.4;
+    const h = 0.5;
+    const rotation = (rand() - 0.5) * 10;
+    return [{ x: (1 - w) / 2, y: (1 - h) / 2, width: w, height: h, rotation }];
+  }
+
+  const baseSize = Math.min(0.42, 0.85 / Math.sqrt(n));
+  const margin = gap + 0.03;
+
+  const rects: PhotoRect[] = [];
+  for (let i = 0; i < n; i++) {
+    const sizeScale = 0.85 + rand() * 0.3;
+    const w = baseSize * sizeScale;
+    const h = baseSize * sizeScale * 1.15; // taller for Polaroid proportions
+
+    const maxX = 1 - w - margin;
+    const maxY = 1 - h - margin;
+    const x = margin + rand() * Math.max(0, maxX - margin);
+    const y = margin + rand() * Math.max(0, maxY - margin);
+
+    // Rotation between -8° and +8°
+    const rotation = (rand() - 0.5) * 16;
+
+    rects.push({ x, y, width: w, height: h, rotation });
+  }
+
+  // Light collision relaxation — allow more overlap than scatter for a natural pile feel
+  for (let pass = 0; pass < 6; pass++) {
+    const nudge = 0.03 - pass * 0.003;
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i];
+        const b = rects[j];
+        const overlapX = (a.width + b.width) / 2 - Math.abs((a.x + a.width / 2) - (b.x + b.width / 2));
+        const overlapY = (a.height + b.height) / 2 - Math.abs((a.y + a.height / 2) - (b.y + b.height / 2));
+        if (overlapX > 0 && overlapY > 0) {
+          const overlapArea = overlapX * overlapY;
+          const smallerArea = Math.min(a.width * a.height, b.width * b.height);
+          if (overlapArea > smallerArea * 0.4) {
+            const dx = (a.x + a.width / 2) < (b.x + b.width / 2) ? -1 : 1;
+            const dy = (a.y + a.height / 2) < (b.y + b.height / 2) ? -1 : 1;
+            a.x += dx * nudge;
+            a.y += dy * nudge;
+            b.x -= dx * nudge;
+            b.y -= dy * nudge;
+          }
+        }
+      }
+    }
+  }
+
+  // Clamp within bounds
+  for (const r of rects) {
+    r.x = Math.max(margin, Math.min(r.x, 1 - r.width - margin));
+    r.y = Math.max(margin, Math.min(r.y, 1 - r.height - margin));
+  }
+
+  return rects;
+}
+
+/** Overlap: photos stacked with depth, each offset right and down */
+function layoutOverlap(n: number, gap: number): PhotoRect[] {
+  if (n === 0) return [];
+  if (n === 1) {
+    const w = 0.8;
+    const h = 0.8;
+    return [{ x: (1 - w) / 2, y: (1 - h) / 2, width: w, height: h, rotation: 0 }];
+  }
+
+  const rects: PhotoRect[] = [];
+  // Back photo is largest, front photo is smallest
+  const maxScale = 0.7;
+  const minScale = 0.45;
+  const scaleStep = n > 1 ? (maxScale - minScale) / (n - 1) : 0;
+
+  // Offset each photo slightly right and down
+  // Reduce offsetStep dynamically so all photos fit within [0, 1]
+  const maxOffset = 0.06;
+  const maxTotalOffset = (1 - maxScale) / 2; // max offset that keeps startPos >= 0
+  const offsetStep = Math.min(maxOffset, n > 1 ? maxTotalOffset / (n - 1) : maxOffset);
+  // Center the stack
+  const totalOffsetX = offsetStep * (n - 1);
+  const totalOffsetY = offsetStep * (n - 1);
+  const startX = (1 - maxScale - totalOffsetX) / 2;
+  const startY = (1 - maxScale - totalOffsetY) / 2;
+
+  for (let i = 0; i < n; i++) {
+    const scale = maxScale - i * scaleStep;
+    const x = startX + i * offsetStep;
+    const y = startY + i * offsetStep;
+    // Slight rotation variation
+    const rotation = i === 0 ? 0 : ((i % 2 === 0 ? 1 : -1) * (1 + i * 0.8));
+    rects.push({ x, y, width: scale, height: scale, rotation });
+  }
+
+  return rects;
+}
+
+/** Full: single photo fills entire container edge-to-edge */
+function layoutFull(n: number): PhotoRect[] {
+  if (n === 0) return [];
+  // Only show first photo, full bleed
+  return [{ x: 0, y: 0, width: 1, height: 1 }];
 }
 
 /** Filmstrip: single horizontal row, all same height */

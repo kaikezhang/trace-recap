@@ -171,6 +171,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
             const hasCaption = !!photo.caption;
             const pad = 6; // px padding inside frame
             const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
+            const isPolaroid = displayLayout?.template === "polaroid";
 
             // Use scatter rotation if provided, otherwise default tilts
             const rotation = rect.rotation != null
@@ -206,10 +207,15 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
                   top: `${rect.y * 100}%`,
                   width: `${rect.width * 100}%`,
                   height: `${rect.height * 100}%`,
-                  borderRadius: `${borderRadiusPx}px`,
+                  borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
                   rotate: rotation,
                   display: "flex",
                   flexDirection: "column" as const,
+                  ...(isPolaroid ? {
+                    background: "white",
+                    padding: "4% 4% 10% 4%",
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+                  } : {}),
                 }}
               >
                 <div

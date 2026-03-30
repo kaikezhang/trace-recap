@@ -27,6 +27,9 @@ import {
   LayoutTemplate,
   Image as ImageIcon,
   Images,
+  Layers,
+  Square,
+  Maximize,
   GripVertical,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,7 +44,7 @@ interface PhotoLayoutEditorProps {
   onClose: () => void;
 }
 
-type LayoutStyle = "grid" | "collage" | "single" | "carousel";
+type LayoutStyle = "grid" | "collage" | "single" | "carousel" | "polaroid" | "overlap" | "full";
 type SortablePhotoListOrientation = "horizontal" | "vertical";
 
 const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; template: LayoutTemplateType | "auto" }[] = [
@@ -49,6 +52,9 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "collage", label: "Collage", icon: LayoutTemplate, template: "hero" },
   { id: "single", label: "Single", icon: ImageIcon, template: "auto" },
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
+  { id: "polaroid", label: "Polaroid", icon: Square, template: "polaroid" },
+  { id: "overlap", label: "Overlap", icon: Layers, template: "overlap" },
+  { id: "full", label: "Full", icon: Maximize, template: "full" },
 ];
 
 function getOrderedPhotos(photos: Photo[], order: string[]): Photo[] {
@@ -72,12 +78,14 @@ function PhotoThumbnail({
   selected,
   orientation,
   overlay = false,
+  dragHandleProps,
 }: {
   photo: Photo;
   index: number;
   selected: boolean;
   orientation: SortablePhotoListOrientation;
   overlay?: boolean;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }) {
   return (
     <div
@@ -97,7 +105,13 @@ function PhotoThumbnail({
       />
       <div className="pointer-events-none absolute inset-x-1 top-1 flex items-center justify-between rounded-md bg-black/45 px-1.5 py-1 text-white backdrop-blur-sm">
         <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">{index + 1}</span>
-        <GripVertical className="h-3.5 w-3.5 opacity-80" />
+        <div
+          data-drag-handle
+          className={`${dragHandleProps ? "pointer-events-auto cursor-grab active:cursor-grabbing touch-none" : ""}`}
+          {...dragHandleProps}
+        >
+          <GripVertical className="h-3.5 w-3.5 opacity-80" />
+        </div>
       </div>
     </div>
   );
@@ -131,21 +145,20 @@ function SortablePhotoThumbnail({
       type="button"
       onClick={onSelect}
       aria-label={`Select photo ${index + 1}${selected ? " (selected)" : ""}`}
-      className={`touch-none text-left transition-[box-shadow,opacity] ${
+      className={`text-left transition-[box-shadow,opacity] ${
         isDragging ? "opacity-35" : ""
       }`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      {...attributes}
-      {...listeners}
     >
       <PhotoThumbnail
         photo={photo}
         index={index}
         selected={selected}
         orientation={orientation}
+        dragHandleProps={{ ...attributes, ...listeners }}
       />
     </button>
   );
@@ -324,6 +337,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     if (activeTemplate === "grid") return "grid";
     if (activeTemplate === "hero") return "collage";
     if (activeTemplate === "filmstrip") return "carousel";
+    if (activeTemplate === "polaroid") return "polaroid";
+    if (activeTemplate === "overlap") return "overlap";
+    if (activeTemplate === "full") return "full";
     return "single";
   })();
 
