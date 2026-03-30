@@ -203,6 +203,52 @@ function PreviewWithMapBackground({
   );
 }
 
+function AnimationSelectorSection({
+  title,
+  selectedAnimation,
+  options,
+  defaultAnimationLabel,
+  onSelect,
+}: {
+  title: string;
+  selectedAnimation: PhotoAnimationOption;
+  options: ReadonlyArray<{ value: PhotoAnimationOption; label: string }>;
+  defaultAnimationLabel: string;
+  onSelect: (animation: PhotoAnimationOption) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+          {title}
+        </p>
+        <p className="mt-1 text-xs text-gray-500">Default uses {defaultAnimationLabel}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {options.map(({ value, label }) => {
+          const isActive = selectedAnimation === value;
+
+          return (
+            <button
+              key={`${title}-${value}`}
+              type="button"
+              onClick={() => onSelect(value)}
+              aria-pressed={isActive}
+              className={`h-10 min-w-[64px] rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                isActive
+                  ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEditorProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const defaultPhotoAnimation = useUIStore((s) => s.photoAnimation);
@@ -324,6 +370,10 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   );
   const [selectedPhotoId, setSelectedPhotoId] = useState<string>(() => orderedPhotoIds[0] ?? "");
   const [activeDragPhotoId, setActiveDragPhotoId] = useState<string | null>(null);
+  const [previewKey, setPreviewKey] = useState(0);
+  const [previewOpacity, setPreviewOpacity] = useState(1);
+  const exitPreviewTimeoutRef = useRef<number | null>(null);
+  const exitPreviewFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (orderedPhotoIds.length === 0) {
@@ -355,21 +405,34 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     if (activeTemplate === "full") return "full";
     return "single";
   })();
-  const selectedAnimation: PhotoAnimationOption =
-    layout.enterAnimation ?? layout.exitAnimation ?? "default";
+  const selectedEnterAnimation: PhotoAnimationOption = layout.enterAnimation ?? "default";
+  const selectedExitAnimation: PhotoAnimationOption = layout.exitAnimation ?? "default";
   const animationOptions = useMemo(
     () => [
       {
         value: "default" as const,
-        label: `Default (${PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]})`,
+        label: "Default",
       },
       ...PHOTO_ANIMATION_OPTIONS.map((value) => ({
         value,
         label: PHOTO_ANIMATION_LABELS[value],
       })),
     ],
-    [defaultPhotoAnimation]
+    []
   );
+
+  const clearExitPreview = useCallback(() => {
+    if (exitPreviewFrameRef.current !== null) {
+      window.cancelAnimationFrame(exitPreviewFrameRef.current);
+      exitPreviewFrameRef.current = null;
+    }
+    if (exitPreviewTimeoutRef.current !== null) {
+      window.clearTimeout(exitPreviewTimeoutRef.current);
+      exitPreviewTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearExitPreview, [clearExitPreview]);
 
   const updateLayout = useCallback(
     (updates: Partial<PhotoLayout>) => {
@@ -392,15 +455,39 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     [updateLayout]
   );
 
-  const handleAnimationSelect = useCallback(
+  const replayEnterPreview = useCallback(() => {
+    clearExitPreview();
+    setPreviewOpacity(1);
+    setPreviewKey((key) => key + 1);
+  }, [clearExitPreview]);
+
+  const replayExitPreview = useCallback(() => {
+    clearExitPreview();
+    setPreviewOpacity(1);
+    exitPreviewFrameRef.current = window.requestAnimationFrame(() => {
+      setPreviewOpacity(0);
+      exitPreviewTimeoutRef.current = window.setTimeout(() => {
+        setPreviewOpacity(1);
+        exitPreviewTimeoutRef.current = null;
+      }, 220);
+      exitPreviewFrameRef.current = null;
+    });
+  }, [clearExitPreview]);
+
+  const handleEnterAnimationSelect = useCallback(
     (animation: PhotoAnimationOption) => {
-      if (animation === "default") {
-        updateLayout({ enterAnimation: undefined, exitAnimation: undefined });
-        return;
-      }
-      updateLayout({ enterAnimation: animation, exitAnimation: animation });
+      updateLayout({ enterAnimation: animation === "default" ? undefined : animation });
+      replayEnterPreview();
     },
-    [updateLayout]
+    [replayEnterPreview, updateLayout]
+  );
+
+  const handleExitAnimationSelect = useCallback(
+    (animation: PhotoAnimationOption) => {
+      updateLayout({ exitAnimation: animation === "default" ? undefined : animation });
+      replayExitPreview();
+    },
+    [replayExitPreview, updateLayout]
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -443,10 +530,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const layoutPreviewNode = (
     <PhotoOverlay
+      key={previewKey}
       photos={orderedPhotos}
       visible={true}
       photoLayout={layout}
-      opacity={1}
+      opacity={previewOpacity}
       containerMode="parent"
     />
   );
@@ -505,24 +593,21 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             </div>
 
             <div className="border-t border-gray-100 px-4 py-3">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-                Photo Animation
-              </p>
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                {animationOptions.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => handleAnimationSelect(value)}
-                    className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${
-                      selectedAnimation === value
-                        ? "bg-indigo-500 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <div className="space-y-4">
+                <AnimationSelectorSection
+                  title="In Animation"
+                  selectedAnimation={selectedEnterAnimation}
+                  options={animationOptions}
+                  defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                  onSelect={handleEnterAnimationSelect}
+                />
+                <AnimationSelectorSection
+                  title="Out Animation"
+                  selectedAnimation={selectedExitAnimation}
+                  options={animationOptions}
+                  defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                  onSelect={handleExitAnimationSelect}
+                />
               </div>
             </div>
 
@@ -604,7 +689,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           {/* 3-column body */}
           <div className="flex h-[500px]">
             {/* LEFT — Layout style selector */}
-            <div className="w-48 border-r border-gray-100 p-4 space-y-2">
+            <div className="w-72 border-r border-gray-100 p-4 space-y-2">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Layout</p>
               {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
                 <button
@@ -621,26 +706,21 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                 </button>
               ))}
 
-              <div className="pt-4">
-                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-400">
-                  Animation
-                </p>
-                <div className="space-y-2">
-                  {animationOptions.map(({ value, label }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => handleAnimationSelect(value)}
-                      className={`w-full rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors ${
-                        selectedAnimation === value
-                          ? "border-indigo-200 bg-indigo-50 text-indigo-600"
-                          : "border-transparent text-gray-600 hover:bg-gray-50"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+              <div className="space-y-5 pt-4">
+                <AnimationSelectorSection
+                  title="In Animation"
+                  selectedAnimation={selectedEnterAnimation}
+                  options={animationOptions}
+                  defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                  onSelect={handleEnterAnimationSelect}
+                />
+                <AnimationSelectorSection
+                  title="Out Animation"
+                  selectedAnimation={selectedExitAnimation}
+                  options={animationOptions}
+                  defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                  onSelect={handleExitAnimationSelect}
+                />
               </div>
             </div>
 
