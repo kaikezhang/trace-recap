@@ -107,22 +107,18 @@ export class IconAnimator {
     const totalLength = turf.length(line);
     const coords = routeLine.coordinates;
 
-    // Dynamic bearing: compute from current position's tangent along the route
-    // This makes the icon rotate as the route curves (e.g. great circle Seoul→Seattle)
-    const currentDist = phase === "FLY" || phase === "ZOOM_IN"
-      ? totalLength * Math.min(progress, 0.999)
-      : 0;
-    const lookAheadDist = Math.min(currentDist + totalLength * 0.02, totalLength * 0.999);
-    let bearing: number;
-    try {
-      const currentPt = turf.along(turf.lineString(coords), currentDist).geometry.coordinates as [number, number];
-      const aheadPt = turf.along(turf.lineString(coords), lookAheadDist).geometry.coordinates as [number, number];
-      bearing = turf.bearing(turf.point(currentPt), turf.point(aheadPt));
-    } catch {
-      const startPt = coords[0] as [number, number];
-      const endPt = coords[coords.length - 1] as [number, number];
-      bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
-    }
+    // Use start bearing for first half, end bearing for second half
+    // This handles great circle routes (e.g. Seoul→Seattle: north then south)
+    // without per-frame computation overhead
+    const startPt = coords[0] as [number, number];
+    const endPt = coords[coords.length - 1] as [number, number];
+    const midIdx = Math.floor(coords.length / 2);
+    const midPt = coords[midIdx] as [number, number];
+
+    const isSecondHalf = (phase === "FLY" && progress > 0.5) || phase === "ZOOM_IN" || phase === "ARRIVE";
+    const bearing = isSecondHalf
+      ? turf.bearing(turf.point(midPt), turf.point(endPt))
+      : turf.bearing(turf.point(startPt), turf.point(midPt));
     const direction = bearingToDirection(bearing);
 
     // Determine which sub-segment the current position is on for the correct icon
