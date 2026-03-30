@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo } from "@/types";
 
@@ -35,14 +36,15 @@ function LayoutPreview({
   template,
   gap,
   customProportions,
+  containerAspect,
 }: {
   photos: Photo[];
   borderRadius: number;
   template: LayoutTemplateType | "auto";
   gap: number;
   customProportions?: { rows?: number[]; cols?: number[] };
+  containerAspect: number;
 }) {
-  const containerAspect = 16 / 10; // approximate preview container aspect
   const containerWidthPx = 500; // reference width for gap calculation
 
   const metas = useMemo(
@@ -91,6 +93,7 @@ function LayoutPreview({
 }
 
 export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEditorProps) {
+  const viewportRatio = useUIStore((s) => s.viewportRatio);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
   const layout = location.photoLayout ?? { mode: "auto" as const };
 
@@ -99,6 +102,13 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const borderRadiusValue = layout.borderRadius ?? 8;
   const gapValue = layout.gap ?? 8;
   const photoOrder = layout.order ?? location.photos.map((p) => p.id);
+
+  // Compute numeric aspect ratio from viewport ratio setting
+  const previewAspect = useMemo(() => {
+    if (viewportRatio === "free") return 16 / 10;
+    const [w, h] = viewportRatio.split(":").map(Number);
+    return w / h;
+  }, [viewportRatio]);
 
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
 
@@ -202,6 +212,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   template={activeTemplate}
                   gap={gapValue}
                   customProportions={layout.customProportions}
+                  containerAspect={previewAspect}
                 />
               </div>
             </div>

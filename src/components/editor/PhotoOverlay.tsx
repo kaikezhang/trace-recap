@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout } from "@/types";
+import { useUIStore } from "@/stores/uiStore";
 
 
 interface PhotoOverlayProps {
@@ -64,6 +65,7 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
 }
 
 export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1 }: PhotoOverlayProps) {
+  const viewportRatio = useUIStore((s) => s.viewportRatio);
   const metas = usePhotoDimensions(photos);
   const hasPhotos = metas.length > 0;
 
@@ -76,6 +78,15 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
   const displayMetas = visible && hasPhotos ? metas : lastVisibleRef.current.metas;
   const displayLayout = visible && hasPhotos ? photoLayout : lastVisibleRef.current.layout;
   const hasDisplayPhotos = displayMetas.length > 0;
+  // When a fixed ratio is set, the parent map container already has that aspect ratio,
+  // so we use percentage-based sizing to stay within bounds. For "free", keep vw/vh.
+  const containerStyle = useMemo(() => {
+    if (viewportRatio === "free") {
+      return { width: "95vw", height: "88vh" };
+    }
+    return { width: "95%", height: "88%" };
+  }, [viewportRatio]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
 
@@ -140,8 +151,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
       ref={containerRef}
       className="absolute inset-0 z-20 pointer-events-none"
       style={{
-        width: "95vw",
-        height: "88vh",
+        ...containerStyle,
         margin: "auto",
         top: 0,
         bottom: 0,
