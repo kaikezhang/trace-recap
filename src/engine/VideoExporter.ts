@@ -423,13 +423,13 @@ export class VideoExporter {
     progress: number, // 0→1 eased
     index: number,
     total: number,
-  ): { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number } {
+  ): { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number } {
     const p = progress;
     switch (style) {
       case "none":
-        return { opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0 };
+        return { opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
       case "fade":
-        return { opacity: p, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0 };
+        return { opacity: p, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
       case "scale":
         return {
           opacity: p,
@@ -438,6 +438,7 @@ export class VideoExporter {
           translateX: 0,
           translateY: 60 * (1 - p),
           rotate: 0,
+          blur: 8 * (1 - p),
         };
       case "slide":
         return {
@@ -447,6 +448,7 @@ export class VideoExporter {
           translateX: (index % 2 === 0 ? -80 : 80) * (1 - p),
           translateY: 0,
           rotate: 0,
+          blur: 0,
         };
       case "flip":
         // Simulate flip via horizontal scale (1→0→1 mapped from rotateY 90→0)
@@ -457,6 +459,7 @@ export class VideoExporter {
           translateX: 0,
           translateY: 0,
           rotate: 0,
+          blur: 0,
         };
       case "scatter": {
         const angle = (index / Math.max(total, 1)) * 2 * Math.PI;
@@ -468,6 +471,7 @@ export class VideoExporter {
           translateX: Math.cos(angle) * dist * (1 - p),
           translateY: Math.sin(angle) * dist * (1 - p),
           rotate: (index % 2 === 0 ? -30 : 30) * (1 - p),
+          blur: 0,
         };
       }
       case "typewriter":
@@ -478,6 +482,7 @@ export class VideoExporter {
           translateX: 0,
           translateY: 20 * (1 - p),
           rotate: 0,
+          blur: 0,
         };
     }
   }
@@ -489,13 +494,13 @@ export class VideoExporter {
     photoExitT: number, // 0→1 per-photo staggered
     index: number,
     total: number,
-  ): { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number } {
+  ): { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number } {
     const t = photoExitT;
     switch (style) {
       case "none":
-        return { opacity: 1 - exitProgress, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0 };
+        return { opacity: 1 - exitProgress, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
       case "fade":
-        return { opacity: 1 - t, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0 };
+        return { opacity: 1 - t, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
       case "scale":
         return {
           opacity: 1 - t,
@@ -504,6 +509,7 @@ export class VideoExporter {
           translateX: 0,
           translateY: -t * 60,
           rotate: t * (index % 2 === 0 ? -12 : 12),
+          blur: t * 6,
         };
       case "slide":
         return {
@@ -513,6 +519,7 @@ export class VideoExporter {
           translateX: (index % 2 === 0 ? -1 : 1) * t * 120,
           translateY: 0,
           rotate: 0,
+          blur: 0,
         };
       case "flip":
         return {
@@ -522,9 +529,10 @@ export class VideoExporter {
           translateX: 0,
           translateY: 0,
           rotate: 0,
+          blur: 0,
         };
       case "scatter": {
-        const angle = (index / Math.max(total, 1)) * 2 * Math.PI;
+        const angle = (index / 4) * 2 * Math.PI;
         const dist = 200;
         return {
           opacity: 1 - t,
@@ -533,6 +541,7 @@ export class VideoExporter {
           translateX: Math.cos(angle) * dist * t,
           translateY: Math.sin(angle) * dist * t,
           rotate: (index % 2 === 0 ? -25 : 25) * t,
+          blur: t * 4,
         };
       }
       case "typewriter":
@@ -543,6 +552,7 @@ export class VideoExporter {
           translateX: 0,
           translateY: t * -30,
           rotate: 0,
+          blur: 0,
         };
     }
   }
@@ -675,7 +685,7 @@ export class VideoExporter {
       const centerY = ry + frameH / 2;
 
       // --- Compute animation transform for this photo ---
-      let animTransform: { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number };
+      let animTransform: { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number };
 
       if (animStyle !== "none" && exitProgress > 0) {
         // Exit animation
@@ -691,7 +701,7 @@ export class VideoExporter {
         const easedProgress = this.easeOut(rawProgress);
         animTransform = this.getEnterTransform(animStyle, easedProgress, i, count);
       } else {
-        animTransform = { opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0 };
+        animTransform = { opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
       }
 
       // Skip fully transparent photos
@@ -701,6 +711,9 @@ export class VideoExporter {
 
       ctx.save();
       ctx.globalAlpha = animTransform.opacity;
+      if (animTransform.blur > 0) {
+        ctx.filter = `blur(${animTransform.blur * scaleX}px)`;
+      }
       ctx.translate(centerX + animTransform.translateX * scaleX, centerY + animTransform.translateY * scaleX);
       ctx.rotate((rotation + animTransform.rotate) * Math.PI / 180);
       ctx.scale(animTransform.scaleX, animTransform.scaleY);
