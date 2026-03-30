@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   X,
   LayoutGrid,
@@ -103,12 +103,56 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const gapValue = layout.gap ?? 8;
   const photoOrder = layout.order ?? location.photos.map((p) => p.id);
 
+  // Measure the preview panel so free mode uses real dimensions
+  const previewPanelRef = useRef<HTMLDivElement>(null);
+  const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const el = previewPanelRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setPanelSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+      }
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
   // Compute numeric aspect ratio from viewport ratio setting
   const previewAspect = useMemo(() => {
-    if (viewportRatio === "free") return 16 / 10;
+    if (viewportRatio === "free") {
+      if (panelSize && panelSize.width > 0 && panelSize.height > 0) {
+        return panelSize.width / panelSize.height;
+      }
+      return 16 / 10; // fallback until measured
+    }
     const [w, h] = viewportRatio.split(":").map(Number);
     return w / h;
-  }, [viewportRatio]);
+  }, [viewportRatio, panelSize]);
+
+  // Compute fitted preview container style for non-free ratios
+  const previewContainerStyle = useMemo<React.CSSProperties>(() => {
+    if (viewportRatio === "free" || !panelSize) {
+      return { width: "100%", height: "100%" };
+    }
+    const { width: pw, height: ph } = panelSize;
+    const targetRatio = previewAspect;
+    const panelRatio = pw / ph;
+
+    let w: number, h: number;
+    if (targetRatio > panelRatio) {
+      // constrained by width
+      w = pw;
+      h = pw / targetRatio;
+    } else {
+      // constrained by height
+      h = ph;
+      w = ph * targetRatio;
+    }
+    return { width: `${w}px`, height: `${h}px` };
+  }, [viewportRatio, panelSize, previewAspect]);
 
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
 
@@ -204,8 +248,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             </div>
 
             {/* CENTER — Live preview using actual layout functions */}
-            <div className="flex-1 bg-gray-100 flex items-center justify-center p-6">
-              <div className="w-full h-full bg-gray-200/50 rounded-xl overflow-hidden relative">
+            <div ref={previewPanelRef} className="flex-1 bg-gray-100 flex items-center justify-center p-6">
+              <div className="bg-gray-200/50 rounded-xl overflow-hidden relative" style={previewContainerStyle}>
                 <LayoutPreview
                   photos={orderedPhotos}
                   borderRadius={borderRadiusValue}
