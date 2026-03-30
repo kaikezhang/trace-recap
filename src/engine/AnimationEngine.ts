@@ -245,15 +245,35 @@ export class AnimationEngine {
         const variableForGroup = totalVariable * proportion;
         // Minimum 1.5s for variable portion so short legs aren't invisible
         const effectiveVariable = Math.max(variableForGroup, 1.5);
-        zoomOutDur = effectiveVariable * 0.2;
-        // Ensure zoom-in has minimum 1.2s for tile loading (prevents black screen on long flights)
-        const minZoomIn = 2.5;
-        const rawZoomIn = effectiveVariable * 0.2;
-        zoomInDur = Math.max(rawZoomIn, minZoomIn);
-        flyDur = effectiveVariable - zoomOutDur - zoomInDur;
-        if (flyDur < 0.5) {
-          flyDur = 0.5;
-          zoomInDur = effectiveVariable - zoomOutDur - flyDur;
+
+        if (isFromWaypoint && isToWaypoint) {
+          // Pure waypoint transit: skip zoom phases, all time to FLY
+          zoomOutDur = 0;
+          zoomInDur = 0;
+          flyDur = effectiveVariable;
+        } else if (isToWaypoint) {
+          // Flying TO a waypoint: minimal zoom-in (just passing through)
+          zoomOutDur = effectiveVariable * 0.15;
+          zoomInDur = 0;
+          flyDur = effectiveVariable - zoomOutDur;
+        } else if (isFromWaypoint) {
+          // Flying FROM a waypoint: minimal zoom-out
+          zoomOutDur = 0;
+          const minZoomIn = 1.5;
+          const rawZoomIn = effectiveVariable * 0.2;
+          zoomInDur = Math.max(rawZoomIn, minZoomIn);
+          flyDur = effectiveVariable - zoomInDur;
+        } else {
+          // Normal segment: full zoom phases
+          zoomOutDur = effectiveVariable * 0.2;
+          const minZoomIn = 2.5;
+          const rawZoomIn = effectiveVariable * 0.2;
+          zoomInDur = Math.max(rawZoomIn, minZoomIn);
+          flyDur = effectiveVariable - zoomOutDur - zoomInDur;
+          if (flyDur < 0.5) {
+            flyDur = 0.5;
+            zoomInDur = effectiveVariable - zoomOutDur - flyDur;
+          }
         }
       }
 
