@@ -112,7 +112,24 @@ export interface PhotoLayout {
 
 export type PhotoAnimation = "scale" | "fade" | "slide" | "flip" | "scatter" | "typewriter" | "none";
 
-export type MapStyle = "light" | "dark" | "satellite";
+export type MapStyle =
+  | "light"
+  | "dark"
+  | "satellite"
+  | "streets"
+  | "outdoors"
+  | "satellite-raw"
+  | "navigation-day"
+  | "navigation-night"
+  | "standard"
+  | "standard-satellite"
+  | "monochrome"
+  | "vintage"
+  | "blueprint"
+  | "pastel"
+  | "midnight";
+
+export type MapStyleCategory = "classic" | "navigation" | "creative";
 
 export interface ProjectMeta {
   id: string;

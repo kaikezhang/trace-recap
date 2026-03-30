@@ -14,7 +14,7 @@ import {
 } from "./routeSegmentSources";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
-import { MAPBOX_TOKEN, getDefaultMapOptions } from "@/lib/mapbox";
+import { MAPBOX_TOKEN, getDefaultMapOptions, applyStyleOverrides } from "@/lib/mapbox";
 import { MAP_STYLES } from "@/lib/constants";
 import type { TransportMode } from "@/types";
 
@@ -388,6 +388,9 @@ export default function MapCanvas() {
     map.setStyle(styleUrl);
 
     map.once("style.load", () => {
+      // Apply runtime paint overrides for custom styles
+      applyStyleOverrides(map, mapStyle);
+
       segmentLayersRef.current.clear();
 
       // Re-add segment layers

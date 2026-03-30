@@ -41,7 +41,8 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import type { AspectRatio, MapStyle, PhotoAnimation } from "@/types";
+import type { AspectRatio, MapStyle, MapStyleCategory, PhotoAnimation } from "@/types";
+import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -256,31 +257,41 @@ export default function TopToolbar() {
             {settingsOpen && (
               <div
                 ref={settingsPanelRef}
-                className="absolute right-0 top-full mt-2 z-50 w-64 rounded-lg border bg-background p-4 shadow-lg space-y-4"
+                className="absolute right-0 top-full mt-2 z-50 w-72 max-h-[80vh] overflow-y-auto rounded-lg border bg-background p-4 shadow-lg space-y-4"
               >
                 <p className="text-sm font-semibold">Settings</p>
                 {/* Map Style */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label className="text-sm font-medium text-muted-foreground">Map Style</label>
-                  <div className="flex gap-2">
-                    {([
-                      { value: "light", label: "Light" },
-                      { value: "dark", label: "Dark" },
-                      { value: "satellite", label: "Satellite" },
-                    ] as const).map((opt) => (
-                      <button
-                        key={opt.value}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                          mapStyle === opt.value
-                            ? "bg-indigo-500 text-white"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                        onClick={() => setMapStyle(opt.value)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+                  {(["classic", "navigation", "creative"] as MapStyleCategory[]).map((cat) => {
+                    const styles = MAP_STYLE_CONFIGS.filter((c) => c.category === cat);
+                    return (
+                      <div key={cat} className="space-y-1.5">
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                          {MAP_STYLE_CATEGORY_LABELS[cat]}
+                        </span>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {styles.map((cfg) => (
+                            <button
+                              key={cfg.id}
+                              className={`flex flex-col items-center gap-1 rounded-lg p-1.5 text-[10px] font-medium transition-colors ${
+                                mapStyle === cfg.id
+                                  ? "ring-2 ring-indigo-500 bg-indigo-50 text-indigo-700"
+                                  : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                              }`}
+                              onClick={() => setMapStyle(cfg.id)}
+                            >
+                              <span
+                                className="h-6 w-full rounded"
+                                style={{ backgroundColor: cfg.swatch }}
+                              />
+                              <span className="truncate w-full text-center">{cfg.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
                 <hr className="border-gray-100" />
                 {/* Language toggle */}
