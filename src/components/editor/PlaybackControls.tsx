@@ -61,7 +61,7 @@ export default function PlaybackControls({
       {/* Controls bar */}
       <div
         className={[
-          "flex items-center gap-2 md:gap-3 bg-white/90 backdrop-blur-xl border border-white/50 shadow-xl px-3 md:px-4 py-2",
+          `flex items-center gap-2 md:gap-3 ${isPlaying ? "bg-white/40 backdrop-blur-sm" : "bg-white/90 backdrop-blur-xl"} border border-white/50 shadow-xl px-3 md:px-4 py-2`,
           "rounded-none md:rounded-2xl w-full md:w-auto",
         ].join(" ")}
       >
