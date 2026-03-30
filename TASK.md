@@ -1,43 +1,74 @@
-# TASK.md — Fix layout editor preview consistency (use PhotoOverlay)
+# TASK.md — New layout templates + refresh button for random layouts
 
 ⚠️ DO NOT MERGE. Create PR and stop.
 
-## Problem
-The Layout Editor's preview (`LayoutPreview` component) renders photos differently from the actual playback (`PhotoOverlay` component). They use separate rendering logic, leading to visual mismatches — what you see in the editor ≠ what you see during playback ≠ what gets exported.
+## Task 1: Add 3 new layout templates
 
-## Solution
-Replace `LayoutPreview` in `PhotoLayoutEditor.tsx` with the actual `PhotoOverlay` component. This ensures the editor preview is identical to playback.
+### Diagonal (`diagonal`)
+- Photos arranged in a staircase/diagonal pattern from top-left to bottom-right
+- Each photo offset right and down from the previous
+- Slight overlap between adjacent photos
+- Photos sized based on their real aspect ratios
+
+### Rows (`rows`)
+- Smart row-based layout (like Google Photos)
+- Photos fill rows left-to-right, sized proportionally by their aspect ratios
+- Each row has equal height, photos in a row have widths proportional to their aspects
+- Rows fill the container width perfectly (justified)
+- This is different from Grid — Grid uses equal cells, Rows uses variable widths
+
+### Magazine (`magazine`)
+- First photo takes up ~60% of the container as a hero
+- Remaining photos arranged in a smaller strip below or beside the hero
+- Clean editorial look with generous spacing
 
 ### Implementation
+1. Add to `LayoutTemplate` type in `src/types/index.ts`: `"diagonal" | "rows" | "magazine"`
+2. Add layout functions in `src/lib/photoLayout.ts` — each receives `photos: PhotoMeta[]`, `containerAspect: number`, `gap: number`
+3. Add to `LAYOUT_STYLES` in `src/components/editor/PhotoLayoutEditor.tsx` with appropriate icons
+4. Add cases in `computeTemplateLayout` switch
 
-1. **Remove `LayoutPreview`** function component from `PhotoLayoutEditor.tsx`
-2. **Import and use `PhotoOverlay`** in its place
-3. Pass the same props that the actual playback uses:
-   - `photos`: the ordered photos array
-   - `visible`: true (always visible in editor preview)
-   - `photoLayout`: the current layout being edited
-   - `opacity`: 1
-4. The `PhotoOverlay` component already handles:
-   - Real photo aspect ratios (loads dimensions via Image.onload)
-   - All layout modes (auto, grid, hero, filmstrip, scatter)
-   - Container aspect ratio via ResizeObserver
-   - Focal points, captions, ordering
-5. Wrap `PhotoOverlay` in the preview container that already has the map snapshot background and correct viewport ratio sizing
+## Task 2: Refresh button for random layouts
 
-### Key changes
-- `src/components/editor/PhotoLayoutEditor.tsx`:
-  - Remove `LayoutPreview` component and `usePhotoDimensions` hook (if duplicated from PhotoOverlay)
-  - Import `PhotoOverlay` from `./PhotoOverlay`
-  - Replace `<LayoutPreview ... />` with `<PhotoOverlay photos={orderedPhotos} visible={true} photoLayout={layout} opacity={1} />`
-  - The `PreviewWithMapBackground` wrapper stays — it provides the map snapshot background and correct aspect ratio container
-  - PhotoOverlay uses `absolute inset-0` positioning, so it should fill the preview container naturally
+Layouts with randomness: **Scatter**, **Polaroid**, **Overlap** (they use random rotations/positions).
 
-### Verify
-- `npx tsc --noEmit` must pass
-- `npm run build` must pass
-- Layout editor preview matches exactly what you see during playback
-- Changing layout style in editor updates preview correctly
-- All layout modes work: auto, grid, hero, filmstrip
+### Implementation
+1. Add a `layoutSeed` field to `PhotoLayout` type (`src/types/index.ts`):
+   ```ts
+   layoutSeed?: number; // random seed for layouts with randomness
+   ```
+2. In `PhotoLayoutEditor.tsx`: when a random layout (scatter/polaroid/overlap) is active, show a 🔄 refresh button next to the layout name
+3. Clicking refresh: `updateLayout({ layoutSeed: Math.random() })` — this changes the seed, causing a re-render with new random values
+4. In `photoLayout.ts`: use `layoutSeed` as a seed for a simple PRNG (seeded random) instead of `Math.random()`:
+   ```ts
+   function seededRandom(seed: number): () => number {
+     let s = seed;
+     return () => {
+       s = (s * 1664525 + 1013904223) % 4294967296;
+       return s / 4294967296;
+     };
+   }
+   ```
+5. Pass `layoutSeed` from `PhotoLayout` into the random layout functions
+6. This makes random layouts deterministic (same seed = same layout) but refreshable
+
+### Refresh button UI
+- Small circular button with a refresh/shuffle icon (🔄 or `RefreshCw` from lucide)
+- Positioned next to the active layout style button or in a toolbar
+- Only visible when current layout is scatter, polaroid, or overlap
+- On click: generates new seed → layout re-randomizes → preview updates
+
+## Files to modify
+- `src/types/index.ts` — add template types + layoutSeed
+- `src/lib/photoLayout.ts` — add 3 layout functions + seeded random
+- `src/components/editor/PhotoLayoutEditor.tsx` — add styles + refresh button
 
 ## Working directory
 `/home/kaike/.openclaw/workspace/trace-recap`
+
+## Verification
+- `npx tsc --noEmit` and `npm run build` must pass
+- All 11 layout options visible
+- Diagonal, Rows, Magazine render correctly
+- Refresh button appears for Scatter/Polaroid/Overlap
+- Clicking refresh changes the random layout
