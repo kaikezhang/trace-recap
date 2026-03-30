@@ -100,11 +100,8 @@ function EditorContent() {
   const { map } = useMap();
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
-  const importRoute = useProjectStore((s) => s.importRoute);
-  const clearRoute = useProjectStore((s) => s.clearRoute);
-  const regenerateSegmentGeometries = useProjectStore(
-    (s) => s.regenerateSegmentGeometries,
-  );
+  const createNewProject = useProjectStore((s) => s.createNewProject);
+  const loadRouteData = useProjectStore((s) => s.loadRouteData);
   const segmentTimingOverrides = useProjectStore(
     (s) => s.segmentTimingOverrides,
   );
@@ -278,9 +275,14 @@ function EditorContent() {
     demoLoadedRef.current = true;
 
     const loadDemoProject = async () => {
-      clearRoute();
-      importRoute(demoProject);
-      await regenerateSegmentGeometries();
+      try {
+        await createNewProject(demoProject.name);
+        await loadRouteData(demoProject);
+      } catch (error) {
+        console.error("Failed to load demo project.", error);
+        demoLoadedRef.current = false;
+        return;
+      }
 
       const nextUrl = new URL(window.location.href);
       nextUrl.searchParams.delete("demo");
@@ -292,7 +294,7 @@ function EditorContent() {
     };
 
     void loadDemoProject();
-  }, [demoQueryChecked, importRoute, regenerateSegmentGeometries, shouldLoadDemo]);
+  }, [createNewProject, demoQueryChecked, loadRouteData, shouldLoadDemo]);
 
   // Rebuild engine when project changes
   useEffect(() => {
