@@ -31,6 +31,11 @@ import {
   Square,
   Maximize,
   GripVertical,
+  Shuffle,
+  BetweenHorizontalStart,
+  Rows3,
+  Newspaper,
+  RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
@@ -45,7 +50,18 @@ interface PhotoLayoutEditorProps {
   onClose: () => void;
 }
 
-type LayoutStyle = "grid" | "collage" | "single" | "carousel" | "polaroid" | "overlap" | "full";
+type LayoutStyle =
+  | "grid"
+  | "collage"
+  | "single"
+  | "carousel"
+  | "scatter"
+  | "polaroid"
+  | "overlap"
+  | "diagonal"
+  | "rows"
+  | "magazine"
+  | "full";
 type SortablePhotoListOrientation = "horizontal" | "vertical";
 type PhotoAnimationOption = PhotoAnimation | "default";
 
@@ -54,10 +70,16 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "collage", label: "Collage", icon: LayoutTemplate, template: "hero" },
   { id: "single", label: "Single", icon: ImageIcon, template: "auto" },
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
+  { id: "scatter", label: "Scatter", icon: Shuffle, template: "scatter" },
   { id: "polaroid", label: "Polaroid", icon: Square, template: "polaroid" },
   { id: "overlap", label: "Overlap", icon: Layers, template: "overlap" },
+  { id: "diagonal", label: "Diagonal", icon: BetweenHorizontalStart, template: "diagonal" },
+  { id: "rows", label: "Rows", icon: Rows3, template: "rows" },
+  { id: "magazine", label: "Magazine", icon: Newspaper, template: "magazine" },
   { id: "full", label: "Full", icon: Maximize, template: "full" },
 ];
+
+const RANDOM_LAYOUT_TEMPLATES: LayoutTemplateType[] = ["scatter", "polaroid", "overlap"];
 
 const PHOTO_ANIMATION_OPTIONS: PhotoAnimation[] = [
   "scale",
@@ -431,11 +453,16 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     if (activeTemplate === "grid") return "grid";
     if (activeTemplate === "hero") return "collage";
     if (activeTemplate === "filmstrip") return "carousel";
+    if (activeTemplate === "scatter") return "scatter";
     if (activeTemplate === "polaroid") return "polaroid";
     if (activeTemplate === "overlap") return "overlap";
+    if (activeTemplate === "diagonal") return "diagonal";
+    if (activeTemplate === "rows") return "rows";
+    if (activeTemplate === "magazine") return "magazine";
     if (activeTemplate === "full") return "full";
     return "single";
   })();
+  const isRandomLayoutActive = activeTemplate !== "auto" && RANDOM_LAYOUT_TEMPLATES.includes(activeTemplate) && location.photos.length > 1;
   const selectedEnterAnimation: PhotoAnimationOption = layout.enterAnimation ?? "default";
   const selectedExitAnimation: PhotoAnimationOption = layout.exitAnimation ?? "default";
   const enterAnimationOptions = useMemo(
@@ -488,11 +515,23 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       if (config.template === "auto") {
         updateLayout({ mode: "auto", template: undefined, customProportions: undefined });
       } else {
-        updateLayout({ mode: "manual", template: config.template, customProportions: undefined });
+        updateLayout({
+          mode: "manual",
+          template: config.template,
+          customProportions: undefined,
+          layoutSeed: RANDOM_LAYOUT_TEMPLATES.includes(config.template)
+            ? (layout.layoutSeed ?? Math.random())
+            : layout.layoutSeed,
+        });
       }
     },
-    [updateLayout]
+    [layout.layoutSeed, updateLayout]
   );
+
+  const refreshRandomLayout = useCallback(() => {
+    if (!isRandomLayoutActive) return;
+    updateLayout({ layoutSeed: Math.random() });
+  }, [isRandomLayoutActive, updateLayout]);
 
   const replayEnterPreview = useCallback(() => {
     clearExitPreview();
@@ -617,6 +656,20 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           {/* Bottom controls */}
           <div className="max-h-[50vh] shrink-0 border-t border-gray-100 bg-white flex min-h-0 flex-col">
             <div className="min-h-0 overflow-y-auto">
+              <div className="flex items-center justify-between gap-3 px-4 pt-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">Layout</p>
+                {isRandomLayoutActive ? (
+                  <button
+                    type="button"
+                    onClick={refreshRandomLayout}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:border-gray-300 hover:text-gray-700"
+                    aria-label="Refresh random layout"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
+
               {/* Layout style selector — horizontal pills */}
               <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
                 {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
@@ -735,7 +788,19 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           <div className="flex flex-1 min-h-0">
             {/* LEFT — Layout style selector */}
             <div className="w-72 min-h-0 overflow-y-auto border-r border-gray-100 p-4 space-y-2">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Layout</p>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Layout</p>
+                {isRandomLayoutActive ? (
+                  <button
+                    type="button"
+                    onClick={refreshRandomLayout}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:border-gray-300 hover:text-gray-700"
+                    aria-label="Refresh random layout"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
               {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}

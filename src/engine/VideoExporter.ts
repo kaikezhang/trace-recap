@@ -631,7 +631,8 @@ export class VideoExporter {
           layout.template,
           gapPx,
           widthPx,
-          layout.customProportions
+          layout.customProportions,
+          layout.layoutSeed
         )
       : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
     const count = loaded.length;

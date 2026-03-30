@@ -158,6 +158,177 @@ function scaleRectsToInnerBounds(rects: PhotoRect[], gap: number): PhotoRect[] {
   }));
 }
 
+function seedFromPhotos(photos: PhotoMeta[]): number {
+  let hash = 2166136261;
+  for (const photo of photos) {
+    for (let i = 0; i < photo.id.length; i++) {
+      hash ^= photo.id.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    hash ^= Math.round(safeAspect(photo.aspect) * 1000);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function resolveSeed(photos: PhotoMeta[], seed?: number): number {
+  if (typeof seed === "number" && Number.isFinite(seed)) {
+    if (Math.abs(seed) < 1) {
+      return Math.floor(seed * 4294967295) >>> 0;
+    }
+    return Math.floor(seed) >>> 0;
+  }
+  return seedFromPhotos(photos);
+}
+
+function layoutRectsWithinSlot(
+  rects: PhotoRect[],
+  slot: LayoutSlot,
+  gap: number
+): PhotoRect[] {
+  if (rects.length === 0) return rects;
+
+  const scaled = scaleRectsToInnerBounds(rects, gap);
+  const innerWidth = 1 - gap * 2;
+  const innerHeight = 1 - gap * 2;
+
+  return scaled.map((rect) => ({
+    ...rect,
+    x: slot.x + ((rect.x - gap) / innerWidth) * slot.width,
+    y: slot.y + ((rect.y - gap) / innerHeight) * slot.height,
+    width: (rect.width / innerWidth) * slot.width,
+    height: (rect.height / innerHeight) * slot.height,
+  }));
+}
+
+function computeJustifiedRows(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  gap: number
+): number[][] {
+  const n = photos.length;
+  if (n === 0) return [];
+
+  const maxPerRow = containerAspect >= 1 ? 4 : 3;
+  const minTargetRows = Math.max(
+    1,
+    containerAspect >= 1 ? Math.ceil(n / 3) : Math.ceil(n / 2)
+  );
+  const innerWidth = 1 - gap * 2;
+
+  let rows: number[][] = [];
+
+  for (let desiredRows = minTargetRows; desiredRows <= n; desiredRows++) {
+    const targetHeight = (1 - gap * (desiredRows + 1)) / desiredRows;
+    const nextRows: number[][] = [];
+    let currentRow: number[] = [];
+    let currentAspect = 0;
+
+    for (let index = 0; index < n; index++) {
+      currentRow.push(index);
+      currentAspect += safeAspect(photos[index]?.aspect ?? 1);
+
+      const rowHeight =
+        ((innerWidth - gap * Math.max(0, currentRow.length - 1)) *
+          safeContainerAspect(containerAspect)) /
+        currentAspect;
+      const remaining = n - index - 1;
+      const shouldClose =
+        currentRow.length >= maxPerRow ||
+        (rowHeight <= targetHeight * 1.12 && remaining >= Math.max(1, desiredRows - nextRows.length - 1));
+
+      if (shouldClose) {
+        nextRows.push(currentRow);
+        currentRow = [];
+        currentAspect = 0;
+      }
+    }
+
+    if (currentRow.length > 0) {
+      nextRows.push(currentRow);
+    }
+
+    if (nextRows.length > 1 && nextRows[nextRows.length - 1]?.length === 1) {
+      const previousRow = nextRows[nextRows.length - 2];
+      if (previousRow && previousRow.length > 2) {
+        nextRows[nextRows.length - 1].unshift(previousRow.pop()!);
+      }
+    }
+
+    const heights = nextRows.map((row) => {
+      const aspectSum = row.reduce(
+        (sum, photoIndex) => sum + safeAspect(photos[photoIndex]?.aspect ?? 1),
+        0
+      );
+      return (
+        ((innerWidth - gap * Math.max(0, row.length - 1)) *
+          safeContainerAspect(containerAspect)) /
+        aspectSum
+      );
+    });
+    const totalHeight = heights.reduce((sum, height) => sum + height, 0) + gap * Math.max(0, nextRows.length - 1);
+
+    rows = nextRows;
+    if (totalHeight <= 1 - gap * 2 || desiredRows === n) {
+      break;
+    }
+  }
+
+  return rows;
+}
+
+function layoutJustifiedRows(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  gap: number
+): PhotoRect[] {
+  const rows = computeJustifiedRows(photos, containerAspect, gap);
+  if (rows.length === 0) return [];
+
+  const innerWidth = 1 - gap * 2;
+  const innerHeight = 1 - gap * 2;
+  const rowHeights = rows.map((row) => {
+    const aspectSum = row.reduce(
+      (sum, photoIndex) => sum + safeAspect(photos[photoIndex]?.aspect ?? 1),
+      0
+    );
+    return (
+      ((innerWidth - gap * Math.max(0, row.length - 1)) *
+        safeContainerAspect(containerAspect)) /
+      aspectSum
+    );
+  });
+  let usedHeight = rowHeights.reduce((sum, height) => sum + height, 0) + gap * Math.max(0, rows.length - 1);
+
+  // Scale all rows proportionally if they overflow the container
+  if (usedHeight > innerHeight) {
+    const scale = innerHeight / usedHeight;
+    for (let i = 0; i < rowHeights.length; i++) {
+      rowHeights[i] *= scale;
+    }
+    usedHeight = innerHeight;
+  }
+
+  const rects: PhotoRect[] = new Array(photos.length);
+
+  let y = gap + Math.max(0, (innerHeight - usedHeight) / 2);
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
+    const rowHeight = rowHeights[rowIndex];
+    let x = gap;
+
+    for (const photoIndex of row) {
+      const width = widthForHeight(rowHeight, photos[photoIndex]?.aspect ?? 1, containerAspect);
+      rects[photoIndex] = { x, y, width, height: rowHeight };
+      x += width + gap;
+    }
+
+    y += rowHeight + gap;
+  }
+
+  return rects;
+}
+
 /**
  * Compute layout rects for N photos (1-9) based on their aspect ratios.
  * All returned values are fractions of the container (0-1).
@@ -297,21 +468,22 @@ function layoutNine(photos: PhotoMeta[], containerAspect: number, gap: number): 
 
 /**
  * Simple seeded pseudo-random number generator.
- * Uses a hash of the input string to produce deterministic sequences.
  */
-function seededRandom(seed: string): () => number {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) {
-    h = ((h << 5) - h + seed.charCodeAt(i)) | 0;
-  }
+function seededRandom(seed: number): () => number {
+  let s = (Math.floor(seed) >>> 0) || 1;
   return () => {
-    h = (h * 1664525 + 1013904223) | 0;
-    return ((h >>> 0) / 4294967296);
+    s = (s * 1664525 + 1013904223) % 4294967296;
+    return s / 4294967296;
   };
 }
 
 /** Scatter: semi-random positions with rotation, like photos on a table */
-function layoutScatter(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+function layoutScatter(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  gap: number,
+  layoutSeed?: number
+): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
   if (n === 1) {
@@ -321,8 +493,7 @@ function layoutScatter(photos: PhotoMeta[], containerAspect: number, gap: number
     }];
   }
 
-  // Seed based on photo IDs for deterministic layout
-  const seed = photos.map((p) => p.id).join(",");
+  const seed = resolveSeed(photos, layoutSeed);
   const rand = seededRandom(seed);
 
   // Base size: each photo gets roughly 1/sqrt(N) of the container
@@ -470,7 +641,99 @@ function layoutScatter(photos: PhotoMeta[], containerAspect: number, gap: number
     }
   }
 
-  return rects;
+  return scaleRectsToInnerBounds(rects, gap);
+}
+
+/** Diagonal: staircase composition with light overlap from top-left to bottom-right. */
+function layoutDiagonal(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  const n = photos.length;
+  if (n === 0) return [];
+
+  const baseSize = Math.max(0.24, Math.min(0.58, 0.92 - n * 0.04));
+  const stepX = Math.max(0.08, baseSize * 0.56);
+  const stepY = Math.max(0.06, baseSize * 0.42);
+  const slots: LayoutSlot[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const sizeScale = 1 - Math.min(i, 4) * 0.04;
+    const slotSize = baseSize * sizeScale;
+    slots.push({
+      x: i * stepX,
+      y: i * stepY,
+      width: slotSize,
+      height: slotSize,
+    });
+  }
+
+  return scaleRectsToInnerBounds(fillSlots(photos, slots, containerAspect), gap);
+}
+
+/** Rows: justified gallery rows with widths proportional to each photo's aspect ratio. */
+function layoutRowsTemplate(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  gap: number
+): PhotoRect[] {
+  return layoutJustifiedRows(photos, containerAspect, gap);
+}
+
+/** Magazine: lead image as a hero with a smaller editorial strip beside or below it. */
+function layoutMagazine(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  const n = photos.length;
+  if (n === 0) return [];
+  if (n === 1) {
+    return fillSlots(
+      photos,
+      [{ x: gap, y: gap, width: 1 - gap * 2, height: 1 - gap * 2 }],
+      containerAspect
+    );
+  }
+
+  const innerWidth = 1 - gap * 2;
+  const innerHeight = 1 - gap * 2;
+  const remainingPhotos = photos.slice(1);
+
+  if (containerAspect >= 1) {
+    const heroWidth = innerWidth * 0.62;
+    const stripWidth = innerWidth - heroWidth - gap;
+    const heroSlot: LayoutSlot = { x: gap, y: gap, width: heroWidth, height: innerHeight };
+    const stripSlot: LayoutSlot = {
+      x: gap + heroWidth + gap,
+      y: gap,
+      width: stripWidth,
+      height: innerHeight,
+    };
+    const stripRects = layoutRectsWithinSlot(
+      layoutJustifiedRows(remainingPhotos, stripWidth / Math.max(stripSlot.height, 0.1), gap * 0.6),
+      stripSlot,
+      gap * 0.6
+    );
+
+    return [
+      fitPhotoToSlot(heroSlot, photos[0], containerAspect),
+      ...stripRects,
+    ];
+  }
+
+  const heroHeight = innerHeight * 0.6;
+  const stripHeight = innerHeight - heroHeight - gap;
+  const heroSlot: LayoutSlot = { x: gap, y: gap, width: innerWidth, height: heroHeight };
+  const stripSlot: LayoutSlot = {
+    x: gap,
+    y: gap + heroHeight + gap,
+    width: innerWidth,
+    height: stripHeight,
+  };
+  const stripRects = layoutRectsWithinSlot(
+    layoutJustifiedRows(remainingPhotos, Math.max(stripSlot.width, 0.1) / Math.max(stripSlot.height, 0.1), gap * 0.6),
+    stripSlot,
+    gap * 0.6
+  );
+
+  return [
+    fitPhotoToSlot(heroSlot, photos[0], containerAspect),
+    ...stripRects,
+  ];
 }
 
 /**
@@ -483,7 +746,8 @@ export function computeTemplateLayout(
   template: LayoutTemplate,
   gap?: number,
   containerWidthPx?: number,
-  customProportions?: { rows?: number[]; cols?: number[] }
+  customProportions?: { rows?: number[]; cols?: number[] },
+  layoutSeed?: number
 ): PhotoRect[] {
   const gapPx = gap ?? 8;
   const widthPx = containerWidthPx ?? 1000;
@@ -499,13 +763,19 @@ export function computeTemplateLayout(
     case "filmstrip":
       return layoutFilmstrip(photos, containerAspect, g);
     case "scatter":
-      return layoutScatter(photos, containerAspect, g);
+      return layoutScatter(photos, containerAspect, g, layoutSeed);
     case "polaroid":
-      return layoutPolaroid(photos, containerAspect, g);
+      return layoutPolaroid(photos, containerAspect, g, layoutSeed);
     case "overlap":
-      return layoutOverlap(photos, containerAspect, g);
+      return layoutOverlap(photos, containerAspect, g, layoutSeed);
     case "full":
       return layoutFull(photos, containerAspect);
+    case "diagonal":
+      return layoutDiagonal(photos, containerAspect, g);
+    case "rows":
+      return layoutRowsTemplate(photos, containerAspect, g);
+    case "magazine":
+      return layoutMagazine(photos, containerAspect, g);
     default:
       return computeAutoLayout(photos, containerAspect, gapPx, widthPx);
   }
@@ -633,11 +903,16 @@ function layoutMasonry(photos: PhotoMeta[], containerAspect: number, gap: number
 }
 
 /** Polaroid: photos as Polaroid-style cards with white borders, slight rotation, scattered */
-function layoutPolaroid(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+function layoutPolaroid(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  gap: number,
+  layoutSeed?: number
+): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
 
-  const seed = photos.map((p) => p.id).join(",");
+  const seed = resolveSeed(photos, layoutSeed);
   const rand = seededRandom(seed);
 
   if (n === 1) {
@@ -708,7 +983,12 @@ function layoutPolaroid(photos: PhotoMeta[], containerAspect: number, gap: numbe
 }
 
 /** Overlap: photos stacked with depth, each offset right and down */
-function layoutOverlap(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+function layoutOverlap(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  gap: number,
+  layoutSeed?: number
+): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
   if (n === 1) {
@@ -718,6 +998,7 @@ function layoutOverlap(photos: PhotoMeta[], containerAspect: number, gap: number
     }];
   }
 
+  const rand = seededRandom(resolveSeed(photos, layoutSeed));
   const rects: PhotoRect[] = [];
   // Back photo is largest, front photo is smallest
   const maxScale = 0.7;
@@ -736,18 +1017,18 @@ function layoutOverlap(photos: PhotoMeta[], containerAspect: number, gap: number
   const startY = (1 - maxScale - totalOffsetY) / 2;
 
   for (let i = 0; i < n; i++) {
-    const scale = maxScale - i * scaleStep;
-    const x = startX + i * offsetStep;
-    const y = startY + i * offsetStep;
-    // Slight rotation variation
-    const rotation = i === 0 ? 0 : ((i % 2 === 0 ? 1 : -1) * (1 + i * 0.8));
+    const jitter = (rand() - 0.5) * offsetStep * 0.9;
+    const scale = maxScale - i * scaleStep - rand() * 0.015;
+    const x = startX + i * offsetStep + jitter;
+    const y = startY + i * offsetStep + (rand() - 0.5) * offsetStep * 0.8;
+    const rotation = (rand() - 0.5) * 10;
     rects.push({
       ...fitPhotoToSlot({ x, y, width: scale, height: scale }, photos[i], containerAspect),
       rotation,
     });
   }
 
-  return rects;
+  return scaleRectsToInnerBounds(rects, gap);
 }
 
 /** Full: single photo fits the whole container while preserving its aspect. */
