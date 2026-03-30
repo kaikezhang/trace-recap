@@ -3,8 +3,8 @@ import type mapboxgl from "mapbox-gl";
 
 export const PHASE_DURATIONS = {
   HOVER: 1.5,
-  ARRIVE: 1.5,
-  PHOTO_DISPLAY: 2.0,
+  ARRIVE: 1.0,
+  PHOTO_DISPLAY: 1.5,
 } as const;
 
 export const ZOOM_RANGE = {
