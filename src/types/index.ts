@@ -7,6 +7,8 @@ export type TransportMode =
   | "walk"
   | "bicycle";
 
+export type TransportIconStyle = "solid" | "outline" | "soft";
+
 export interface Photo {
   id: string;
   locationId: string;
@@ -30,6 +32,7 @@ export interface Segment {
   fromId: string;
   toId: string;
   transportMode: TransportMode;
+  iconStyle: TransportIconStyle;
   geometry: GeoJSON.LineString | null;
 }
 

@@ -1,6 +1,6 @@
 import * as turf from "@turf/turf";
 import type mapboxgl from "mapbox-gl";
-import type { ExportSettings, Photo, PhotoAnimation, TransportMode } from "@/types";
+import type { ExportSettings, Photo, PhotoAnimation } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 import type { AnimationEvent } from "./AnimationEngine";
 import {
@@ -28,10 +28,6 @@ interface PreloadedPhoto {
   aspect: number; // naturalWidth / naturalHeight
   failed?: boolean; // true if the original image failed to load (placeholder)
 }
-
-const TRANSPORT_MODES: TransportMode[] = [
-  "flight", "car", "train", "bus", "ferry", "walk", "bicycle",
-];
 
 export class VideoExporter {
   private engine: AnimationEngine;
@@ -61,8 +57,21 @@ export class VideoExporter {
   /** Initialize Lottie canvas renderers for all transport modes (for video export compositing) */
   private async preloadIcons(): Promise<void> {
     const iconAnimator = this.engine.getIconAnimator();
+    const seen = new Set<string>();
+    const iconVariants = this.engine.getSegments().filter((segment) => {
+      const key = `${segment.transportMode}:${segment.iconStyle}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     await Promise.all(
-      TRANSPORT_MODES.map((mode) => iconAnimator.ensureCanvasRenderer(mode))
+      iconVariants.map((segment) =>
+        iconAnimator.ensureCanvasRenderer(
+          segment.transportMode,
+          segment.iconStyle,
+        ),
+      )
     );
   }
 

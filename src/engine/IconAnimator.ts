@@ -2,7 +2,17 @@ import mapboxgl from "mapbox-gl";
 import * as turf from "@turf/turf";
 import lottie from "lottie-web";
 import type { AnimationItem } from "lottie-web";
-import type { AnimationGroup, AnimationPhase, TransportMode } from "@/types";
+import {
+  getTransportIconAssetKey,
+  getTransportIconAssetPath,
+} from "@/lib/transportIcons";
+import type {
+  AnimationGroup,
+  AnimationPhase,
+  Segment,
+  TransportIconStyle,
+  TransportMode,
+} from "@/types";
 
 const BASE_SIZE = 52;
 
@@ -14,6 +24,7 @@ export interface IconState {
   position: [number, number] | null;
   /** Current transport mode (used by VideoExporter to identify the active Lottie) */
   mode: TransportMode | null;
+  iconStyle: TransportIconStyle | null;
   size: number;
   opacity: number;
   /** Current bearing in degrees (0 = north). Used for rotation during canvas compositing. */
@@ -28,19 +39,21 @@ export class IconAnimator {
   private lottieEl: HTMLDivElement;
 
   private currentMode: TransportMode | null = null;
+  private currentIconStyle: TransportIconStyle | null = null;
   private currentBearing: number = 0;
-  private lottieInstances: Map<TransportMode, AnimationItem> = new Map();
+  private lottieInstances: Map<string, AnimationItem> = new Map();
   private activeInstance: AnimationItem | null = null;
   private lottieFrame: number = 0;
 
   /** Offscreen canvas + Lottie instances for video export compositing */
   private canvasEl: HTMLCanvasElement | null = null;
-  private canvasInstances: Map<TransportMode, AnimationItem> = new Map();
+  private canvasInstances: Map<string, AnimationItem> = new Map();
 
   private lastState: IconState = {
     visible: false,
     position: null,
     mode: null,
+    iconStyle: null,
     size: BASE_SIZE,
     opacity: 1,
     bearing: 0,
@@ -82,8 +95,12 @@ export class IconAnimator {
   }
 
   /** Load (or retrieve cached) Lottie animation for a transport mode in the SVG marker */
-  private loadLottie(mode: TransportMode): AnimationItem {
-    const existing = this.lottieInstances.get(mode);
+  private loadLottie(
+    mode: TransportMode,
+    iconStyle: TransportIconStyle,
+  ): AnimationItem {
+    const key = getTransportIconAssetKey(mode, iconStyle);
+    const existing = this.lottieInstances.get(key);
     if (existing) return existing;
 
     const instance = lottie.loadAnimation({
@@ -91,16 +108,16 @@ export class IconAnimator {
       renderer: "svg",
       loop: true,
       autoplay: false,
-      path: `/lottie/${mode}.json`,
+      path: getTransportIconAssetPath(mode, iconStyle),
     });
 
-    this.lottieInstances.set(mode, instance);
+    this.lottieInstances.set(key, instance);
     return instance;
   }
 
   /** Switch to a different transport mode's Lottie animation */
-  private setMode(mode: TransportMode) {
-    if (mode === this.currentMode) return;
+  private setMode(mode: TransportMode, iconStyle: TransportIconStyle) {
+    if (mode === this.currentMode && iconStyle === this.currentIconStyle) return;
 
     // Hide current animation's SVG
     if (this.activeInstance) {
@@ -110,7 +127,8 @@ export class IconAnimator {
     }
 
     this.currentMode = mode;
-    this.activeInstance = this.loadLottie(mode);
+    this.currentIconStyle = iconStyle;
+    this.activeInstance = this.loadLottie(mode, iconStyle);
     const wrapper = (this.activeInstance as AnimationItem & { wrapper?: HTMLElement }).wrapper;
     if (wrapper) wrapper.style.display = "block";
     this.activeInstance.play();
@@ -142,8 +160,15 @@ export class IconAnimator {
     const startPt = coords[0] as [number, number];
     const endPt = coords[coords.length - 1] as [number, number];
 
-    const mode = this.getTransportModeAtProgress(group, totalLength, phase, progress);
-    this.setMode(mode);
+    const activeSegment = this.getSegmentAtProgress(
+      group,
+      totalLength,
+      phase,
+      progress,
+    );
+    const mode = activeSegment.transportMode;
+    const iconStyle = activeSegment.iconStyle;
+    this.setMode(mode, iconStyle);
 
     // Compute bearing for direction
     let bearing: number;
@@ -210,6 +235,7 @@ export class IconAnimator {
       visible: showIcon && opacity > 0,
       position,
       mode: this.currentMode,
+      iconStyle: this.currentIconStyle,
       size,
       opacity: showIcon ? opacity : 0,
       bearing,
@@ -224,14 +250,19 @@ export class IconAnimator {
    * Ensure the offscreen canvas Lottie renderer is ready for a given mode.
    * Used by VideoExporter for frame-accurate canvas compositing.
    */
-  ensureCanvasRenderer(mode: TransportMode): Promise<HTMLCanvasElement> {
+  ensureCanvasRenderer(
+    mode: TransportMode,
+    iconStyle: TransportIconStyle,
+  ): Promise<HTMLCanvasElement> {
     if (!this.canvasEl) {
       this.canvasEl = document.createElement("canvas");
       this.canvasEl.width = BASE_SIZE * 2;
       this.canvasEl.height = BASE_SIZE * 2;
     }
 
-    if (this.canvasInstances.has(mode)) {
+    const key = getTransportIconAssetKey(mode, iconStyle);
+
+    if (this.canvasInstances.has(key)) {
       return Promise.resolve(this.canvasEl);
     }
 
@@ -248,13 +279,13 @@ export class IconAnimator {
         renderer: "canvas",
         loop: true,
         autoplay: false,
-        path: `/lottie/${mode}.json`,
+        path: getTransportIconAssetPath(mode, iconStyle),
         rendererSettings: {
           context: canvas.getContext("2d")!,
           preserveAspectRatio: "xMidYMid meet",
         },
       } as Parameters<typeof lottie.loadAnimation>[0]);
-      this.canvasInstances.set(mode, instance);
+      this.canvasInstances.set(key, instance);
       instance.addEventListener("DOMLoaded", () => {
         resolve(canvas);
       });
@@ -272,9 +303,19 @@ export class IconAnimator {
     size: number,
   ): void {
     const state = this.lastState;
-    if (!state.visible || !state.position || state.opacity <= 0 || !state.mode) return;
+    if (
+      !state.visible ||
+      !state.position ||
+      state.opacity <= 0 ||
+      !state.mode ||
+      !state.iconStyle
+    ) {
+      return;
+    }
 
-    const canvasInstance = this.canvasInstances.get(state.mode);
+    const canvasInstance = this.canvasInstances.get(
+      getTransportIconAssetKey(state.mode, state.iconStyle),
+    );
     if (!canvasInstance || !this.canvasEl) return;
 
     // Advance the Lottie frame on the canvas renderer
@@ -292,18 +333,18 @@ export class IconAnimator {
     ctx.globalAlpha = prev;
   }
 
-  private getTransportModeAtProgress(
+  private getSegmentAtProgress(
     group: AnimationGroup,
     totalLength: number,
     phase: AnimationPhase,
     progress: number
-  ): TransportMode {
-    if (group.segments.length <= 1) return group.segments[0].transportMode;
+  ): Segment {
+    if (group.segments.length <= 1) return group.segments[0];
     if (phase === "ARRIVE" || phase === "ZOOM_IN") {
-      return group.segments[group.segments.length - 1].transportMode;
+      return group.segments[group.segments.length - 1];
     }
     if (phase === "HOVER") {
-      return group.segments[0].transportMode;
+      return group.segments[0];
     }
 
     const distance = phase === "ZOOM_OUT"
@@ -316,11 +357,11 @@ export class IconAnimator {
       const segLength = turf.length(turf.lineString(seg.geometry.coordinates));
       accumulated += segLength;
       if (distance <= accumulated) {
-        return seg.transportMode;
+        return seg;
       }
     }
 
-    return group.segments[group.segments.length - 1].transportMode;
+    return group.segments[group.segments.length - 1];
   }
 
   hide() {
@@ -339,6 +380,7 @@ export class IconAnimator {
     this.lottieInstances.clear();
     this.activeInstance = null;
     this.currentMode = null;
+    this.currentIconStyle = null;
 
     // Destroy canvas renderer instances
     for (const instance of this.canvasInstances.values()) {
