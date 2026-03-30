@@ -10,6 +10,16 @@ export const PHOTO_ANIMATION_LABELS: Record<PhotoAnimation, string> = {
   none: "None",
 };
 
+export const PHOTO_EXIT_ANIMATION_LABELS: Record<PhotoAnimation, string> = {
+  scale: "Shrink",
+  fade: "Fade Out",
+  slide: "Slide Out",
+  flip: "Flip Away",
+  scatter: "Scatter",
+  typewriter: "Sequential",
+  none: "None",
+};
+
 export function resolvePhotoAnimations(
   layout: PhotoLayout | undefined,
   fallback: PhotoAnimation,

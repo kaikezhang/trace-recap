@@ -35,7 +35,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { PHOTO_ANIMATION_LABELS } from "@/lib/photoAnimation";
+import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS } from "@/lib/photoAnimation";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
 import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation } from "@/types";
@@ -436,15 +436,23 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   })();
   const selectedEnterAnimation: PhotoAnimationOption = layout.enterAnimation ?? "default";
   const selectedExitAnimation: PhotoAnimationOption = layout.exitAnimation ?? "default";
-  const animationOptions = useMemo(
+  const enterAnimationOptions = useMemo(
     () => [
-      {
-        value: "default" as const,
-        label: "Default",
-      },
+      { value: "default" as const, label: "Default" },
       ...PHOTO_ANIMATION_OPTIONS.map((value) => ({
         value,
         label: PHOTO_ANIMATION_LABELS[value],
+      })),
+    ],
+    []
+  );
+
+  const exitAnimationOptions = useMemo(
+    () => [
+      { value: "default" as const, label: "Default" },
+      ...PHOTO_ANIMATION_OPTIONS.map((value) => ({
+        value,
+        label: PHOTO_EXIT_ANIMATION_LABELS[value],
       })),
     ],
     []
@@ -493,12 +501,15 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const replayExitPreview = useCallback(() => {
     clearExitPreview();
     setPreviewOpacity(1);
+    // Brief delay to ensure photos are visible, then trigger exit
     exitPreviewFrameRef.current = window.requestAnimationFrame(() => {
-      setPreviewOpacity(0);
+      setPreviewOpacity(0); // triggers exit animation
+      // After exit completes (~800ms) + 1 second pause, bring photos back
       exitPreviewTimeoutRef.current = window.setTimeout(() => {
         setPreviewOpacity(1);
+        setPreviewKey((key) => key + 1); // remount to replay enter
         exitPreviewTimeoutRef.current = null;
-      }, 220);
+      }, 1800); // ~800ms exit animation + 1000ms pause
       exitPreviewFrameRef.current = null;
     });
   }, [clearExitPreview]);
@@ -627,15 +638,15 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   <AnimationSelectorSection
                     title="In Animation"
                     selectedAnimation={selectedEnterAnimation}
-                    options={animationOptions}
+                    options={enterAnimationOptions}
                     defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
                     onSelect={handleEnterAnimationSelect}
                   />
                   <AnimationSelectorSection
                     title="Out Animation"
                     selectedAnimation={selectedExitAnimation}
-                    options={animationOptions}
-                    defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                    options={exitAnimationOptions}
+                    defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
                     onSelect={handleExitAnimationSelect}
                   />
                 </div>
@@ -742,15 +753,15 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                 <AnimationSelectorSection
                   title="In Animation"
                   selectedAnimation={selectedEnterAnimation}
-                  options={animationOptions}
+                  options={enterAnimationOptions}
                   defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
                   onSelect={handleEnterAnimationSelect}
                 />
                 <AnimationSelectorSection
                   title="Out Animation"
                   selectedAnimation={selectedExitAnimation}
-                  options={animationOptions}
-                  defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                  options={exitAnimationOptions}
+                  defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
                   onSelect={handleExitAnimationSelect}
                 />
               </div>
