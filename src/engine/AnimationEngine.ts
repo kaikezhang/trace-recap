@@ -39,46 +39,19 @@ export interface AnimationEvent {
 
 type AnimationListener = (event: AnimationEvent) => void;
 
-/** Build animation groups by merging segments connected by waypoints */
+/** Build animation groups — one group per segment, no merging for waypoints.
+ *  Each waypoint segment gets its own FLY phase with 0 hover/arrive time. */
 function buildAnimationGroups(
   locations: Location[],
   segments: Segment[]
 ): AnimationGroup[] {
   if (segments.length === 0) return [];
 
-  const groups: AnimationGroup[] = [];
-  let currentSegments: Segment[] = [];
-  let currentLocations: Location[] = [];
-
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
+  return segments.map((seg) => {
     const fromLoc = locations.find((l) => l.id === seg.fromId)!;
     const toLoc = locations.find((l) => l.id === seg.toId)!;
-
-    if (currentSegments.length === 0) {
-      currentSegments = [seg];
-      currentLocations = [fromLoc, toLoc];
-    } else {
-      // The "from" of this segment is the "to" of the previous one.
-      // If that connecting location is a waypoint, merge into the current group.
-      if (fromLoc.isWaypoint) {
-        currentSegments.push(seg);
-        currentLocations.push(toLoc);
-      } else {
-        // Finalize the current group
-        groups.push(finalizeGroup(currentSegments, currentLocations));
-        currentSegments = [seg];
-        currentLocations = [fromLoc, toLoc];
-      }
-    }
-  }
-
-  // Finalize last group
-  if (currentSegments.length > 0) {
-    groups.push(finalizeGroup(currentSegments, currentLocations));
-  }
-
-  return groups;
+    return finalizeGroup([seg], [fromLoc, toLoc]);
+  });
 }
 
 function finalizeGroup(
@@ -203,10 +176,13 @@ export class AnimationEngine {
 
     let totalFixed = 0;
     for (let i = 0; i < n; i++) {
-      const hoverTime = this.camera.getHoverDuration(i);
-      totalFixed += hoverTime + arriveTime;
-      const toLoc = this.groups[i].toLoc;
-      if (toLoc.photos.length > 0) {
+      const group = this.groups[i];
+      const isFromWaypoint = group.fromLoc.isWaypoint;
+      const isToWaypoint = group.toLoc.isWaypoint;
+      const hoverTime = isFromWaypoint ? 0 : this.camera.getHoverDuration(i);
+      const groupArrive = isToWaypoint ? 0 : arriveTime;
+      totalFixed += hoverTime + groupArrive;
+      if (!isToWaypoint && group.toLoc.photos.length > 0) {
         totalFixed += photoTime;
       }
     }
@@ -228,9 +204,11 @@ export class AnimationEngine {
 
     for (let i = 0; i < n; i++) {
       const group = this.groups[i];
-      const hasPhotos = group.toLoc.photos.length > 0;
-      let hoverTime = this.camera.getHoverDuration(i);
-      let arriveDur = arriveTime + (hasPhotos ? photoTime : 0);
+      const isFromWaypoint = group.fromLoc.isWaypoint;
+      const isToWaypoint = group.toLoc.isWaypoint;
+      const hasPhotos = !isToWaypoint && group.toLoc.photos.length > 0;
+      let hoverTime = isFromWaypoint ? 0 : this.camera.getHoverDuration(i);
+      let arriveDur = isToWaypoint ? 0 : arriveTime + (hasPhotos ? photoTime : 0);
 
       // Check for timing override using the first segment's id
       const overrideKey = group.segments[0].id;
@@ -452,13 +430,13 @@ export class AnimationEngine {
     // Icon
     this.iconAnimator.update(groupIndex, phase, phaseProgress);
 
-    // City label — only for destinations (group endpoints), not waypoints
+    // City label — only for non-waypoint locations
     let cityLabel: string | null = null;
     let cityLabelZh: string | null = null;
-    if (phase === "HOVER") {
+    if (phase === "HOVER" && !group.fromLoc.isWaypoint) {
       cityLabel = group.fromLoc.name;
       cityLabelZh = group.fromLoc.nameZh ?? null;
-    } else if (phase === "ARRIVE") {
+    } else if (phase === "ARRIVE" && !group.toLoc.isWaypoint) {
       cityLabel = group.toLoc.name;
       cityLabelZh = group.toLoc.nameZh ?? null;
     }
