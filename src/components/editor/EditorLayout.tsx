@@ -435,9 +435,9 @@ function EditorContent() {
     }
     engineRef.current?.play();
     setPlaybackState("playing");
-    // On mobile, scroll down to hide the toolbar for full-screen map
+    // On mobile, scroll down just enough to hide the toolbar (48px)
     if (window.innerWidth < 768) {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      window.scrollTo({ top: 48, behavior: "smooth" });
     }
   }, [map, setPlaybackState]);
 
