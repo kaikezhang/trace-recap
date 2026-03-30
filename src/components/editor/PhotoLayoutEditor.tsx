@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useMap } from "./MapContext";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo } from "@/types";
 
@@ -92,9 +93,37 @@ function LayoutPreview({
   );
 }
 
+/* ── Map-backed preview container ── */
+
+function PreviewWithMapBackground({
+  mapSnapshot,
+  previewContainerStyle,
+  children,
+}: {
+  mapSnapshot: string | null;
+  previewContainerStyle: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-xl overflow-hidden relative"
+      style={{
+        ...previewContainerStyle,
+        backgroundImage: mapSnapshot ? `url(${mapSnapshot})` : undefined,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundColor: mapSnapshot ? undefined : "rgba(0,0,0,0.3)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEditorProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
+  const { map } = useMap();
   const layout = location.photoLayout ?? { mode: "auto" as const };
 
   const activeTemplate: LayoutTemplateType | "auto" =
@@ -103,20 +132,34 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const gapValue = layout.gap ?? 8;
   const photoOrder = layout.order ?? location.photos.map((p) => p.id);
 
-  // Measure the preview panel so free mode uses real dimensions
-  const previewPanelRef = useRef<HTMLDivElement>(null);
+  // Capture map snapshot once when editor opens
+  const [mapSnapshot, setMapSnapshot] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!map) return;
+    try {
+      setMapSnapshot(map.getCanvas().toDataURL("image/jpeg", 0.8));
+    } catch {
+      // Canvas tainted or not ready — fall back to dark background
+    }
+  }, [map]);
+
+  // Measure whichever preview panel is visible (mobile or desktop)
+  const mobilePreviewRef = useRef<HTMLDivElement>(null);
+  const desktopPreviewRef = useRef<HTMLDivElement>(null);
   const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
-    const el = previewPanelRef.current;
-    if (!el) return;
     const obs = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        setPanelSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setPanelSize({ width, height });
+        }
       }
     });
-    obs.observe(el);
+    if (mobilePreviewRef.current) obs.observe(mobilePreviewRef.current);
+    if (desktopPreviewRef.current) obs.observe(desktopPreviewRef.current);
     return () => obs.disconnect();
   }, []);
 
@@ -126,7 +169,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       if (panelSize && panelSize.width > 0 && panelSize.height > 0) {
         return panelSize.width / panelSize.height;
       }
-      return 16 / 10; // fallback until measured
+      return 16 / 9; // fallback
     }
     const [w, h] = viewportRatio.split(":").map(Number);
     return w / h;
@@ -143,11 +186,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
     let w: number, h: number;
     if (targetRatio > panelRatio) {
-      // constrained by width
       w = pw;
       h = pw / targetRatio;
     } else {
-      // constrained by height
       h = ph;
       w = ph * targetRatio;
     }
@@ -197,31 +238,124 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   if (location.photos.length === 0) return null;
 
+  const layoutPreviewNode = (
+    <LayoutPreview
+      photos={orderedPhotos}
+      borderRadius={borderRadiusValue}
+      template={activeTemplate}
+      gap={gapValue}
+      customProportions={layout.customProportions}
+      containerAspect={previewAspect}
+    />
+  );
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        {/* ── Mobile layout ── */}
+        <motion.div
+          initial={{ y: "100%", opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: "100%", opacity: 0 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className="md:hidden bg-white flex flex-col w-full h-full"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">{location.name}</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {location.photos.length} photo{location.photos.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+              <X className="h-5 w-5 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Preview area — takes up remaining space above controls */}
+          <div ref={mobilePreviewRef} className="flex-1 min-h-0 flex items-center justify-center p-4 bg-gray-950/5">
+            <PreviewWithMapBackground mapSnapshot={mapSnapshot} previewContainerStyle={previewContainerStyle}>
+              {layoutPreviewNode}
+            </PreviewWithMapBackground>
+          </div>
+
+          {/* Bottom controls */}
+          <div className="shrink-0 border-t border-gray-100 bg-white">
+            {/* Layout style selector — horizontal pills */}
+            <div className="flex items-center gap-2 px-4 py-3">
+              {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => handleStyleSelect(id)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-colors ${
+                    activeStyle === id
+                      ? "bg-indigo-500 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Photo thumbnails — horizontal scroll */}
+            <div className="px-4 pb-3 overflow-x-auto">
+              <div className="flex gap-2">
+                {orderedPhotos.map((photo, i) => (
+                  <button
+                    key={photo.id}
+                    onClick={() => setSelectedPhotoIndex(i)}
+                    className={`shrink-0 w-[60px] h-[60px] rounded-lg overflow-hidden transition-all ${
+                      selectedPhotoIndex === i
+                        ? "ring-2 ring-indigo-500 ring-offset-2"
+                        : "hover:ring-2 hover:ring-gray-300 hover:ring-offset-1"
+                    }`}
+                  >
+                    <img
+                      src={photo.url}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+              <p className="text-xs text-gray-400">Changes are applied automatically</p>
+              <button
+                onClick={onClose}
+                className="px-5 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg hover:bg-indigo-600 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Desktop layout ── */}
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 overflow-hidden"
+          className="hidden md:flex flex-col bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <div>
-              <h3 className="text-base font-semibold text-gray-900">
-                {location.name}
-              </h3>
+              <h3 className="text-base font-semibold text-gray-900">{location.name}</h3>
               <p className="text-xs text-gray-500 mt-0.5">
                 {location.photos.length} photo{location.photos.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
               <X className="h-5 w-5 text-gray-500" />
             </button>
           </div>
@@ -247,18 +381,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
               ))}
             </div>
 
-            {/* CENTER — Live preview using actual layout functions */}
-            <div ref={previewPanelRef} className="flex-1 bg-gray-100 flex items-center justify-center p-6">
-              <div className="bg-gray-200/50 rounded-xl overflow-hidden relative" style={previewContainerStyle}>
-                <LayoutPreview
-                  photos={orderedPhotos}
-                  borderRadius={borderRadiusValue}
-                  template={activeTemplate}
-                  gap={gapValue}
-                  customProportions={layout.customProportions}
-                  containerAspect={previewAspect}
-                />
-              </div>
+            {/* CENTER — Live preview with map background */}
+            <div ref={desktopPreviewRef} className="flex-1 bg-gray-100 flex items-center justify-center p-6">
+              <PreviewWithMapBackground mapSnapshot={mapSnapshot} previewContainerStyle={previewContainerStyle}>
+                {layoutPreviewNode}
+              </PreviewWithMapBackground>
             </div>
 
             {/* RIGHT — Photo thumbnail list */}
@@ -270,9 +397,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                 {orderedPhotos.map((photo, i) => (
                   <button
                     key={photo.id}
-                    onClick={() => {
-                      setSelectedPhotoIndex(i);
-                    }}
+                    onClick={() => setSelectedPhotoIndex(i)}
                     className={`w-full aspect-square rounded-lg overflow-hidden transition-all ${
                       selectedPhotoIndex === i
                         ? "ring-2 ring-indigo-500 ring-offset-2"
