@@ -1,50 +1,43 @@
-# TASK.md — Settings panel + map language + route label fix
+# TASK.md — Label positioning: relative + configurable
 
 ⚠️ DO NOT MERGE. Create PR and stop.
 
 ## Problem
-1. City label settings (font size, language) are buried in Export Dialog's "Advanced Settings" — should be a separate settings panel accessible from toolbar
-2. When user selects Chinese language, only the floating city label overlay changes — the Mapbox base map labels stay in English. Map labels should also switch to Chinese.
-3. The "Taipei → Taichung" route segment indicator is positioned outside the map area (below the map in the dark zone on mobile). It should be inside the map container.
+City label (`top-6` = fixed 24px) and route segment label (`bottom-20` = fixed 80px) use absolute pixel positioning. This means:
+- In free mode (tall container), the route label sits very low and gets hidden by PlaybackControls
+- In 4:3 mode (short container), labels are relatively higher
+- Not consistent across viewport ratios
 
-## Requirements
+## Solution
 
-### 1. Create a Settings panel (gear icon in TopToolbar)
-- Add a gear/settings icon button to the TopToolbar (right side, near undo/redo)
-- Clicking it opens a side panel or popover with these settings:
-  - **City Label Language**: English / 中文 toggle pills (move from ExportDialog)
-  - **City Label Size**: slider 12-48px (move from ExportDialog)
-- These settings are already in `uiStore` (`cityLabelSize`, `cityLabelLang`) — just move the UI
-- Remove these settings from ExportDialog's Advanced Settings section
-- The Export Dialog should become simpler: just "Export Video" button + the WYSIWYG explanation text
-- On mobile, the settings could be a small dropdown/popover from the gear icon
+### 1. Use percentage-based positioning
+Replace fixed pixel positioning with percentage-based:
+- **City label**: `top: X%` of the map container (default ~5%)
+- **Route segment label**: `bottom: Y%` of the map container (default ~15%)
 
-### 2. Apply language to Mapbox base map labels
-When `cityLabelLang` changes, update Mapbox GL layers to show labels in the selected language:
-- Mapbox vector tiles include `name_zh-Hant` (Traditional Chinese), `name_en`, `name` fields
-- Find all label layers (settlement, place, country, state, etc.) and update their `text-field` layout property:
-  - English: `["coalesce", ["get", "name_en"], ["get", "name"]]`
-  - Chinese: `["coalesce", ["get", "name_zh-Hant"], ["get", "name_zh-Hans"], ["get", "name"]]`
-- Use `map.getStyle().layers` to find layers with `type === "symbol"` that have `text-field` set
-- Apply via `map.setLayoutProperty(layerId, "text-field", expression)`
-- Do this in a `useEffect` in MapCanvas.tsx or EditorLayout.tsx that watches `cityLabelLang`
+This makes labels consistently positioned regardless of container height.
 
-### 3. Move route segment indicator inside map
-The "FromCity → ToCity" pill in `PlaybackControls.tsx` currently renders above the controls bar but outside the map container.
-- Move this segment info display to be inside the MapStage component instead, positioned at the bottom of the map (above the playback controls if they're inside, or at a fixed position within the map)
-- It should be inside the map container so it appears within the viewport ratio frame
-- Keep the same styling (white/90 backdrop-blur pill)
+### 2. Add settings to configure label positions
+Add two new settings to `uiStore`:
+- `cityLabelTopPercent: number` (default 5, range 0-30)
+- `routeLabelBottomPercent: number` (default 15, range 5-40)
 
-### Non-goals
-- Don't change the viewport ratio selector
-- Don't change the export logic (it already reads cityLabelSize/cityLabelLang from settings)
+### 3. Add controls to Settings panel
+In the Settings popover (TopToolbar gear icon), add two sliders:
+- "City Label Position" — slider 0-30%
+- "Route Label Position" — slider 5-40%
+
+Keep them in the same settings panel as City Label Language and Size.
+
+### 4. Apply in MapStage
+- `CityLabelOverlay`: replace `className="absolute top-6 ..."` with `style={{ top: '${cityLabelTopPercent}%' }}`
+- Route segment label: replace `className="absolute bottom-20 ..."` with `style={{ bottom: '${routeLabelBottomPercent}%' }}`
+- Read both values from `useUIStore`
 
 ## Files to modify
-- `src/components/editor/TopToolbar.tsx` — add settings gear icon + panel
-- `src/components/editor/ExportDialog.tsx` — remove city label settings
-- `src/components/editor/MapCanvas.tsx` or `EditorLayout.tsx` — apply map language
-- `src/components/editor/PlaybackControls.tsx` — remove segment info pill from here
-- `src/components/editor/MapStage.tsx` — add segment info pill here (inside map)
+- `src/stores/uiStore.ts` — add `cityLabelTopPercent`, `routeLabelBottomPercent` + setters
+- `src/components/editor/MapStage.tsx` — use percentage positioning
+- `src/components/editor/TopToolbar.tsx` — add position sliders to settings panel
 
 ## Working directory
 `/home/kaike/.openclaw/workspace/trace-recap`
@@ -52,7 +45,5 @@ The "FromCity → ToCity" pill in `PlaybackControls.tsx` currently renders above
 ## Verification
 - `npx tsc --noEmit` must pass
 - `npm run build` must pass
-- Settings gear icon visible in toolbar
-- Changing language to 中文 makes BOTH the overlay label AND base map labels show Chinese
-- "City → City" route indicator appears inside the map frame
-- Export Dialog is simplified (no more Advanced Settings for labels)
+- Labels positioned consistently in free mode and 4:3 mode
+- Settings sliders adjust label positions in real-time

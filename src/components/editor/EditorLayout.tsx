@@ -407,10 +407,6 @@ function EditorContent() {
     engine.on("complete", () => {
       setPlaybackState("idle");
       setCurrentSegmentIndex(0);
-      // On mobile, scroll back to top to show toolbar
-      if (window.innerWidth < 768) {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
     });
 
     return () => {
@@ -435,19 +431,12 @@ function EditorContent() {
     }
     engineRef.current?.play();
     setPlaybackState("playing");
-    // On mobile, scroll down just enough to hide the toolbar (48px)
-    if (window.innerWidth < 768) {
-      window.scrollTo({ top: 48, behavior: "smooth" });
-    }
+
   }, [map, setPlaybackState]);
 
   const handlePause = useCallback(() => {
     engineRef.current?.pause();
     setPlaybackState("paused");
-    // On mobile, scroll back to top to show toolbar
-    if (window.innerWidth < 768) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
   }, [setPlaybackState]);
 
   const handleReset = useCallback(() => {
@@ -670,7 +659,7 @@ function EditorContent() {
 
   return (
     <div className="flex h-screen flex-col bg-[#FAFAFA]">
-      <TopToolbar />
+      {!isPlaying && <TopToolbar />}
       <div className="flex flex-1 overflow-hidden">
         <LeftPanel
           onLocationClick={handleLocationClick}
