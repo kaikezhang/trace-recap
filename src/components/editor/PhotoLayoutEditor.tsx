@@ -168,12 +168,14 @@ function SortablePhotoThumbnail({
   } = useSortable({ id: photo.id });
 
   return (
-    <button
+    <div
       ref={setNodeRef}
-      type="button"
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
       aria-label={`Select photo ${index + 1}${selected ? " (selected)" : ""}`}
-      className={`text-left transition-[box-shadow,opacity] ${
+      className={`text-left transition-[box-shadow,opacity] cursor-pointer ${
         isDragging ? "opacity-35" : ""
       }`}
       style={{
@@ -189,7 +191,7 @@ function SortablePhotoThumbnail({
         dragHandleProps={{ ...attributes, ...listeners }}
         onDelete={onDelete}
       />
-    </button>
+    </div>
   );
 }
 
