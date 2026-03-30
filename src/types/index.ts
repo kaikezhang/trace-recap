@@ -76,6 +76,7 @@ export interface ExportSettings {
   fps: number;
   cityLabelSize?: number; // CSS font size in px (default 18)
   cityLabelLang?: "en" | "zh";
+  viewportRatio?: AspectRatio;
 }
 
 export type LayoutTemplate = "grid" | "hero" | "masonry" | "filmstrip" | "scatter";
