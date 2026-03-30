@@ -69,8 +69,8 @@ export default function TransportSelector({ segment }: TransportSelectorProps) {
   const fromLoc = locations.find((l) => l.id === segment.fromId);
   const toLoc = locations.find((l) => l.id === segment.toId);
 
-  // Only show timing control on the first segment of each animation group.
-  const isGroupLeader = !fromLoc?.isWaypoint;
+  // Show timing control for every segment (each segment is its own animation group now)
+  const isGroupLeader = true;
 
   // Find auto-computed duration from timeline for this segment
   const timelineEntry = timeline.find((t) => t.segmentId === segment.id);
