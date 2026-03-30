@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Download,
@@ -13,7 +13,9 @@ import {
   Redo2,
   MoreVertical,
   Map,
+  Settings,
 } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,7 +45,10 @@ import type { AspectRatio, MapStyle } from "@/types";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const setExportDialogOpen = useUIStore((s) => s.setExportDialogOpen);
   const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
   const setLeftPanelOpen = useUIStore((s) => s.setLeftPanelOpen);
@@ -55,10 +60,31 @@ export default function TopToolbar() {
   const setMapStyle = useProjectStore((s) => s.setMapStyle);
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const setViewportRatio = useUIStore((s) => s.setViewportRatio);
+  const cityLabelSize = useUIStore((s) => s.cityLabelSize);
+  const setCityLabelSize = useUIStore((s) => s.setCityLabelSize);
+  const cityLabelLang = useUIStore((s) => s.cityLabelLang);
+  const setCityLabelLang = useUIStore((s) => s.setCityLabelLang);
   const undo = useHistoryStore((s) => s.undo);
   const redo = useHistoryStore((s) => s.redo);
   const canUndo = useHistoryStore((s) => s.canUndo);
   const canRedo = useHistoryStore((s) => s.canRedo);
+
+  // Close settings panel on outside click
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        settingsPanelRef.current &&
+        !settingsPanelRef.current.contains(e.target as Node) &&
+        settingsButtonRef.current &&
+        !settingsButtonRef.current.contains(e.target as Node)
+      ) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [settingsOpen]);
 
   const ratioOptions: AspectRatio[] = ["free", "16:9", "9:16", "4:3", "3:4", "1:1"];
   const ratioLabels: Record<AspectRatio, string> = {
@@ -187,6 +213,66 @@ export default function TopToolbar() {
           >
             <Redo2 className="h-4 w-4" />
           </Button>
+
+          {/* Settings gear */}
+          <div className="relative">
+            <Button
+              ref={settingsButtonRef}
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setSettingsOpen((v) => !v)}
+              aria-label="Settings"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+            {settingsOpen && (
+              <div
+                ref={settingsPanelRef}
+                className="absolute right-0 top-full mt-2 z-50 w-64 rounded-lg border bg-background p-4 shadow-lg space-y-4"
+              >
+                <p className="text-sm font-semibold">City Label Settings</p>
+                {/* Language toggle */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Language</label>
+                  <div className="flex gap-2">
+                    {([
+                      { value: "en", label: "English" },
+                      { value: "zh", label: "中文" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                          cityLabelLang === opt.value
+                            ? "bg-indigo-500 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
+                        onClick={() => setCityLabelLang(opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Label size slider */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Label Size: {cityLabelSize}px
+                  </label>
+                  <Slider
+                    value={[cityLabelSize]}
+                    min={12}
+                    max={48}
+                    step={1}
+                    onValueChange={(v) => {
+                      const val = Array.isArray(v) ? v[0] : v;
+                      setCityLabelSize(val);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* More menu */}
           <DropdownMenu>
