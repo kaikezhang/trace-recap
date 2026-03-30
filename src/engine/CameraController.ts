@@ -201,15 +201,22 @@ export class CameraController {
 
       case "FLY": {
         // Camera uses smooth straight-line lerp for stable motion
-        // Icon follows actual route — at flyZoom level this difference is invisible
         const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
-        const zoom = gc.flyZoom;
+        // Start pre-zooming in the last 30% of FLY to preload destination tiles
+        // This prevents black screen on long flights (e.g. Hawaii→Tokyo)
+        let zoom = gc.flyZoom;
+        if (eased > 0.7) {
+          const preZoomProgress = (eased - 0.7) / 0.3; // 0→1 over last 30%
+          const midZoom = gc.flyZoom + (gc.arriveZoom - gc.flyZoom) * 0.3; // zoom 30% of the way
+          zoom = lerp(gc.flyZoom, midZoom, preZoomProgress);
+        }
         return { center, zoom, bearing: 0, pitch: 0 };
       }
 
       case "ZOOM_IN": {
-        // Full zoom from flyZoom to arriveZoom — icon is already at destination
-        const zoom = lerp(gc.flyZoom, gc.arriveZoom, eased);
+        // Continue zoom from pre-zoom level (30% of target) to full arriveZoom
+        const preZoomLevel = gc.flyZoom + (gc.arriveZoom - gc.flyZoom) * 0.3;
+        const zoom = lerp(preZoomLevel, gc.arriveZoom, eased);
         return { center: gc.toCenter, zoom, bearing: 0, pitch: 0 };
       }
 
