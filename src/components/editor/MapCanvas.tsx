@@ -296,6 +296,14 @@ export default function MapCanvas() {
       map.once("style.load", runSyncAndVis);
     }
 
+    // Safety net: re-apply visibility after a short delay to handle race
+    // conditions where style.load already fired before the once() listener
+    // was registered, or sources weren't ready yet.
+    const safetyTimer = setTimeout(() => {
+      if (map.isStyleLoaded()) runSyncAndVis();
+    }, 500);
+
+    return () => clearTimeout(safetyTimer);
   }, [segments]);
 
   // Track previous segment index to detect transitions and clear source data
