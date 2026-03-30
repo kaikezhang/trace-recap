@@ -6,6 +6,8 @@ import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
 import PhotoLayoutEditor from "./PhotoLayoutEditor";
 import MapEmptyState from "./MapEmptyState";
+import { useAnimationStore } from "@/stores/animationStore";
+import { useProjectStore } from "@/stores/projectStore";
 import type { Location, Photo, PhotoLayout } from "@/types";
 
 interface MapStageProps {
@@ -113,6 +115,20 @@ export default function MapStage({
     editingLocation && editingLocation.photos.length > 0,
   );
 
+  const playbackState = useAnimationStore((s) => s.playbackState);
+  const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
+  const locations = useProjectStore((s) => s.locations);
+  const segments = useProjectStore((s) => s.segments);
+
+  const isPlaying = playbackState === "playing";
+  const currentSegment = segments[currentSegmentIndex];
+  const fromCity = currentSegment
+    ? locations.find((l) => l.id === currentSegment.fromId)?.name
+    : null;
+  const toCity = currentSegment
+    ? locations.find((l) => l.id === currentSegment.toId)?.name
+    : null;
+
   return (
     <div className="relative h-full w-full">
       <MapCanvas />
@@ -128,6 +144,19 @@ export default function MapStage({
             cityLabel={currentCityLabel}
             cityLabelSize={cityLabelSize}
           />
+        )}
+      </AnimatePresence>
+      {/* Route segment indicator — inside the map container */}
+      <AnimatePresence>
+        {isPlaying && fromCity && toCity && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="absolute bottom-20 left-1/2 z-10 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-full px-4 py-1.5 shadow-lg text-xs font-medium text-gray-700"
+          >
+            {fromCity} → {toCity}
+          </motion.div>
         )}
       </AnimatePresence>
       <PhotoOverlay

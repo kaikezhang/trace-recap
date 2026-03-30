@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
 import LeftPanel from "./LeftPanel";
@@ -189,6 +190,52 @@ function EditorContent() {
     observer.observe(mapContainerRef.current);
     return () => observer.disconnect();
   }, [constrainedMapSize?.height, constrainedMapSize?.width, map, viewportRatio]);
+  // Apply language to Mapbox base map labels when cityLabelLang changes
+  // Also re-apply after style reloads (e.g. map style switch)
+  useEffect(() => {
+    if (!map) return;
+
+    // Only target name-label layers (place, settlement, country, state, etc.)
+    // Skip shield/transit/ref layers whose text-field uses other properties
+    const NAME_LAYER_PATTERNS = [
+      "settlement", "place", "country", "state", "continent",
+      "city", "town", "village", "island", "region", "capital",
+    ];
+
+    const isNameLabelLayer = (layerId: string): boolean => {
+      const id = layerId.toLowerCase();
+      return NAME_LAYER_PATTERNS.some((p) => id.includes(p));
+    };
+
+    const applyMapLanguage = () => {
+      const style = map.getStyle();
+      if (!style?.layers) return;
+
+      const textFieldExpr =
+        cityLabelLang === "zh"
+          ? (["coalesce", ["get", "name_zh-Hant"], ["get", "name_zh-Hans"], ["get", "name"]] as mapboxgl.ExpressionSpecification)
+          : (["coalesce", ["get", "name_en"], ["get", "name"]] as mapboxgl.ExpressionSpecification);
+
+      for (const layer of style.layers) {
+        if (layer.type !== "symbol") continue;
+        if (!isNameLabelLayer(layer.id)) continue;
+        const textField = map.getLayoutProperty(layer.id, "text-field");
+        if (textField != null) {
+          map.setLayoutProperty(layer.id, "text-field", textFieldExpr);
+        }
+      }
+    };
+
+    if (map.isStyleLoaded()) {
+      applyMapLanguage();
+    }
+    // Re-apply on every style reload (map style change)
+    map.on("style.load", applyMapLanguage);
+    return () => {
+      map.off("style.load", applyMapLanguage);
+    };
+  }, [map, cityLabelLang]);
+
   const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
   const currentCityLabelZh = useAnimationStore((s) => s.currentCityLabelZh);
   const currentCityLabel =

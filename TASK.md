@@ -1,89 +1,58 @@
-# TASK.md — Current Sprint: CrowdTest Fixes
+# TASK.md — Settings panel + map language + route label fix
 
-## ⚠️ DO NOT MERGE ANY PR. Create PR and stop. DO NOT MERGE.
+⚠️ DO NOT MERGE. Create PR and stop.
 
-## Sprint: CrowdTest v1 Fixes
+## Problem
+1. City label settings (font size, language) are buried in Export Dialog's "Advanced Settings" — should be a separate settings panel accessible from toolbar
+2. When user selects Chinese language, only the floating city label overlay changes — the Mapbox base map labels stay in English. Map labels should also switch to Chinese.
+3. The "Taipei → Taichung" route segment indicator is positioned outside the map area (below the map in the dark zone on mobile). It should be inside the map container.
 
-| PR | Task | Priority | Status |
-|----|------|----------|--------|
-| PR25 | Project Persistence (localStorage) | P0 | 🔜 |
-| PR26 | Local Photo Upload (file picker) | P0 | 🔜 |
-| PR27 | Onboarding + Demo Project | P0 | ⏳ |
-| PR28 | Undo/Redo | P1 | ⏳ |
+## Requirements
 
-## PR25: Project Persistence (localStorage)
+### 1. Create a Settings panel (gear icon in TopToolbar)
+- Add a gear/settings icon button to the TopToolbar (right side, near undo/redo)
+- Clicking it opens a side panel or popover with these settings:
+  - **City Label Language**: English / 中文 toggle pills (move from ExportDialog)
+  - **City Label Size**: slider 12-48px (move from ExportDialog)
+- These settings are already in `uiStore` (`cityLabelSize`, `cityLabelLang`) — just move the UI
+- Remove these settings from ExportDialog's Advanced Settings section
+- The Export Dialog should become simpler: just "Export Video" button + the WYSIWYG explanation text
+- On mobile, the settings could be a small dropdown/popover from the gear icon
 
-**Problem**: Refreshing the page loses ALL work. This is the #1 user complaint.
+### 2. Apply language to Mapbox base map labels
+When `cityLabelLang` changes, update Mapbox GL layers to show labels in the selected language:
+- Mapbox vector tiles include `name_zh-Hant` (Traditional Chinese), `name_en`, `name` fields
+- Find all label layers (settlement, place, country, state, etc.) and update their `text-field` layout property:
+  - English: `["coalesce", ["get", "name_en"], ["get", "name"]]`
+  - Chinese: `["coalesce", ["get", "name_zh-Hant"], ["get", "name_zh-Hans"], ["get", "name"]]`
+- Use `map.getStyle().layers` to find layers with `type === "symbol"` that have `text-field` set
+- Apply via `map.setLayoutProperty(layerId, "text-field", expression)`
+- Do this in a `useEffect` in MapCanvas.tsx or EditorLayout.tsx that watches `cityLabelLang`
 
-**Solution**: Auto-save project state to localStorage, auto-restore on page load.
+### 3. Move route segment indicator inside map
+The "FromCity → ToCity" pill in `PlaybackControls.tsx` currently renders above the controls bar but outside the map container.
+- Move this segment info display to be inside the MapStage component instead, positioned at the bottom of the map (above the playback controls if they're inside, or at a fixed position within the map)
+- It should be inside the map container so it appears within the viewport ratio frame
+- Keep the same styling (white/90 backdrop-blur pill)
 
-### What to Build
+### Non-goals
+- Don't change the viewport ratio selector
+- Don't change the export logic (it already reads cityLabelSize/cityLabelLang from settings)
 
-1. **Auto-save**: After every state change in `projectStore`, debounce-save the full project state to `localStorage` under key `trace-recap-project`.
-   - Save: locations, segments, mapStyle, segmentTimingOverrides
-   - Debounce: 500ms after last change
+## Files to modify
+- `src/components/editor/TopToolbar.tsx` — add settings gear icon + panel
+- `src/components/editor/ExportDialog.tsx` — remove city label settings
+- `src/components/editor/MapCanvas.tsx` or `EditorLayout.tsx` — apply map language
+- `src/components/editor/PlaybackControls.tsx` — remove segment info pill from here
+- `src/components/editor/MapStage.tsx` — add segment info pill here (inside map)
 
-2. **Auto-restore**: On app load, check localStorage for saved state and hydrate `projectStore`.
-   - If saved state exists → import it (use existing `importRoute` logic)
-   - Also restore segment geometry by re-fetching directions
+## Working directory
+`/home/kaike/.openclaw/workspace/trace-recap`
 
-3. **Clear project**: Add a "Clear Route" button that clears localStorage + resets store.
-   - Confirm dialog: "Are you sure? This cannot be undone."
-
-4. **Route export includes photos**: Ensure `exportRoute()` includes photo URLs in the JSON so imported routes preserve photos.
-
-### Files to Modify
-- `src/stores/projectStore.ts` — add localStorage save/restore logic
-- `src/components/editor/LeftPanel.tsx` or `TopToolbar.tsx` — add Clear Route button
-
-### Acceptance Criteria
-- [ ] Route persists after page refresh
-- [ ] All locations, segments, transport modes preserved
-- [ ] Segment timing overrides preserved
-- [ ] Map style preserved
-- [ ] Photos (URLs) preserved
-- [ ] "Clear Route" works with confirmation
-- [ ] `npm run build` passes
-- [ ] `npx tsc --noEmit` passes
-
-### Branch: `feat/project-persistence`
-
----
-
-## PR26: Local Photo Upload
-
-**Problem**: Users can only add photos via URL. No way to upload from local device.
-
-**Solution**: Add a file picker that lets users select local images, convert to data URLs or object URLs.
-
-### What to Build
-
-1. **File input**: In `PhotoManager`, add a button "Upload from device" alongside the URL input.
-   - Accept: `.jpg, .jpeg, .png, .webp, .gif`
-   - Multiple selection allowed
-   - Max file size: 10MB per image
-
-2. **Convert to usable URL**: 
-   - Use `URL.createObjectURL(file)` for preview (fast, no memory copy)
-   - For persistence/export: convert to base64 data URL and store in the photo's `url` field
-   - Or: store as object URL for session, and on export warn that local photos won't be included in JSON
-
-3. **Drag & drop**: Support dragging image files onto a location card to add photos.
-   - Already partially implemented (`usePhotoDropZone` exists) — extend to handle File drops, not just reorder
-
-4. **Mobile camera**: On mobile, the file input should also offer "Take Photo" option (automatically available with `accept="image/*"` + `capture` attribute).
-
-### Files to Modify
-- `src/components/editor/PhotoManager.tsx` — add file upload button, handle File objects
-- `src/components/editor/LocationCard.tsx` — extend drop zone to handle file drops
-
-### Acceptance Criteria
-- [ ] "Upload" button opens native file picker
-- [ ] Selected images appear as photo thumbnails
-- [ ] Multiple file selection works
-- [ ] Drag & drop files onto location card works
-- [ ] Works on mobile (camera option available)
-- [ ] Photos display correctly in preview and animation
-- [ ] `npm run build` passes
-
-### Branch: `feat/local-photo-upload`
+## Verification
+- `npx tsc --noEmit` must pass
+- `npm run build` must pass
+- Settings gear icon visible in toolbar
+- Changing language to 中文 makes BOTH the overlay label AND base map labels show Chinese
+- "City → City" route indicator appears inside the map frame
+- Export Dialog is simplified (no more Advanced Settings for labels)

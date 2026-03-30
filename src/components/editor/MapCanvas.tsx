@@ -398,6 +398,12 @@ export default function MapCanvas() {
         const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
         const lineStyle = MODE_LINE_STYLES[seg.transportMode];
 
+        if (map.getSource(srcId)) {
+          // Source already exists (race condition) — just update data
+          setSegmentSourceData(map, seg.id, seg.geometry);
+          segmentLayersRef.current.add(layerId);
+          continue;
+        }
         map.addSource(srcId, {
           type: "geojson",
           data: getEmptyRouteData(),

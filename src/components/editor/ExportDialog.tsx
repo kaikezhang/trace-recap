@@ -6,9 +6,7 @@ import {
   X,
   AlertTriangle,
   Check,
-  ChevronDown,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Slider } from "@/components/ui/slider";
 import { useMap } from "./MapContext";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -69,11 +66,8 @@ export default function ExportDialog() {
   const segments = useProjectStore((s) => s.segments);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
-  const setCityLabelSize = useUIStore((s) => s.setCityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
-  const setCityLabelLang = useUIStore((s) => s.setCityLabelLang);
   const viewportRatio = useUIStore((s) => s.viewportRatio);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
@@ -137,14 +131,6 @@ export default function ExportDialog() {
   const handleQuickExport = () => {
     void startExport({
       fps: FPS,
-    });
-  };
-
-  const handleConfiguredExport = () => {
-    void startExport({
-      fps: FPS,
-      cityLabelSize,
-      cityLabelLang,
     });
   };
 
@@ -271,82 +257,6 @@ export default function ExportDialog() {
           >
             Export Video
           </Button>
-
-          {/* Advanced Settings toggle */}
-          <button
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-full justify-center"
-            onClick={() => setShowAdvanced((v) => !v)}
-          >
-            <span>Advanced Settings</span>
-            <ChevronDown
-              className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
-            />
-          </button>
-
-          {/* Advanced settings collapsible */}
-          <AnimatePresence initial={false}>
-            {showAdvanced && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="space-y-4 pt-1">
-                  {/* City Label pills */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">City Label</label>
-                    <div className="flex gap-2">
-                      {[
-                        { value: "en", label: "English" },
-                        { value: "zh", label: "中文" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.value}
-                          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                            cityLabelLang === opt.value
-                              ? "bg-indigo-500 text-white"
-                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                          }`}
-                          onClick={() =>
-                            setCityLabelLang(opt.value as "en" | "zh")
-                          }
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Label Size slider */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      Label Size: {cityLabelSize}px
-                    </label>
-                    <Slider
-                      value={[cityLabelSize]}
-                      min={12}
-                      max={48}
-                      step={1}
-                      onValueChange={(v) => {
-                        const val = Array.isArray(v) ? v[0] : v;
-                        setCityLabelSize(val);
-                      }}
-                    />
-                  </div>
-
-                  <Button
-                    className="h-11 w-full"
-                    onClick={handleConfiguredExport}
-                    disabled={segments.length === 0}
-                  >
-                    Start Export
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {exportError && (
             <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">

@@ -1,11 +1,9 @@
 "use client";
 
 import { Play, Pause, RotateCcw } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useAnimationStore } from "@/stores/animationStore";
-import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import OnboardingHint from "./OnboardingHint";
 
@@ -36,22 +34,10 @@ export default function PlaybackControls({
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentTime = useAnimationStore((s) => s.currentTime);
   const totalDuration = useAnimationStore((s) => s.totalDuration);
-  const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
   const bottomSheetState = useUIStore((s) => s.bottomSheetState);
-  const locations = useProjectStore((s) => s.locations);
-  const segments = useProjectStore((s) => s.segments);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
-
-  // Get current segment info for the pill
-  const currentSegment = segments[currentSegmentIndex];
-  const fromCity = currentSegment
-    ? locations.find((l) => l.id === currentSegment.fromId)?.name
-    : null;
-  const toCity = currentSegment
-    ? locations.find((l) => l.id === currentSegment.toId)?.name
-    : null;
 
   const controlsBottomClass =
     bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[120px]";
@@ -69,20 +55,6 @@ export default function PlaybackControls({
         "md:absolute md:z-10 md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto",
       ].join(" ")}
     >
-      {/* Segment info pill — shown when playing */}
-      <AnimatePresence>
-        {isPlaying && fromCity && toCity && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            className="mb-2 bg-white/90 backdrop-blur-md rounded-full px-4 py-1.5 shadow-lg text-xs font-medium text-gray-700"
-          >
-            {fromCity} → {toCity}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Controls bar */}
       <div
         className={[
