@@ -437,8 +437,13 @@ export class AnimationEngine {
       phase,
       phaseProgress
     );
+    // Wrap longitude to [-180, 180] to prevent tile loading issues with unwrapped coords
+    let lng = cameraState.center[0];
+    while (lng > 180) lng -= 360;
+    while (lng < -180) lng += 360;
+
     this.map.jumpTo({
-      center: cameraState.center,
+      center: [lng, cameraState.center[1]],
       zoom: cameraState.zoom,
       bearing: cameraState.bearing,
       pitch: cameraState.pitch,
