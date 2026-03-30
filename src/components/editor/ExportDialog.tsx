@@ -5,8 +5,6 @@ import {
   Download,
   X,
   AlertTriangle,
-  Monitor,
-  Smartphone,
   Check,
   ChevronDown,
 } from "lucide-react";
@@ -24,7 +22,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { VideoExporter, type ExportProgress } from "@/engine/VideoExporter";
-import type { AspectRatio, ExportSettings } from "@/types";
+import type { ExportSettings } from "@/types";
 import { FPS } from "@/lib/constants";
 
 function CircularProgress({ percent }: { percent: number }) {
@@ -74,9 +72,6 @@ export default function ExportDialog() {
   const setCityLabelSize = useUIStore((s) => s.setCityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const setCityLabelLang = useUIStore((s) => s.setCityLabelLang);
-  const aspectRatio = useUIStore((s) => s.exportAspectRatio) as AspectRatio;
-  const setAspectRatio = useUIStore((s) => s.setExportAspectRatio);
-  const [resolution, setResolution] = useState("720");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [isExporting, setIsExporting] = useState(false);
@@ -139,17 +134,15 @@ export default function ExportDialog() {
 
   const handleQuickExport = () => {
     void startExport({
-      aspectRatio: "16:9",
-      resolution: 720,
-      fps: 24,
+      fps: FPS,
     });
   };
 
   const handleConfiguredExport = () => {
     void startExport({
-      aspectRatio,
-      resolution: parseInt(resolution, 10),
       fps: FPS,
+      cityLabelSize,
+      cityLabelLang,
     });
   };
 
@@ -264,46 +257,9 @@ export default function ExportDialog() {
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Step 1: Aspect ratio cards */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Aspect Ratio</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
-                  aspectRatio === "16:9"
-                    ? "border-indigo-500 bg-indigo-50"
-                    : "border-border hover:border-gray-300"
-                }`}
-                onClick={() => setAspectRatio("16:9")}
-              >
-                {aspectRatio === "16:9" && (
-                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                    <Check className="h-3 w-3 text-white" />
-                  </div>
-                )}
-                <Monitor className="h-8 w-8 text-gray-600" />
-                <span className="text-sm font-medium">Landscape</span>
-                <span className="text-xs text-muted-foreground">16:9</span>
-              </button>
-              <button
-                className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-colors ${
-                  aspectRatio === "9:16"
-                    ? "border-indigo-500 bg-indigo-50"
-                    : "border-border hover:border-gray-300"
-                }`}
-                onClick={() => setAspectRatio("9:16")}
-              >
-                {aspectRatio === "9:16" && (
-                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                    <Check className="h-3 w-3 text-white" />
-                  </div>
-                )}
-                <Smartphone className="h-8 w-8 text-gray-600" />
-                <span className="text-sm font-medium">Portrait</span>
-                <span className="text-xs text-muted-foreground">9:16</span>
-              </button>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Exports exactly what you see — the viewport ratio controls the video dimensions.
+          </p>
 
           {/* Quick Export button */}
           <Button
@@ -311,7 +267,7 @@ export default function ExportDialog() {
             onClick={handleQuickExport}
             disabled={segments.length === 0}
           >
-            Quick Export (720p)
+            Export Video
           </Button>
 
           {/* Advanced Settings toggle */}
@@ -336,26 +292,6 @@ export default function ExportDialog() {
                 className="overflow-hidden"
               >
                 <div className="space-y-4 pt-1">
-                  {/* Resolution pills */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Resolution</label>
-                    <div className="flex gap-2">
-                      {["720", "1080"].map((res) => (
-                        <button
-                          key={res}
-                          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                            resolution === res
-                              ? "bg-indigo-500 text-white"
-                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                          }`}
-                          onClick={() => setResolution(res)}
-                        >
-                          {res}p
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   {/* City Label pills */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium">City Label</label>

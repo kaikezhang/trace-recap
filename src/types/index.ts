@@ -70,11 +70,9 @@ export interface CameraState {
 
 export type PlaybackState = "idle" | "playing" | "paused" | "exporting";
 
-export type AspectRatio = "16:9" | "9:16";
+export type AspectRatio = "free" | "16:9" | "9:16" | "4:3" | "3:4" | "1:1";
 
 export interface ExportSettings {
-  aspectRatio: AspectRatio;
-  resolution: number; // height in pixels (720 or 1080)
   fps: number;
   cityLabelSize?: number; // CSS font size in px (default 18)
   cityLabelLang?: "en" | "zh";

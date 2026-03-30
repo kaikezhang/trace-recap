@@ -39,7 +39,7 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import type { MapStyle } from "@/types";
+import type { AspectRatio, MapStyle } from "@/types";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,10 +53,22 @@ export default function TopToolbar() {
   const clearRoute = useProjectStore((s) => s.clearRoute);
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const setMapStyle = useProjectStore((s) => s.setMapStyle);
+  const viewportRatio = useUIStore((s) => s.viewportRatio);
+  const setViewportRatio = useUIStore((s) => s.setViewportRatio);
   const undo = useHistoryStore((s) => s.undo);
   const redo = useHistoryStore((s) => s.redo);
   const canUndo = useHistoryStore((s) => s.canUndo);
   const canRedo = useHistoryStore((s) => s.canRedo);
+
+  const ratioOptions: AspectRatio[] = ["free", "16:9", "9:16", "4:3", "3:4", "1:1"];
+  const ratioLabels: Record<AspectRatio, string> = {
+    free: "Free",
+    "16:9": "16:9",
+    "9:16": "9:16",
+    "4:3": "4:3",
+    "3:4": "3:4",
+    "1:1": "1:1",
+  };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -109,6 +121,48 @@ export default function TopToolbar() {
           >
             TraceRecap
           </Link>
+        </div>
+
+        {/* Center: viewport ratio selector (desktop) */}
+        <div className="hidden md:flex items-center gap-1 rounded-lg border p-0.5 bg-muted/50">
+          {ratioOptions.map((ratio) => (
+            <button
+              key={ratio}
+              className={`px-2 py-1 text-xs rounded-md font-medium transition-colors ${
+                viewportRatio === ratio
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-accent"
+              }`}
+              onClick={() => setViewportRatio(ratio)}
+            >
+              {ratioLabels[ratio]}
+            </button>
+          ))}
+        </div>
+
+        {/* Center: viewport ratio selector (mobile dropdown) */}
+        <div className="md:hidden">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button className="px-2 py-1 text-xs rounded-md font-medium border bg-muted/50">
+                  {ratioLabels[viewportRatio]}
+                </button>
+              }
+            />
+            <DropdownMenuContent align="center" sideOffset={4}>
+              <DropdownMenuRadioGroup
+                value={viewportRatio}
+                onValueChange={(v) => setViewportRatio(v as AspectRatio)}
+              >
+                {ratioOptions.map((ratio) => (
+                  <DropdownMenuRadioItem key={ratio} value={ratio}>
+                    {ratioLabels[ratio]}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Right: undo/redo + more menu */}
