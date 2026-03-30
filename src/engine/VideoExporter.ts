@@ -485,6 +485,7 @@ export class VideoExporter {
         )
       : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
     const count = loaded.length;
+    const isPolaroid = layout?.template === "polaroid";
 
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
@@ -523,53 +524,122 @@ export class VideoExporter {
         ctx.rotate((rotation * Math.PI) / 180);
       }
 
-      // Compute contain dimensions (fit entire image, no crop)
-      const imgAspect = preloaded.aspect;
-      const targetAspect = frameW / frameH;
-      let drawW: number, drawH: number, drawX: number, drawY: number;
-      if (imgAspect > targetAspect) {
-        drawW = frameW;
-        drawH = frameW / imgAspect;
-        drawX = -frameW / 2;
-        drawY = -drawH / 2;
+      if (isPolaroid) {
+        // Polaroid: white card with thicker bottom padding and shadow
+        const polPadSide = frameW * 0.04;
+        const polPadBottom = frameH * 0.10;
+        const polPadTop = frameW * 0.04;
+        const polRadius = 4 * scaleX;
+
+        // Drop shadow for the white frame
+        ctx.shadowColor = "rgba(0,0,0,0.25)";
+        ctx.shadowBlur = 16 * scaleX;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4 * scaleX;
+
+        // White frame
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.roundRect(-frameW / 2, -frameH / 2, frameW, frameH, polRadius);
+        ctx.fill();
+
+        // Reset shadow before drawing image
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+
+        // Image area inside the white frame
+        const imgAreaX = -frameW / 2 + polPadSide;
+        const imgAreaY = -frameH / 2 + polPadTop;
+        const imgAreaW = frameW - polPadSide * 2;
+        const imgAreaH = frameH - polPadTop - polPadBottom;
+
+        // Fit image within the area (contain)
+        const imgAspect = preloaded.aspect;
+        const areaAspect = imgAreaW / imgAreaH;
+        let drawW: number, drawH: number, drawX: number, drawY: number;
+        if (imgAspect > areaAspect) {
+          drawW = imgAreaW;
+          drawH = imgAreaW / imgAspect;
+          drawX = imgAreaX;
+          drawY = imgAreaY + (imgAreaH - drawH) / 2;
+        } else {
+          drawH = imgAreaH;
+          drawW = imgAreaH * imgAspect;
+          drawX = imgAreaX + (imgAreaW - drawW) / 2;
+          drawY = imgAreaY;
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(imgAreaX, imgAreaY, imgAreaW, imgAreaH);
+        ctx.clip();
+        ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
+        ctx.restore();
+
+        if (hasCaption) {
+          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = "#374151";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(
+            photo.caption!,
+            0,
+            imgAreaY + imgAreaH + (polPadBottom - polPadTop) / 2,
+            imgAreaW
+          );
+        }
       } else {
-        drawH = frameH;
-        drawW = frameH * imgAspect;
-        drawX = -drawW / 2;
-        drawY = -frameH / 2;
-      }
+        // Default: direct image with rounded corners
+        // Compute contain dimensions (fit entire image, no crop)
+        const imgAspect = preloaded.aspect;
+        const targetAspect = frameW / frameH;
+        let drawW: number, drawH: number, drawX: number, drawY: number;
+        if (imgAspect > targetAspect) {
+          drawW = frameW;
+          drawH = frameW / imgAspect;
+          drawX = -frameW / 2;
+          drawY = -drawH / 2;
+        } else {
+          drawH = frameH;
+          drawW = frameH * imgAspect;
+          drawX = -drawW / 2;
+          drawY = -frameH / 2;
+        }
 
-      // Drop shadow
-      ctx.shadowColor = "rgba(0,0,0,0.3)";
-      ctx.shadowBlur = 12 * scaleX;
-      ctx.shadowOffsetX = shadowOffX;
-      ctx.shadowOffsetY = shadowOffY;
+        // Drop shadow
+        ctx.shadowColor = "rgba(0,0,0,0.3)";
+        ctx.shadowBlur = 12 * scaleX;
+        ctx.shadowOffsetX = shadowOffX;
+        ctx.shadowOffsetY = shadowOffY;
 
-      // Clip to rounded rect and draw
-      ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(drawX, drawY, drawW, drawH, radius);
-      ctx.clip();
-      ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
-      ctx.restore();
+        // Clip to rounded rect and draw
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(drawX, drawY, drawW, drawH, radius);
+        ctx.clip();
+        ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
+        ctx.restore();
 
-      // Reset shadow
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
+        // Reset shadow
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
 
-      if (hasCaption) {
-        ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
-        ctx.fillStyle = "#374151";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(
-          photo.caption!,
-          0,
-          drawY + drawH + captionH / 2,
-          drawW
-        );
+        if (hasCaption) {
+          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = "#374151";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(
+            photo.caption!,
+            0,
+            drawY + drawH + captionH / 2,
+            drawW
+          );
+        }
       }
 
       ctx.restore();
