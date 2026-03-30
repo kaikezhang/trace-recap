@@ -132,16 +132,39 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const gapValue = layout.gap ?? 8;
   const photoOrder = layout.order ?? location.photos.map((p) => p.id);
 
-  // Capture map snapshot once when editor opens
+  // Capture map snapshot once when editor opens (wait for full render)
   const [mapSnapshot, setMapSnapshot] = useState<string | null>(null);
 
   useEffect(() => {
     if (!map) return;
-    try {
-      setMapSnapshot(map.getCanvas().toDataURL("image/jpeg", 0.8));
-    } catch {
-      // Canvas tainted or not ready — fall back to dark background
+    let cancelled = false;
+
+    const capture = () => {
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        try {
+          setMapSnapshot(map.getCanvas().toDataURL("image/jpeg", 0.8));
+        } catch {
+          // Canvas tainted or not ready — fall back to dark background
+        }
+      });
+    };
+
+    if (map.loaded()) {
+      // Map tiles loaded; wait for one more idle to ensure render is flushed
+      map.once("idle", capture);
+    } else {
+      // Map hasn't finished loading yet
+      map.once("load", () => {
+        if (cancelled) return;
+        map.once("idle", capture);
+      });
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [map]);
 
   // Measure whichever preview panel is visible (mobile or desktop)
@@ -150,16 +173,25 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
+    // Only observe the container that matches the current viewport
+    const isDesktop = window.matchMedia("(min-width: 768px)").matches;
+    const target = isDesktop ? desktopPreviewRef.current : mobilePreviewRef.current;
+    if (!target) return;
+
     const obs = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setPanelSize({ width, height });
+        const nextWidth = Math.round(entry.contentRect.width);
+        const nextHeight = Math.round(entry.contentRect.height);
+        if (nextWidth > 0 && nextHeight > 0) {
+          setPanelSize((current) =>
+            current && current.width === nextWidth && current.height === nextHeight
+              ? current
+              : { width: nextWidth, height: nextHeight },
+          );
         }
       }
     });
-    if (mobilePreviewRef.current) obs.observe(mobilePreviewRef.current);
-    if (desktopPreviewRef.current) obs.observe(desktopPreviewRef.current);
+    obs.observe(target);
     return () => obs.disconnect();
   }, []);
 
