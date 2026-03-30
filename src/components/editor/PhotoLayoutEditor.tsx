@@ -35,9 +35,10 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { PHOTO_ANIMATION_LABELS } from "@/lib/photoAnimation";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
-import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo } from "@/types";
+import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation } from "@/types";
 
 interface PhotoLayoutEditorProps {
   location: Location;
@@ -46,6 +47,7 @@ interface PhotoLayoutEditorProps {
 
 type LayoutStyle = "grid" | "collage" | "single" | "carousel" | "polaroid" | "overlap" | "full";
 type SortablePhotoListOrientation = "horizontal" | "vertical";
+type PhotoAnimationOption = PhotoAnimation | "default";
 
 const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; template: LayoutTemplateType | "auto" }[] = [
   { id: "grid", label: "Grid", icon: LayoutGrid, template: "grid" },
@@ -55,6 +57,16 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "polaroid", label: "Polaroid", icon: Square, template: "polaroid" },
   { id: "overlap", label: "Overlap", icon: Layers, template: "overlap" },
   { id: "full", label: "Full", icon: Maximize, template: "full" },
+];
+
+const PHOTO_ANIMATION_OPTIONS: PhotoAnimation[] = [
+  "scale",
+  "fade",
+  "slide",
+  "flip",
+  "scatter",
+  "typewriter",
+  "none",
 ];
 
 function getOrderedPhotos(photos: Photo[], order: string[]): Photo[] {
@@ -193,6 +205,7 @@ function PreviewWithMapBackground({
 
 export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEditorProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
+  const defaultPhotoAnimation = useUIStore((s) => s.photoAnimation);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
   const { map } = useMap();
   const layout = location.photoLayout ?? { mode: "auto" as const };
@@ -342,6 +355,21 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     if (activeTemplate === "full") return "full";
     return "single";
   })();
+  const selectedAnimation: PhotoAnimationOption =
+    layout.enterAnimation ?? layout.exitAnimation ?? "default";
+  const animationOptions = useMemo(
+    () => [
+      {
+        value: "default" as const,
+        label: `Default (${PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]})`,
+      },
+      ...PHOTO_ANIMATION_OPTIONS.map((value) => ({
+        value,
+        label: PHOTO_ANIMATION_LABELS[value],
+      })),
+    ],
+    [defaultPhotoAnimation]
+  );
 
   const updateLayout = useCallback(
     (updates: Partial<PhotoLayout>) => {
@@ -360,6 +388,17 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       } else {
         updateLayout({ mode: "manual", template: config.template, customProportions: undefined });
       }
+    },
+    [updateLayout]
+  );
+
+  const handleAnimationSelect = useCallback(
+    (animation: PhotoAnimationOption) => {
+      if (animation === "default") {
+        updateLayout({ enterAnimation: undefined, exitAnimation: undefined });
+        return;
+      }
+      updateLayout({ enterAnimation: animation, exitAnimation: animation });
     },
     [updateLayout]
   );
@@ -465,6 +504,28 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
               ))}
             </div>
 
+            <div className="border-t border-gray-100 px-4 py-3">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+                Photo Animation
+              </p>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {animationOptions.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => handleAnimationSelect(value)}
+                    className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${
+                      selectedAnimation === value
+                        ? "bg-indigo-500 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Photo thumbnails — horizontal scroll */}
             <div className="px-4 pb-3 overflow-x-auto">
               <DndContext
@@ -559,6 +620,28 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   {label}
                 </button>
               ))}
+
+              <div className="pt-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-gray-400">
+                  Animation
+                </p>
+                <div className="space-y-2">
+                  {animationOptions.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => handleAnimationSelect(value)}
+                      className={`w-full rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors ${
+                        selectedAnimation === value
+                          ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                          : "border-transparent text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* CENTER — Live preview with map background */}

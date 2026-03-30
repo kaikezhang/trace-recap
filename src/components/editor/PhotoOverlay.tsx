@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, type Transition, type TargetAndTransition } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
+import { resolvePhotoAnimations } from "@/lib/photoAnimation";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout, PhotoAnimation } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -206,6 +207,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
   const displayMetas = visible && hasPhotos ? metas : lastVisibleRef.current.metas;
   const displayLayout = visible && hasPhotos ? photoLayout : lastVisibleRef.current.layout;
   const hasDisplayPhotos = displayMetas.length > 0;
+  const { enterAnimation, exitAnimation } = resolvePhotoAnimations(displayLayout, photoAnimation);
   // When a fixed ratio is set, the parent map container already has that aspect ratio,
   // so we use percentage-based sizing to stay within bounds. For "free", keep vw/vh.
   const containerStyle = useMemo(() => {
@@ -313,8 +315,8 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
             const staggerOffset = n > 1 ? (n - 1 - i) / (n - 1) * 0.4 : 0;
             const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
 
-            const enter = getEnterAnimation(photoAnimation, i, n);
-            const exit = getExitValues(photoAnimation, exitProgress, photoExitT, i);
+            const enter = getEnterAnimation(enterAnimation, i, n);
+            const exit = getExitValues(exitAnimation, exitProgress, photoExitT, i);
 
             const enterRotate = typeof (enter.animate as { rotate?: number }).rotate === "number"
               ? (enter.animate as { rotate?: number }).rotate! + rotation

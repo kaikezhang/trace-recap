@@ -90,6 +90,8 @@ export interface PhotoLayout {
   order?: string[];        // photo IDs in custom order
   gap?: number;            // gap in px (0-20), default 8
   borderRadius?: number;   // border radius in px (0-20), default 8
+  enterAnimation?: PhotoAnimation; // per-location enter animation, falls back to global default
+  exitAnimation?: PhotoAnimation; // per-location exit animation, falls back to global default
   customProportions?: {
     rows?: number[];       // relative row heights (e.g. [2, 1] = first row 2x the second)
     cols?: number[];       // relative column widths

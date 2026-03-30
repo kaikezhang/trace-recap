@@ -9,6 +9,7 @@ import {
   SEGMENT_GLOW_LAYER_PREFIX,
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
+import { resolvePhotoAnimations } from "@/lib/photoAnimation";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import { getExportViewportSize } from "@/lib/viewportRatio";
 import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
@@ -637,7 +638,10 @@ export class VideoExporter {
     const isPolaroid = layout?.template === "polaroid";
 
     // --- Photo animation timing ---
-    const animStyle = this.settings.photoAnimation ?? "scale";
+    const {
+      enterAnimation: enterAnimStyle,
+      exitAnimation: exitAnimStyle,
+    } = resolvePhotoAnimations(layout, this.settings.photoAnimation ?? "scale");
     const groupIdx = progress.groupIndex;
 
     // Track when photos first appeared for this group
@@ -687,19 +691,19 @@ export class VideoExporter {
       // --- Compute animation transform for this photo ---
       let animTransform: { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number };
 
-      if (animStyle !== "none" && exitProgress > 0) {
-        // Exit animation
+      if (exitProgress > 0) {
+        // Exit animations always run during fade-out; "none" maps to opacity-only parity with PhotoOverlay.
         const staggerOffset = count > 1 ? (count - 1 - i) / (count - 1) * 0.4 : 0;
         const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
-        animTransform = this.getExitTransform(animStyle, exitProgress, photoExitT, i, count);
-      } else if (animStyle !== "none") {
+        animTransform = this.getExitTransform(exitAnimStyle, exitProgress, photoExitT, i, count);
+      } else if (enterAnimStyle !== "none") {
         // Enter animation with per-photo stagger
-        const staggerDelaySec = animStyle === "typewriter" ? i * 0.2 : i * 0.08;
+        const staggerDelaySec = enterAnimStyle === "typewriter" ? i * 0.2 : i * 0.08;
         const staggerDelayFrames = staggerDelaySec * fps;
         const elapsed = frameIndex - enterStartFrame - staggerDelayFrames;
         const rawProgress = Math.max(0, Math.min(1, elapsed / enterDurationFrames));
         const easedProgress = this.easeOut(rawProgress);
-        animTransform = this.getEnterTransform(animStyle, easedProgress, i, count);
+        animTransform = this.getEnterTransform(enterAnimStyle, easedProgress, i, count);
       } else {
         animTransform = { opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
       }
