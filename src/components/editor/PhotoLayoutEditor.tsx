@@ -191,8 +191,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       });
     };
 
-    if (map.isStyleLoaded() && map.loaded() && map.idle()) {
-      // Map is already fully rendered and idle — capture immediately
+    if (map.isStyleLoaded() && map.loaded()) {
+      // Map is already fully rendered — capture immediately
       capture();
     } else {
       // Map is still loading or rendering — capture once it settles
