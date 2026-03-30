@@ -7,8 +7,19 @@ import type {
   PhotoLayout,
   TransportMode,
   MapStyle,
+  ProjectMeta,
 } from "@/types";
 import { useHistoryStore } from "./historyStore";
+import {
+  saveProject,
+  getProjectData,
+  listProjects as listProjectsFromDB,
+  deleteProject as deleteProjectFromDB,
+  renameProject as renameProjectInDB,
+  duplicateProject as duplicateProjectInDB,
+  migrateFromLocalStorage,
+  putProjectMeta,
+} from "@/lib/storage";
 
 export interface ImportRouteData {
   name: string;
@@ -37,15 +48,21 @@ type PersistedProjectData = ImportRouteData;
 
 const DEFAULT_ROUTE_NAME = "My Trip";
 const DEFAULT_MAP_STYLE: MapStyle = "light";
-const PROJECT_STORAGE_KEY = "trace-recap-project";
 const PROJECT_SAVE_DEBOUNCE_MS = 500;
 
 interface ProjectState {
+  // Multi-project state
+  currentProjectId: string | null;
+  currentProjectName: string;
+  projects: ProjectMeta[];
+
+  // Current project data
   locations: Location[];
   segments: Segment[];
   mapStyle: MapStyle;
   segmentTimingOverrides: Record<string, number>;
 
+  // Location CRUD
   addLocation: (
     location: Omit<Location, "id" | "photos" | "isWaypoint">,
   ) => void;
@@ -57,12 +74,13 @@ interface ProjectState {
   ) => void;
   toggleWaypoint: (locationId: string) => void;
 
+  // Segment operations
   setTransportMode: (segmentId: string, mode: TransportMode) => void;
   setSegmentGeometry: (segmentId: string, geometry: GeoJSON.LineString) => void;
-
   setSegmentTiming: (segmentId: string, duration: number | null) => void;
   clearAllTimingOverrides: () => void;
 
+  // Photo operations
   addPhoto: (
     locationId: string,
     photo: Omit<Photo, "id" | "locationId">,
@@ -75,6 +93,7 @@ interface ProjectState {
     point: { x: number; y: number },
   ) => void;
 
+  // Project operations
   setMapStyle: (style: MapStyle) => void;
   clearRoute: () => void;
   importRoute: (data: ImportRouteData) => void;
@@ -83,6 +102,16 @@ interface ProjectState {
   restorePersistedProject: () => Promise<void>;
   enrichChineseNames: () => Promise<void>;
   exportRoute: () => Promise<ImportRouteData>;
+
+  // Multi-project operations
+  createNewProject: (name?: string) => Promise<string>;
+  switchProject: (projectId: string) => Promise<void>;
+  deleteCurrentProject: () => Promise<void>;
+  deleteProjectById: (projectId: string) => Promise<void>;
+  renameCurrentProject: (name: string) => Promise<void>;
+  renameProjectById: (projectId: string, name: string) => Promise<void>;
+  duplicateProjectById: (projectId: string) => Promise<ProjectMeta | null>;
+  refreshProjectList: () => Promise<void>;
 }
 
 let nextId = 1;
@@ -102,6 +131,7 @@ function serializeProjectState(
   segments: Segment[],
   mapStyle: MapStyle,
   segmentTimingOverrides: Record<string, number>,
+  name?: string,
 ): PersistedProjectData {
   const exportedLocations = locations.map((loc) => ({
     name: loc.name,
@@ -135,7 +165,7 @@ function serializeProjectState(
   }));
 
   return {
-    name: DEFAULT_ROUTE_NAME,
+    name: name ?? DEFAULT_ROUTE_NAME,
     mapStyle,
     locations: exportedLocations,
     segments: segments.map((segment) => ({
@@ -202,7 +232,31 @@ function rebuildSegments(
   return segments;
 }
 
+function buildProjectMeta(
+  id: string,
+  name: string,
+  locations: Location[],
+  existingMeta?: ProjectMeta,
+): ProjectMeta {
+  const now = Date.now();
+  return {
+    id,
+    name,
+    createdAt: existingMeta?.createdAt ?? now,
+    updatedAt: now,
+    locationCount: locations.length,
+    previewLocations: locations
+      .filter((l) => !l.isWaypoint)
+      .slice(0, 3)
+      .map((l) => l.name),
+  };
+}
+
 export const useProjectStore = create<ProjectState>((set, get) => ({
+  currentProjectId: null,
+  currentProjectName: DEFAULT_ROUTE_NAME,
+  projects: [],
+
   locations: [],
   segments: [],
   mapStyle: DEFAULT_MAP_STYLE,
@@ -367,8 +421,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         persistTimeout = null;
       }
       skipNextPersist = true;
-      window.localStorage.removeItem(PROJECT_STORAGE_KEY);
-      lastSavedProjectJson = "";
     }
 
     set({
@@ -380,7 +432,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   exportRoute: async () => {
-    const { locations, segments, mapStyle, segmentTimingOverrides } = get();
+    const { locations, segments, mapStyle, segmentTimingOverrides, currentProjectName } = get();
 
     // Convert blob URLs to base64 data URLs for persistence
     const toDataURL = async (url: string): Promise<string> => {
@@ -432,7 +484,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     );
 
     return {
-      name: DEFAULT_ROUTE_NAME,
+      name: currentProjectName,
       mapStyle,
       locations: exportedLocations,
       segments: segments.map((seg) => ({
@@ -566,16 +618,32 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   restorePersistedProject: async () => {
     if (!isBrowser()) return;
 
-    const savedProject = window.localStorage.getItem(PROJECT_STORAGE_KEY);
-    if (!savedProject) return;
+    // Migrate legacy localStorage data to IndexedDB
+    const migratedId = await migrateFromLocalStorage();
 
-    try {
-      const data = JSON.parse(savedProject) as PersistedProjectData;
-      await get().loadRouteData(data);
-    } catch {
-      window.localStorage.removeItem(PROJECT_STORAGE_KEY);
-      lastSavedProjectJson = "";
+    // Load project list
+    const projects = await listProjectsFromDB();
+    set({ projects });
+
+    // Determine which project to load
+    let targetId = migratedId ?? projects[0]?.id ?? null;
+
+    // Fresh start — create a default project
+    if (!targetId) {
+      targetId = await get().createNewProject();
+      return;
     }
+
+    const data = await getProjectData(targetId);
+    if (!data) return;
+
+    const meta = projects.find((p) => p.id === targetId);
+    set({
+      currentProjectId: targetId,
+      currentProjectName: meta?.name ?? data.name ?? DEFAULT_ROUTE_NAME,
+    });
+
+    await get().loadRouteData(data);
   },
 
   enrichChineseNames: async () => {
@@ -610,7 +678,207 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }),
     }));
   },
+
+  // -------------------------------------------------------------------------
+  // Multi-project operations
+  // -------------------------------------------------------------------------
+
+  createNewProject: async (name) => {
+    // Save current project first
+    const state = get();
+    if (state.currentProjectId) {
+      await persistCurrentProject(state);
+    }
+
+    const id = crypto.randomUUID();
+    const projectName = name ?? DEFAULT_ROUTE_NAME;
+    const now = Date.now();
+    const meta: ProjectMeta = {
+      id,
+      name: projectName,
+      createdAt: now,
+      updatedAt: now,
+      locationCount: 0,
+      previewLocations: [],
+    };
+
+    const data: ImportRouteData = {
+      name: projectName,
+      locations: [],
+      segments: [],
+      mapStyle: DEFAULT_MAP_STYLE,
+    };
+
+    await saveProject(meta, data);
+
+    // Clear current state and switch to new project
+    skipNextPersist = true;
+    set({
+      currentProjectId: id,
+      currentProjectName: projectName,
+      locations: [],
+      segments: [],
+      mapStyle: DEFAULT_MAP_STYLE,
+      segmentTimingOverrides: {},
+    });
+    lastSavedProjectJson = "";
+
+    // Refresh project list
+    const projects = await listProjectsFromDB();
+    set({ projects });
+
+    return id;
+  },
+
+  switchProject: async (projectId) => {
+    const state = get();
+    if (state.currentProjectId === projectId) return;
+
+    // Save current project first
+    if (state.currentProjectId) {
+      await persistCurrentProject(state);
+    }
+
+    // Load the target project
+    const data = await getProjectData(projectId);
+    if (!data) return;
+
+    const projects = await listProjectsFromDB();
+    const meta = projects.find((p) => p.id === projectId);
+
+    skipNextPersist = true;
+    set({
+      currentProjectId: projectId,
+      currentProjectName: meta?.name ?? data.name ?? DEFAULT_ROUTE_NAME,
+      locations: [],
+      segments: [],
+      mapStyle: DEFAULT_MAP_STYLE,
+      segmentTimingOverrides: {},
+      projects,
+    });
+    lastSavedProjectJson = "";
+
+    useHistoryStore.getState().pushState();
+    await get().loadRouteData(data);
+  },
+
+  deleteCurrentProject: async () => {
+    const { currentProjectId } = get();
+    if (!currentProjectId) return;
+
+    await deleteProjectFromDB(currentProjectId);
+    const projects = await listProjectsFromDB();
+
+    if (projects.length > 0) {
+      // Switch to the most recent project
+      const nextProject = projects[0];
+      const data = await getProjectData(nextProject.id);
+
+      skipNextPersist = true;
+      set({
+        currentProjectId: nextProject.id,
+        currentProjectName: nextProject.name,
+        locations: [],
+        segments: [],
+        mapStyle: DEFAULT_MAP_STYLE,
+        segmentTimingOverrides: {},
+        projects,
+      });
+      lastSavedProjectJson = "";
+
+      if (data) {
+        await get().loadRouteData(data);
+      }
+    } else {
+      // No projects left — create a fresh one
+      skipNextPersist = true;
+      set({
+        currentProjectId: null,
+        currentProjectName: DEFAULT_ROUTE_NAME,
+        locations: [],
+        segments: [],
+        mapStyle: DEFAULT_MAP_STYLE,
+        segmentTimingOverrides: {},
+        projects: [],
+      });
+      lastSavedProjectJson = "";
+      await get().createNewProject();
+    }
+  },
+
+  deleteProjectById: async (projectId) => {
+    const { currentProjectId } = get();
+
+    if (projectId === currentProjectId) {
+      await get().deleteCurrentProject();
+      return;
+    }
+
+    await deleteProjectFromDB(projectId);
+    const projects = await listProjectsFromDB();
+    set({ projects });
+  },
+
+  renameCurrentProject: async (name) => {
+    const { currentProjectId } = get();
+    if (!currentProjectId) return;
+
+    await renameProjectInDB(currentProjectId, name);
+    set({ currentProjectName: name });
+
+    const projects = await listProjectsFromDB();
+    set({ projects });
+  },
+
+  renameProjectById: async (projectId, name) => {
+    await renameProjectInDB(projectId, name);
+
+    const { currentProjectId } = get();
+    if (projectId === currentProjectId) {
+      set({ currentProjectName: name });
+    }
+
+    const projects = await listProjectsFromDB();
+    set({ projects });
+  },
+
+  duplicateProjectById: async (projectId) => {
+    const newId = crypto.randomUUID();
+    const projects = get().projects;
+    const source = projects.find((p) => p.id === projectId);
+    const newName = source ? `${source.name} (copy)` : "Copy";
+
+    const newMeta = await duplicateProjectInDB(projectId, newId, newName);
+    if (!newMeta) return null;
+
+    const refreshed = await listProjectsFromDB();
+    set({ projects: refreshed });
+    return newMeta;
+  },
+
+  refreshProjectList: async () => {
+    const projects = await listProjectsFromDB();
+    set({ projects });
+  },
 }));
+
+// ---------------------------------------------------------------------------
+// Helper: persist current in-memory project to IndexedDB
+// ---------------------------------------------------------------------------
+
+async function persistCurrentProject(state: ProjectState): Promise<void> {
+  const { currentProjectId, currentProjectName, locations, segments, mapStyle, segmentTimingOverrides } = state;
+  if (!currentProjectId) return;
+
+  const data = serializeProjectState(locations, segments, mapStyle, segmentTimingOverrides, currentProjectName);
+  const meta = buildProjectMeta(currentProjectId, currentProjectName, locations);
+
+  await saveProject(meta, data);
+}
+
+// ---------------------------------------------------------------------------
+// Persistence initializer — subscribes to store changes and auto-saves
+// ---------------------------------------------------------------------------
 
 interface ProjectPersistenceOptions {
   skipRestore?: boolean;
@@ -622,7 +890,6 @@ export function initializeProjectPersistence(
   if (!isBrowser() || persistenceInitialized) return;
 
   persistenceInitialized = true;
-  lastSavedProjectJson = window.localStorage.getItem(PROJECT_STORAGE_KEY) ?? "";
 
   useProjectStore.subscribe((state) => {
     if (skipNextPersist) {
@@ -630,17 +897,23 @@ export function initializeProjectPersistence(
       return;
     }
 
+    if (!state.currentProjectId) return;
+
     if (persistTimeout) {
       clearTimeout(persistTimeout);
     }
 
     persistTimeout = setTimeout(() => {
+      const projectId = state.currentProjectId;
+      if (!projectId) return;
+
       const nextProjectJson = JSON.stringify(
         serializeProjectState(
           state.locations,
           state.segments,
           state.mapStyle,
           state.segmentTimingOverrides,
+          state.currentProjectName,
         ),
       );
 
@@ -648,28 +921,30 @@ export function initializeProjectPersistence(
         return;
       }
 
-      try {
-        window.localStorage.setItem(PROJECT_STORAGE_KEY, nextProjectJson);
+      const data = serializeProjectState(
+        state.locations,
+        state.segments,
+        state.mapStyle,
+        state.segmentTimingOverrides,
+        state.currentProjectName,
+      );
+
+      const meta = buildProjectMeta(
+        projectId,
+        state.currentProjectName,
+        state.locations,
+      );
+
+      void saveProject(meta, data).then(() => {
         lastSavedProjectJson = nextProjectJson;
-      } catch (e) {
-        // QuotaExceededError — localStorage is full (likely due to base64 photo data)
-        // Try saving without photo data as fallback
-        try {
-          const stripped = JSON.stringify(
-            serializeProjectState(
-              state.locations.map((loc) => ({ ...loc, photos: [] })),
-              state.segments,
-              state.mapStyle,
-              state.segmentTimingOverrides,
-            ),
-          );
-          window.localStorage.setItem(PROJECT_STORAGE_KEY, stripped);
-          lastSavedProjectJson = stripped;
-          console.warn("Project saved without photos (localStorage quota exceeded)");
-        } catch {
-          console.error("Failed to save project to localStorage", e);
-        }
-      }
+        // Refresh the project list metadata in the store
+        void listProjectsFromDB().then((projects) => {
+          // Only update if we still have same projectId to avoid races
+          if (useProjectStore.getState().currentProjectId === projectId) {
+            useProjectStore.setState({ projects });
+          }
+        });
+      });
     }, PROJECT_SAVE_DEBOUNCE_MS);
   });
 

@@ -7,6 +7,7 @@ interface UIState {
   leftPanelOpen: boolean;
   exportDialogOpen: boolean;
   aiPanelOpen: boolean;
+  projectListOpen: boolean;
   searchQuery: string;
   bottomSheetState: BottomSheetState;
   cityLabelSize: number; // CSS font size in px (default 18)
@@ -20,6 +21,7 @@ interface UIState {
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
   setAIPanelOpen: (open: boolean) => void;
+  setProjectListOpen: (open: boolean) => void;
   setSearchQuery: (query: string) => void;
   setBottomSheetState: (state: BottomSheetState) => void;
   setCityLabelSize: (size: number) => void;
@@ -35,6 +37,7 @@ export const useUIStore = create<UIState>((set) => ({
   leftPanelOpen: true,
   exportDialogOpen: false,
   aiPanelOpen: false,
+  projectListOpen: false,
   searchQuery: "",
   bottomSheetState: "collapsed",
   cityLabelSize: 18,
@@ -48,6 +51,7 @@ export const useUIStore = create<UIState>((set) => ({
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
   setAIPanelOpen: (aiPanelOpen) => set({ aiPanelOpen }),
+  setProjectListOpen: (projectListOpen) => set({ projectListOpen }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setBottomSheetState: (bottomSheetState) => set({ bottomSheetState }),
   setCityLabelSize: (cityLabelSize) => set({ cityLabelSize }),

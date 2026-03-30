@@ -114,6 +114,16 @@ export type PhotoAnimation = "scale" | "fade" | "slide" | "flip" | "scatter" | "
 
 export type MapStyle = "light" | "dark" | "satellite";
 
+export interface ProjectMeta {
+  id: string;
+  name: string;
+  createdAt: number; // epoch ms
+  updatedAt: number; // epoch ms
+  locationCount: number;
+  /** First location name, used as subtitle in project list */
+  previewLocations: string[];
+}
+
 export interface Project {
   locations: Location[];
   segments: Segment[];
