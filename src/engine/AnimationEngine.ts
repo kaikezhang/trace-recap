@@ -269,8 +269,8 @@ export class AnimationEngine {
         const effectiveVariable = Math.max(variableForGroup, 1.5);
         zoomOutDur = effectiveVariable * 0.2;
         // Ensure zoom-in has minimum 1.2s for tile loading (prevents black screen on long flights)
-        const minZoomIn = 1.2;
-        const rawZoomIn = effectiveVariable * 0.15;
+        const minZoomIn = 2.5;
+        const rawZoomIn = effectiveVariable * 0.2;
         zoomInDur = Math.max(rawZoomIn, minZoomIn);
         flyDur = effectiveVariable - zoomOutDur - zoomInDur;
         if (flyDur < 0.5) {
