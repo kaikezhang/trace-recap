@@ -268,8 +268,15 @@ export class AnimationEngine {
         // Minimum 1.5s for variable portion so short legs aren't invisible
         const effectiveVariable = Math.max(variableForGroup, 1.5);
         zoomOutDur = effectiveVariable * 0.2;
-        flyDur = effectiveVariable * 0.65;  // longer fly, zoom happens during fly
-        zoomInDur = effectiveVariable * 0.15; // shorter, just final settle
+        // Ensure zoom-in has minimum 1.2s for tile loading (prevents black screen on long flights)
+        const minZoomIn = 1.2;
+        const rawZoomIn = effectiveVariable * 0.15;
+        zoomInDur = Math.max(rawZoomIn, minZoomIn);
+        flyDur = effectiveVariable - zoomOutDur - zoomInDur;
+        if (flyDur < 0.5) {
+          flyDur = 0.5;
+          zoomInDur = effectiveVariable - zoomOutDur - flyDur;
+        }
       }
 
       const phases: SegmentTiming["phases"] = [
