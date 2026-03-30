@@ -8,13 +8,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useProjectStore } from "@/stores/projectStore";
+import { MAP_STYLE_CONFIGS } from "@/lib/constants";
 import type { MapStyle } from "@/types";
-
-const STYLES: { value: MapStyle; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "satellite", label: "Satellite" },
-];
 
 export default function MapStyleSelector() {
   const mapStyle = useProjectStore((s) => s.mapStyle);
@@ -26,9 +21,9 @@ export default function MapStyleSelector() {
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {STYLES.map((s) => (
-          <SelectItem key={s.value} value={s.value}>
-            {s.label}
+        {MAP_STYLE_CONFIGS.map((cfg) => (
+          <SelectItem key={cfg.id} value={cfg.id}>
+            {cfg.label}
           </SelectItem>
         ))}
       </SelectContent>
