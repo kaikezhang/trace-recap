@@ -3,9 +3,13 @@ import * as turf from "@turf/turf";
 import lottie from "lottie-web";
 import type { AnimationItem } from "lottie-web";
 import {
+  bearingToDirection,
   getTransportIconAssetKey,
   getTransportIconAssetPath,
+  getTransportIconPngPath,
+  isSolidStyle,
 } from "@/lib/transportIcons";
+import type { IconDirection } from "@/lib/transportIcons";
 import type {
   AnimationGroup,
   AnimationPhase,
@@ -22,13 +26,15 @@ const LOTTIE_FACING_OFFSET = 90;
 export interface IconState {
   visible: boolean;
   position: [number, number] | null;
-  /** Current transport mode (used by VideoExporter to identify the active Lottie) */
+  /** Current transport mode (used by VideoExporter to identify the active icon) */
   mode: TransportMode | null;
   iconStyle: TransportIconStyle | null;
   size: number;
   opacity: number;
-  /** Current bearing in degrees (0 = north). Used for rotation during canvas compositing. */
+  /** Current bearing in degrees (0 = north). Used for Lottie rotation during canvas compositing. */
   bearing: number;
+  /** For solid style: the current PNG icon path (used by VideoExporter for canvas compositing) */
+  pngSrc: string | null;
 }
 
 export class IconAnimator {
@@ -36,8 +42,13 @@ export class IconAnimator {
   private groups: AnimationGroup[];
   private marker: mapboxgl.Marker | null = null;
   private containerEl: HTMLDivElement;
-  private lottieEl: HTMLDivElement;
 
+  // --- Solid (PNG) elements ---
+  private imgEl: HTMLImageElement;
+  private currentPngKey: string = "";
+
+  // --- Lottie elements ---
+  private lottieEl: HTMLDivElement;
   private currentMode: TransportMode | null = null;
   private currentIconStyle: TransportIconStyle | null = null;
   private currentBearing: number = 0;
@@ -49,6 +60,12 @@ export class IconAnimator {
   private canvasEl: HTMLCanvasElement | null = null;
   private canvasInstances: Map<string, AnimationItem> = new Map();
 
+  /** Cached PNG images for video export compositing (solid style) */
+  private pngImages: Map<string, HTMLImageElement> = new Map();
+
+  /** Whether the current rendering uses solid (PNG) or Lottie */
+  private usingSolid: boolean = false;
+
   private lastState: IconState = {
     visible: false,
     position: null,
@@ -57,6 +74,7 @@ export class IconAnimator {
     size: BASE_SIZE,
     opacity: 1,
     bearing: 0,
+    pngSrc: null,
   };
 
   constructor(map: mapboxgl.Map, groups: AnimationGroup[]) {
@@ -72,11 +90,22 @@ export class IconAnimator {
       display:flex;align-items:center;justify-content:center;
     `;
 
-    // Inner element that holds the Lottie SVG and gets rotated for direction
+    // PNG image element (solid style — directional variants, no rotation)
+    this.imgEl = document.createElement("img");
+    this.imgEl.style.cssText = `
+      width:100%;height:100%;
+      object-fit:contain;
+      filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+      display:none;
+    `;
+    this.containerEl.appendChild(this.imgEl);
+
+    // Lottie container element (outline/soft styles — rotated via CSS)
     this.lottieEl = document.createElement("div");
     this.lottieEl.style.cssText = `
       width:100%;height:100%;
       filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+      display:none;
     `;
     this.containerEl.appendChild(this.lottieEl);
   }
@@ -91,6 +120,36 @@ export class IconAnimator {
       })
         .setLngLat([0, 0])
         .addTo(this.map);
+    }
+  }
+
+  // ── Solid (PNG) icon management ──
+
+  private setSolidIcon(mode: TransportMode, direction: IconDirection) {
+    const key = `${mode}-${direction}`;
+    if (key === this.currentPngKey && this.usingSolid) return;
+
+    // Switch visibility: show PNG, hide Lottie
+    if (!this.usingSolid) {
+      this.hideLottie();
+      this.imgEl.style.display = "block";
+      this.lottieEl.style.display = "none";
+      this.usingSolid = true;
+    }
+
+    this.currentPngKey = key;
+    this.currentMode = null;
+    this.currentIconStyle = null;
+    this.imgEl.src = getTransportIconPngPath(mode, direction);
+  }
+
+  // ── Lottie icon management ──
+
+  private hideLottie() {
+    if (this.activeInstance) {
+      this.activeInstance.stop();
+      const wrapper = (this.activeInstance as AnimationItem & { wrapper?: HTMLElement }).wrapper;
+      if (wrapper) wrapper.style.display = "none";
     }
   }
 
@@ -115,16 +174,19 @@ export class IconAnimator {
     return instance;
   }
 
-  /** Switch to a different transport mode's Lottie animation */
-  private setMode(mode: TransportMode, iconStyle: TransportIconStyle) {
+  /** Switch to a Lottie animation (outline/soft styles) */
+  private setLottieMode(mode: TransportMode, iconStyle: TransportIconStyle) {
+    // Switch visibility: hide PNG, show Lottie
+    if (this.usingSolid) {
+      this.imgEl.style.display = "none";
+      this.lottieEl.style.display = "block";
+      this.usingSolid = false;
+    }
+
     if (mode === this.currentMode && iconStyle === this.currentIconStyle) return;
 
     // Hide current animation's SVG
-    if (this.activeInstance) {
-      this.activeInstance.stop();
-      const wrapper = (this.activeInstance as AnimationItem & { wrapper?: HTMLElement }).wrapper;
-      if (wrapper) wrapper.style.display = "none";
-    }
+    this.hideLottie();
 
     this.currentMode = mode;
     this.currentIconStyle = iconStyle;
@@ -135,11 +197,12 @@ export class IconAnimator {
   }
 
   /** Rotate the Lottie element to match the travel bearing */
-  private setDirection(bearing: number) {
+  private setLottieDirection(bearing: number) {
     this.currentBearing = bearing;
-    // Lottie icons face right (90°), so offset by 90 to align with map bearing
     this.lottieEl.style.transform = `rotate(${bearing - LOTTIE_FACING_OFFSET}deg)`;
   }
+
+  // ── Unified update ──
 
   update(groupIndex: number, phase: AnimationPhase, progress: number) {
     const group = this.groups[groupIndex];
@@ -168,7 +231,6 @@ export class IconAnimator {
     );
     const mode = activeSegment.transportMode;
     const iconStyle = activeSegment.iconStyle;
-    this.setMode(mode, iconStyle);
 
     // Compute bearing for direction
     let bearing: number;
@@ -182,7 +244,17 @@ export class IconAnimator {
     } else {
       bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
     }
-    this.setDirection(bearing);
+
+    // Choose rendering path based on icon style
+    let pngSrc: string | null = null;
+    if (isSolidStyle(iconStyle)) {
+      const direction = bearingToDirection(bearing);
+      this.setSolidIcon(mode, direction);
+      pngSrc = getTransportIconPngPath(mode, direction);
+    } else {
+      this.setLottieMode(mode, iconStyle);
+      this.setLottieDirection(bearing);
+    }
 
     let position: [number, number];
     let showIcon = true;
@@ -234,11 +306,12 @@ export class IconAnimator {
     this.lastState = {
       visible: showIcon && opacity > 0,
       position,
-      mode: this.currentMode,
-      iconStyle: this.currentIconStyle,
+      mode,
+      iconStyle,
       size,
       opacity: showIcon ? opacity : 0,
       bearing,
+      pngSrc,
     };
   }
 
@@ -246,9 +319,11 @@ export class IconAnimator {
     return { ...this.lastState };
   }
 
+  // ── Video export: canvas rendering ──
+
   /**
    * Ensure the offscreen canvas Lottie renderer is ready for a given mode.
-   * Used by VideoExporter for frame-accurate canvas compositing.
+   * Used by VideoExporter for frame-accurate canvas compositing (Lottie styles only).
    */
   ensureCanvasRenderer(
     mode: TransportMode,
@@ -266,15 +341,12 @@ export class IconAnimator {
       return Promise.resolve(this.canvasEl);
     }
 
-    // Clear any prior content from the canvas for this new mode load
     const ctx = this.canvasEl.getContext("2d");
     if (ctx) ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
 
     const canvas = this.canvasEl;
 
     return new Promise<HTMLCanvasElement>((resolve) => {
-      // Cast needed: lottie-web types don't expose the canvas `context` option
-      // in their overload signatures, but lottie-web supports it at runtime.
       const instance = lottie.loadAnimation({
         renderer: "canvas",
         loop: true,
@@ -293,8 +365,31 @@ export class IconAnimator {
   }
 
   /**
-   * Draw the current Lottie frame onto an export canvas context.
-   * Called by VideoExporter instead of drawing a static PNG.
+   * Pre-load a PNG icon for video export compositing (solid style).
+   * Returns a promise that resolves when the image is loaded.
+   */
+  ensurePngImage(mode: TransportMode, direction: IconDirection): Promise<void> {
+    const src = getTransportIconPngPath(mode, direction);
+    if (this.pngImages.has(src)) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        this.pngImages.set(src, img);
+        resolve();
+      };
+      img.onerror = () => {
+        // Silently skip — icon won't render during export
+        resolve();
+      };
+      img.src = src;
+    });
+  }
+
+  /**
+   * Draw the current icon frame onto an export canvas context.
+   * For solid style: draws the static PNG (no rotation — directional variants handle it).
+   * For Lottie styles: draws the animated Lottie frame with bearing rotation.
    */
   drawToCanvas(
     ctx: CanvasRenderingContext2D,
@@ -313,24 +408,37 @@ export class IconAnimator {
       return;
     }
 
-    const canvasInstance = this.canvasInstances.get(
-      getTransportIconAssetKey(state.mode, state.iconStyle),
-    );
-    if (!canvasInstance || !this.canvasEl) return;
+    if (isSolidStyle(state.iconStyle)) {
+      // Solid style: draw cached PNG (no rotation — directional variant is correct)
+      if (!state.pngSrc) return;
+      const img = this.pngImages.get(state.pngSrc);
+      if (!img) return;
 
-    // Advance the Lottie frame on the canvas renderer
-    this.lottieFrame = (this.lottieFrame + 1) % Math.max(canvasInstance.totalFrames, 1);
-    canvasInstance.goToAndStop(this.lottieFrame, true);
+      const prev = ctx.globalAlpha;
+      ctx.save();
+      ctx.globalAlpha = state.opacity;
+      ctx.drawImage(img, px - size / 2, py - size / 2, size, size);
+      ctx.restore();
+      ctx.globalAlpha = prev;
+    } else {
+      // Lottie style: draw animated frame with bearing rotation
+      const canvasInstance = this.canvasInstances.get(
+        getTransportIconAssetKey(state.mode, state.iconStyle),
+      );
+      if (!canvasInstance || !this.canvasEl) return;
 
-    const prev = ctx.globalAlpha;
-    ctx.save();
-    ctx.globalAlpha = state.opacity;
-    ctx.translate(px, py);
-    // Rotate to match bearing (Lottie faces right = 90°)
-    ctx.rotate((state.bearing - LOTTIE_FACING_OFFSET) * Math.PI / 180);
-    ctx.drawImage(this.canvasEl, -size / 2, -size / 2, size, size);
-    ctx.restore();
-    ctx.globalAlpha = prev;
+      this.lottieFrame = (this.lottieFrame + 1) % Math.max(canvasInstance.totalFrames, 1);
+      canvasInstance.goToAndStop(this.lottieFrame, true);
+
+      const prev = ctx.globalAlpha;
+      ctx.save();
+      ctx.globalAlpha = state.opacity;
+      ctx.translate(px, py);
+      ctx.rotate((state.bearing - LOTTIE_FACING_OFFSET) * Math.PI / 180);
+      ctx.drawImage(this.canvasEl, -size / 2, -size / 2, size, size);
+      ctx.restore();
+      ctx.globalAlpha = prev;
+    }
   }
 
   private getSegmentAtProgress(
@@ -372,7 +480,7 @@ export class IconAnimator {
   }
 
   destroy() {
-    // Destroy SVG marker instances
+    // Destroy SVG marker Lottie instances
     for (const instance of this.lottieInstances.values()) {
       instance.stop();
       instance.destroy();
@@ -382,13 +490,16 @@ export class IconAnimator {
     this.currentMode = null;
     this.currentIconStyle = null;
 
-    // Destroy canvas renderer instances
+    // Destroy canvas renderer Lottie instances
     for (const instance of this.canvasInstances.values()) {
       instance.stop();
       instance.destroy();
     }
     this.canvasInstances.clear();
     this.canvasEl = null;
+
+    // Clear PNG image cache
+    this.pngImages.clear();
 
     if (this.marker) {
       this.marker.remove();
