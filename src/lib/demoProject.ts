@@ -48,16 +48,19 @@ export const demoProject: ImportRouteData = {
       name: "Chiayi",
       nameZh: "嘉义",
       coordinates: [120.4491, 23.48],
+      isWaypoint: true,
     },
     {
       name: "Taoyuan",
       nameZh: "桃园",
       coordinates: [121.2168, 24.9936],
+      isWaypoint: true,
     },
     {
       name: "Seoul",
       nameZh: "首尔",
       coordinates: [126.978, 37.5665],
+      isWaypoint: true,
     },
     {
       name: "Seattle",
