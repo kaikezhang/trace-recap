@@ -7,6 +7,7 @@ import TopToolbar from "./TopToolbar";
 import LeftPanel from "./LeftPanel";
 import BottomSheet from "./BottomSheet";
 import ExportDialog from "./ExportDialog";
+import ProjectListDialog from "./ProjectListDialog";
 import MapStage from "./MapStage";
 import type { CitySearchHandle } from "./CitySearch";
 import {
@@ -756,6 +757,7 @@ export default function EditorLayout() {
     <MapProvider>
       <EditorContent />
       <ExportDialog />
+      <ProjectListDialog />
     </MapProvider>
   );
 }

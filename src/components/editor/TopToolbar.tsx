@@ -12,8 +12,8 @@ import {
   Undo2,
   Redo2,
   MoreVertical,
-  Map,
   Settings,
+  ChevronDown,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,8 @@ export default function TopToolbar() {
   const setRouteLabelSize = useUIStore((s) => s.setRouteLabelSize);
   const photoAnimation = useUIStore((s) => s.photoAnimation);
   const setPhotoAnimation = useUIStore((s) => s.setPhotoAnimation);
+  const setProjectListOpen = useUIStore((s) => s.setProjectListOpen);
+  const currentProjectName = useProjectStore((s) => s.currentProjectName);
   const undo = useHistoryStore((s) => s.undo);
   const redo = useHistoryStore((s) => s.redo);
   const canUndo = useHistoryStore((s) => s.canUndo);
@@ -134,7 +136,7 @@ export default function TopToolbar() {
   return (
     <>
       <div className="flex h-12 items-center justify-between border-b bg-background px-3 md:px-4">
-        {/* Left: panel toggle + logo */}
+        {/* Left: panel toggle + logo + project name */}
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -155,6 +157,23 @@ export default function TopToolbar() {
           >
             TraceRecap
           </Link>
+          <span className="hidden md:inline text-muted-foreground/40 mx-0.5">/</span>
+          <button
+            className="hidden md:flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors max-w-[180px]"
+            onClick={() => setProjectListOpen(true)}
+            title="Switch project"
+          >
+            <span className="truncate">{currentProjectName}</span>
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+          </button>
+          <button
+            className="md:hidden flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+            onClick={() => setProjectListOpen(true)}
+            title="Switch project"
+          >
+            <span className="truncate max-w-[100px]">{currentProjectName}</span>
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+          </button>
         </div>
 
         {/* Center: viewport ratio selector (desktop) */}

@@ -3,6 +3,7 @@ import { useProjectStore } from "./projectStore";
 import type { Location, Segment, MapStyle } from "@/types";
 
 interface HistorySnapshot {
+  projectId: string | null;
   locations: Location[];
   segments: Segment[];
   mapStyle: MapStyle;
@@ -16,15 +17,17 @@ interface HistoryState {
   redoStack: HistorySnapshot[];
   canUndo: boolean;
   canRedo: boolean;
+  resetHistory: () => void;
   pushState: () => void;
   undo: () => void;
   redo: () => void;
 }
 
 function captureSnapshot(): HistorySnapshot {
-  const { locations, segments, mapStyle, segmentTimingOverrides } =
+  const { currentProjectId, locations, segments, mapStyle, segmentTimingOverrides } =
     useProjectStore.getState();
   return {
+    projectId: currentProjectId,
     locations: structuredClone(locations),
     segments: structuredClone(segments),
     mapStyle,
@@ -47,6 +50,10 @@ export const useHistoryStore = create<HistoryState>((set) => ({
   canUndo: false,
   canRedo: false,
 
+  resetHistory: () => {
+    set({ undoStack: [], redoStack: [], canUndo: false, canRedo: false });
+  },
+
   pushState: () => {
     const snapshot = captureSnapshot();
     set((state) => {
@@ -62,6 +69,12 @@ export const useHistoryStore = create<HistoryState>((set) => ({
       const current = captureSnapshot();
       const undoStack = [...state.undoStack];
       const snapshot = undoStack.pop()!;
+
+      // Guard against cross-project corruption
+      if (snapshot.projectId !== current.projectId) {
+        return { undoStack: [], redoStack: [], canUndo: false, canRedo: false };
+      }
+
       const redoStack = [...state.redoStack, current];
 
       restoreSnapshot(snapshot);
@@ -82,6 +95,12 @@ export const useHistoryStore = create<HistoryState>((set) => ({
       const current = captureSnapshot();
       const redoStack = [...state.redoStack];
       const snapshot = redoStack.pop()!;
+
+      // Guard against cross-project corruption
+      if (snapshot.projectId !== current.projectId) {
+        return { undoStack: [], redoStack: [], canUndo: false, canRedo: false };
+      }
+
       const undoStack = [...state.undoStack, current];
 
       restoreSnapshot(snapshot);
