@@ -694,6 +694,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   createNewProject: async (name) => {
+    // Kill any pending debounce from the old project immediately
+    if (persistTimeout) {
+      clearTimeout(persistTimeout);
+      persistTimeout = null;
+    }
+
     // Save current project first
     const state = get();
     if (state.currentProjectId) {
@@ -720,12 +726,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     };
 
     await saveProject(meta, data);
-
-    // Clear stale debounce timer before switching
-    if (persistTimeout) {
-      clearTimeout(persistTimeout);
-      persistTimeout = null;
-    }
     // Clear current state and switch to new project
     skipNextPersist = true;
     set({
@@ -752,6 +752,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const state = get();
     if (state.currentProjectId === projectId) return;
 
+    // Kill any pending debounce from the old project immediately
+    if (persistTimeout) {
+      clearTimeout(persistTimeout);
+      persistTimeout = null;
+    }
+
     // Save current project first
     if (state.currentProjectId) {
       await persistCurrentProject(state);
@@ -763,12 +769,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     const projects = await listProjectsFromDB();
     const meta = projects.find((p) => p.id === projectId);
-
-    // Clear stale debounce timer before switching
-    if (persistTimeout) {
-      clearTimeout(persistTimeout);
-      persistTimeout = null;
-    }
     skipNextPersist = true;
     set({
       currentProjectId: projectId,
@@ -787,17 +787,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   deleteCurrentProject: async () => {
+    // Kill any pending debounce from the old project immediately
+    if (persistTimeout) {
+      clearTimeout(persistTimeout);
+      persistTimeout = null;
+    }
+
     const { currentProjectId } = get();
     if (!currentProjectId) return;
 
     await deleteProjectFromDB(currentProjectId);
     const projects = await listProjectsFromDB();
-
-    // Clear stale debounce timer before switching
-    if (persistTimeout) {
-      clearTimeout(persistTimeout);
-      persistTimeout = null;
-    }
 
     if (projects.length > 0) {
       // Switch to the most recent project

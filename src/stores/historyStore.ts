@@ -24,9 +24,10 @@ interface HistoryState {
 }
 
 function captureSnapshot(): HistorySnapshot {
-  const { locations, segments, mapStyle, segmentTimingOverrides } =
+  const { currentProjectId, locations, segments, mapStyle, segmentTimingOverrides } =
     useProjectStore.getState();
   return {
+    projectId: currentProjectId,
     locations: structuredClone(locations),
     segments: structuredClone(segments),
     mapStyle,
@@ -68,6 +69,12 @@ export const useHistoryStore = create<HistoryState>((set) => ({
       const current = captureSnapshot();
       const undoStack = [...state.undoStack];
       const snapshot = undoStack.pop()!;
+
+      // Guard against cross-project corruption
+      if (snapshot.projectId !== current.projectId) {
+        return { undoStack: [], redoStack: [], canUndo: false, canRedo: false };
+      }
+
       const redoStack = [...state.redoStack, current];
 
       restoreSnapshot(snapshot);
@@ -88,6 +95,12 @@ export const useHistoryStore = create<HistoryState>((set) => ({
       const current = captureSnapshot();
       const redoStack = [...state.redoStack];
       const snapshot = redoStack.pop()!;
+
+      // Guard against cross-project corruption
+      if (snapshot.projectId !== current.projectId) {
+        return { undoStack: [], redoStack: [], canUndo: false, canRedo: false };
+      }
+
       const undoStack = [...state.undoStack, current];
 
       restoreSnapshot(snapshot);
