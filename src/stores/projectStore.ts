@@ -48,7 +48,7 @@ type PersistedProjectData = ImportRouteData;
 
 const DEFAULT_ROUTE_NAME = "My Trip";
 const DEFAULT_MAP_STYLE: MapStyle = "light";
-const PROJECT_SAVE_DEBOUNCE_MS = 500;
+const PROJECT_SAVE_DEBOUNCE_MS = 2000; // 2 seconds — prevents heavy serialization during rapid slider drags
 
 interface ProjectState {
   // Multi-project state
@@ -126,17 +126,24 @@ function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
 
-/** Convert a blob: URL to a data: URL for persistence */
+/** Cache for blob→dataURL conversions to avoid redundant work on repeated saves */
+const blobToDataUrlCache = new Map<string, string>();
+
+/** Convert a blob: URL to a data: URL for persistence (cached) */
 async function blobUrlToDataUrl(url: string): Promise<string> {
   if (!url.startsWith("blob:")) return url;
+  const cached = blobToDataUrlCache.get(url);
+  if (cached) return cached;
   try {
     const resp = await fetch(url);
     const blob = await resp.blob();
-    return new Promise((resolve) => {
+    const dataUrl = await new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.readAsDataURL(blob);
     });
+    blobToDataUrlCache.set(url, dataUrl);
+    return dataUrl;
   } catch {
     return url;
   }
@@ -960,20 +967,7 @@ export function initializeProjectPersistence(
       const projectId = state.currentProjectId;
       if (!projectId) return;
 
-      const nextProjectJson = JSON.stringify(
-        await serializeProjectState(
-          state.locations,
-          state.segments,
-          state.mapStyle,
-          state.segmentTimingOverrides,
-          state.currentProjectName,
-        ),
-      );
-
-      if (nextProjectJson === lastSavedProjectJson) {
-        return;
-      }
-
+      // Serialize once (includes async blob→dataURL conversion)
       const data = await serializeProjectState(
         state.locations,
         state.segments,
@@ -981,6 +975,11 @@ export function initializeProjectPersistence(
         state.segmentTimingOverrides,
         state.currentProjectName,
       );
+
+      const nextProjectJson = JSON.stringify(data);
+      if (nextProjectJson === lastSavedProjectJson) {
+        return;
+      }
 
       const meta = buildProjectMeta(
         projectId,
