@@ -19,6 +19,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "idb": "^8.0.3",
+    "lottie-web": "^5.13.0",
     "lucide-react": "^1.7.0",
     "mapbox-gl": "^3.20.0",
     "mp4-muxer": "^5.2.2",
