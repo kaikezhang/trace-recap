@@ -3,6 +3,7 @@ import { useProjectStore } from "./projectStore";
 import type { Location, Segment, MapStyle } from "@/types";
 
 interface HistorySnapshot {
+  projectId: string | null;
   locations: Location[];
   segments: Segment[];
   mapStyle: MapStyle;
@@ -16,6 +17,7 @@ interface HistoryState {
   redoStack: HistorySnapshot[];
   canUndo: boolean;
   canRedo: boolean;
+  resetHistory: () => void;
   pushState: () => void;
   undo: () => void;
   redo: () => void;
@@ -46,6 +48,10 @@ export const useHistoryStore = create<HistoryState>((set) => ({
   redoStack: [],
   canUndo: false,
   canRedo: false,
+
+  resetHistory: () => {
+    set({ undoStack: [], redoStack: [], canUndo: false, canRedo: false });
+  },
 
   pushState: () => {
     const snapshot = captureSnapshot();

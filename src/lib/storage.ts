@@ -188,7 +188,7 @@ export async function migrateFromLocalStorage(): Promise<string | null> {
     window.localStorage.setItem(MIGRATION_DONE_KEY, "1");
     return id;
   } catch {
-    window.localStorage.setItem(MIGRATION_DONE_KEY, "1");
+    // Do NOT set migration flag on failure — legacy data is still the only valid copy
     return null;
   }
 }

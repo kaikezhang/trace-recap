@@ -429,6 +429,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       mapStyle: DEFAULT_MAP_STYLE,
       segmentTimingOverrides: {},
     });
+
+    // Persist cleared state to IndexedDB immediately so reload doesn't resurrect old data
+    const { currentProjectId, currentProjectName } = get();
+    if (currentProjectId) {
+      const data = serializeProjectState([], [], DEFAULT_MAP_STYLE, {}, currentProjectName);
+      const meta = buildProjectMeta(currentProjectId, currentProjectName, []);
+      void saveProject(meta, data).then(() => {
+        lastSavedProjectJson = JSON.stringify(data);
+      });
+    }
   },
 
   exportRoute: async () => {
@@ -711,6 +721,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     await saveProject(meta, data);
 
+    // Clear stale debounce timer before switching
+    if (persistTimeout) {
+      clearTimeout(persistTimeout);
+      persistTimeout = null;
+    }
     // Clear current state and switch to new project
     skipNextPersist = true;
     set({
@@ -722,6 +737,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       segmentTimingOverrides: {},
     });
     lastSavedProjectJson = "";
+
+    // Reset history to prevent cross-project undo/redo
+    useHistoryStore.getState().resetHistory();
 
     // Refresh project list
     const projects = await listProjectsFromDB();
@@ -746,6 +764,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const projects = await listProjectsFromDB();
     const meta = projects.find((p) => p.id === projectId);
 
+    // Clear stale debounce timer before switching
+    if (persistTimeout) {
+      clearTimeout(persistTimeout);
+      persistTimeout = null;
+    }
     skipNextPersist = true;
     set({
       currentProjectId: projectId,
@@ -758,7 +781,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
     lastSavedProjectJson = "";
 
-    useHistoryStore.getState().pushState();
+    // Reset history to prevent cross-project undo/redo
+    useHistoryStore.getState().resetHistory();
     await get().loadRouteData(data);
   },
 
@@ -768,6 +792,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     await deleteProjectFromDB(currentProjectId);
     const projects = await listProjectsFromDB();
+
+    // Clear stale debounce timer before switching
+    if (persistTimeout) {
+      clearTimeout(persistTimeout);
+      persistTimeout = null;
+    }
 
     if (projects.length > 0) {
       // Switch to the most recent project
@@ -786,6 +816,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       });
       lastSavedProjectJson = "";
 
+      // Reset history to prevent cross-project undo/redo
+      useHistoryStore.getState().resetHistory();
+
       if (data) {
         await get().loadRouteData(data);
       }
@@ -802,6 +835,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         projects: [],
       });
       lastSavedProjectJson = "";
+
+      // Reset history to prevent cross-project undo/redo
+      useHistoryStore.getState().resetHistory();
       await get().createNewProject();
     }
   },
