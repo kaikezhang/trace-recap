@@ -75,6 +75,7 @@ export default function TopToolbar() {
   const setPhotoAnimation = useUIStore((s) => s.setPhotoAnimation);
   const setProjectListOpen = useUIStore((s) => s.setProjectListOpen);
   const currentProjectName = useProjectStore((s) => s.currentProjectName);
+  const isSwitchingProject = useProjectStore((s) => s.isSwitchingProject);
   const undo = useHistoryStore((s) => s.undo);
   const redo = useHistoryStore((s) => s.redo);
   const canUndo = useHistoryStore((s) => s.canUndo);
@@ -115,8 +116,8 @@ export default function TopToolbar() {
       const data: ImportRouteData = JSON.parse(text);
       await loadRouteData(data);
       void enrichChineseNames();
-    } catch {
-      // Invalid JSON or file read error.
+    } catch (error) {
+      console.error("Failed to import route file.", error);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -162,6 +163,7 @@ export default function TopToolbar() {
           <button
             className="hidden md:flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors max-w-[180px]"
             onClick={() => setProjectListOpen(true)}
+            disabled={isSwitchingProject}
             title="Switch project"
           >
             <span className="truncate">{currentProjectName}</span>
@@ -170,6 +172,7 @@ export default function TopToolbar() {
           <button
             className="md:hidden flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted"
             onClick={() => setProjectListOpen(true)}
+            disabled={isSwitchingProject}
             title="Switch project"
           >
             <span className="truncate max-w-[100px]">{currentProjectName}</span>
@@ -427,7 +430,10 @@ export default function TopToolbar() {
               }
             />
             <DropdownMenuContent align="end" sideOffset={4}>
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+              <DropdownMenuItem
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSwitchingProject}
+              >
                 <Upload className="h-4 w-4" />
                 Import Route
               </DropdownMenuItem>
@@ -444,6 +450,7 @@ export default function TopToolbar() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
+                disabled={isSwitchingProject}
                 onClick={() => setClearDialogOpen(true)}
               >
                 <Trash2 className="h-4 w-4" />
@@ -475,9 +482,14 @@ export default function TopToolbar() {
             </DialogClose>
             <Button
               variant="destructive"
+              disabled={isSwitchingProject}
               onClick={() => {
-                clearRoute();
-                setClearDialogOpen(false);
+                try {
+                  clearRoute();
+                  setClearDialogOpen(false);
+                } catch (error) {
+                  console.error("Failed to clear the current route.", error);
+                }
               }}
             >
               Clear Route

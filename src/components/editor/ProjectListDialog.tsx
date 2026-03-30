@@ -47,6 +47,7 @@ function formatDate(epoch: number): string {
 function ProjectRow({
   project,
   isCurrent,
+  disabled,
   onSwitch,
   onRename,
   onDelete,
@@ -54,27 +55,63 @@ function ProjectRow({
 }: {
   project: ProjectMeta;
   isCurrent: boolean;
-  onSwitch: () => void;
-  onRename: (name: string) => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
+  disabled: boolean;
+  onSwitch: () => Promise<void>;
+  onRename: (name: string) => Promise<void>;
+  onDelete: () => Promise<void>;
+  onDuplicate: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(project.name);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pendingAction, setPendingAction] = useState<
+    "switch" | "rename" | "delete" | "duplicate" | null
+  >(null);
+  const isBusy = disabled || pendingAction !== null;
 
-  const handleSubmitRename = useCallback(() => {
+  const handleSubmitRename = useCallback(async () => {
     const trimmed = editName.trim();
-    if (trimmed && trimmed !== project.name) {
-      onRename(trimmed);
+    if (!trimmed || trimmed === project.name) {
+      setEditing(false);
+      return;
     }
-    setEditing(false);
-  }, [editName, project.name, onRename]);
+
+    setPendingAction("rename");
+    try {
+      await onRename(trimmed);
+      setEditing(false);
+    } catch (error) {
+      console.error(`Failed to rename project ${project.id}.`, error);
+    } finally {
+      setPendingAction(null);
+    }
+  }, [editName, onRename, project.id, project.name]);
 
   const handleCancelRename = useCallback(() => {
+    if (pendingAction === "rename") return;
     setEditName(project.name);
     setEditing(false);
-  }, [project.name]);
+  }, [pendingAction, project.name]);
+
+  const runRowAction = useCallback(
+    async (
+      action: "switch" | "delete" | "duplicate",
+      callback: () => Promise<void>,
+    ) => {
+      setPendingAction(action);
+      try {
+        await callback();
+        if (action === "delete") {
+          setConfirmDelete(false);
+        }
+      } catch (error) {
+        console.error(`Failed to ${action} project ${project.id}.`, error);
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [project.id],
+  );
 
   return (
     <div
@@ -82,12 +119,13 @@ function ProjectRow({
         isCurrent
           ? "border-primary/30 bg-primary/5"
           : "border-transparent hover:border-border hover:bg-muted/50"
-      }`}
+      } ${isBusy ? "opacity-70" : ""}`}
+      aria-busy={isBusy}
     >
       <button
         className="flex flex-1 min-w-0 items-start gap-3 text-left"
-        onClick={onSwitch}
-        disabled={isCurrent}
+        onClick={() => void runRowAction("switch", onSwitch)}
+        disabled={isCurrent || isBusy}
       >
         <div
           className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
@@ -106,20 +144,23 @@ function ProjectRow({
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSubmitRename();
+                  if (e.key === "Enter") void handleSubmitRename();
                   if (e.key === "Escape") handleCancelRename();
                 }}
+                disabled={isBusy}
                 autoFocus
               />
               <button
                 className="shrink-0 rounded p-0.5 text-green-600 hover:bg-green-50"
-                onClick={handleSubmitRename}
+                onClick={() => void handleSubmitRename()}
+                disabled={isBusy}
               >
                 <Check className="h-3.5 w-3.5" />
               </button>
               <button
                 className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted"
                 onClick={handleCancelRename}
+                disabled={isBusy}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -154,6 +195,7 @@ function ProjectRow({
               setEditName(project.name);
               setEditing(true);
             }}
+            disabled={isBusy}
             title="Rename"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -163,8 +205,9 @@ function ProjectRow({
           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           onClick={(e) => {
             e.stopPropagation();
-            onDuplicate();
+            void runRowAction("duplicate", onDuplicate);
           }}
+          disabled={isBusy}
           title="Duplicate"
         >
           <Copy className="h-3.5 w-3.5" />
@@ -173,7 +216,8 @@ function ProjectRow({
           <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
             <button
               className="rounded p-1 text-red-600 hover:bg-red-50"
-              onClick={onDelete}
+              onClick={() => void runRowAction("delete", onDelete)}
+              disabled={isBusy}
               title="Confirm delete"
             >
               <Check className="h-3.5 w-3.5" />
@@ -181,6 +225,7 @@ function ProjectRow({
             <button
               className="rounded p-1 text-muted-foreground hover:bg-muted"
               onClick={() => setConfirmDelete(false)}
+              disabled={isBusy}
               title="Cancel"
             >
               <X className="h-3.5 w-3.5" />
@@ -193,6 +238,7 @@ function ProjectRow({
               e.stopPropagation();
               setConfirmDelete(true);
             }}
+            disabled={isBusy}
             title="Delete"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -213,16 +259,25 @@ export default function ProjectListDialog() {
   const deleteProjectById = useProjectStore((s) => s.deleteProjectById);
   const renameProjectById = useProjectStore((s) => s.renameProjectById);
   const duplicateProjectById = useProjectStore((s) => s.duplicateProjectById);
+  const isSwitchingProject = useProjectStore((s) => s.isSwitchingProject);
 
   const handleNewProject = useCallback(async () => {
-    await createNewProject();
-    setOpen(false);
+    try {
+      await createNewProject();
+      setOpen(false);
+    } catch (error) {
+      console.error("Failed to create a new project.", error);
+    }
   }, [createNewProject, setOpen]);
 
   const handleSwitch = useCallback(
     async (projectId: string) => {
-      await switchProject(projectId);
-      setOpen(false);
+      try {
+        await switchProject(projectId);
+        setOpen(false);
+      } catch (error) {
+        console.error(`Failed to switch to project ${projectId}.`, error);
+      }
     },
     [switchProject, setOpen],
   );
@@ -244,10 +299,13 @@ export default function ProjectListDialog() {
                 key={project.id}
                 project={project}
                 isCurrent={project.id === currentProjectId}
-                onSwitch={() => void handleSwitch(project.id)}
-                onRename={(name) => void renameProjectById(project.id, name)}
-                onDelete={() => void deleteProjectById(project.id)}
-                onDuplicate={() => void duplicateProjectById(project.id)}
+                disabled={isSwitchingProject}
+                onSwitch={() => handleSwitch(project.id)}
+                onRename={(name) => renameProjectById(project.id, name)}
+                onDelete={() => deleteProjectById(project.id)}
+                onDuplicate={async () => {
+                  await duplicateProjectById(project.id);
+                }}
               />
             ))}
             {projects.length === 0 && (
@@ -264,9 +322,10 @@ export default function ProjectListDialog() {
             size="sm"
             className="w-full"
             onClick={() => void handleNewProject()}
+            disabled={isSwitchingProject}
           >
             <Plus className="h-4 w-4" />
-            New Project
+            {isSwitchingProject ? "Working..." : "New Project"}
           </Button>
         </div>
       </DialogContent>

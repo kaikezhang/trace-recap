@@ -187,7 +187,8 @@ export async function migrateFromLocalStorage(): Promise<string | null> {
     await saveProject(meta, data);
     window.localStorage.setItem(MIGRATION_DONE_KEY, "1");
     return id;
-  } catch {
+  } catch (error) {
+    console.error("Failed to migrate legacy project data from localStorage.", error);
     // Do NOT set migration flag on failure — legacy data is still the only valid copy
     return null;
   }
