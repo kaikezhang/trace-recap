@@ -1,17 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
 import LeftPanel from "./LeftPanel";
 import BottomSheet from "./BottomSheet";
-import MapCanvas from "./MapCanvas";
-import PlaybackControls from "./PlaybackControls";
-import PhotoOverlay from "./PhotoOverlay";
-import PhotoLayoutEditor from "./PhotoLayoutEditor";
 import ExportDialog from "./ExportDialog";
-import MapEmptyState from "./MapEmptyState";
+import MapStage from "./MapStage";
 import type { CitySearchHandle } from "./CitySearch";
 import {
   SEGMENT_LAYER_PREFIX,
@@ -29,6 +24,7 @@ import {
 import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
+import { computeContainedViewportSize } from "@/lib/viewportRatio";
 
 const ONBOARDING_STORAGE_KEY = "trace-recap-onboarded";
 
@@ -82,6 +78,22 @@ function persistOnboardingState(state: OnboardingState): void {
   );
 }
 
+function measureStageSize(element: HTMLDivElement): {
+  width: number;
+  height: number;
+} {
+  const styles = window.getComputedStyle(element);
+  const paddingX =
+    parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+  const paddingY =
+    parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+
+  return {
+    width: element.clientWidth - paddingX,
+    height: element.clientHeight - paddingY,
+  };
+}
+
 function EditorContent() {
   const { map } = useMap();
   const locations = useProjectStore((s) => s.locations);
@@ -122,30 +134,61 @@ function EditorContent() {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const setBottomSheetState = useUIStore((s) => s.setBottomSheetState);
 
+  const stageViewportRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [availableStageSize, setAvailableStageSize] = useState({
+    width: 0,
+    height: 0,
+  });
 
-  const mapContainerStyle = useMemo(() => {
-    if (viewportRatio === "free") return {};
-    const [w, h] = viewportRatio.split(":").map(Number);
-    return { aspectRatio: `${w}/${h}` };
-  }, [viewportRatio]);
+  const constrainedMapSize = useMemo(
+    () =>
+      computeContainedViewportSize(
+        availableStageSize.width,
+        availableStageSize.height,
+        viewportRatio,
+      ),
+    [availableStageSize.height, availableStageSize.width, viewportRatio],
+  );
 
-  // Resize Mapbox when viewport ratio changes
   useEffect(() => {
-    if (!map) return;
-    const timer = setTimeout(() => map.resize(), 100);
-    return () => clearTimeout(timer);
+    const stageViewport = stageViewportRef.current;
+    if (!stageViewport) return;
+
+    const updateStageSize = (width: number, height: number) => {
+      const nextWidth = Math.round(width);
+      const nextHeight = Math.round(height);
+      setAvailableStageSize((current) =>
+        current.width === nextWidth && current.height === nextHeight
+          ? current
+          : { width: nextWidth, height: nextHeight },
+      );
+    };
+
+    const measuredStageSize = measureStageSize(stageViewport);
+    updateStageSize(measuredStageSize.width, measuredStageSize.height);
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      updateStageSize(entry.contentRect.width, entry.contentRect.height);
+    });
+    observer.observe(stageViewport);
+
+    return () => observer.disconnect();
   }, [map, viewportRatio]);
 
-  // ResizeObserver for robust map resize
   useEffect(() => {
     if (!map || !mapContainerRef.current) return;
+
+    map.resize();
+
     const observer = new ResizeObserver(() => {
       map.resize();
     });
     observer.observe(mapContainerRef.current);
     return () => observer.disconnect();
-  }, [map]);
+  }, [constrainedMapSize?.height, constrainedMapSize?.width, map, viewportRatio]);
   const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
   const currentCityLabelZh = useAnimationStore((s) => s.currentCityLabelZh);
   const currentCityLabel =
@@ -582,202 +625,71 @@ function EditorContent() {
           onDismissSearchHint={handleSearchHintDismiss}
           searchRef={searchRef}
         />
-        {/* Map area: full width on mobile, flex-1 on desktop */}
-        {viewportRatio === "free" ? (
-          <div className="flex-1 relative">
-            <div ref={mapContainerRef} className="absolute inset-0">
-              <MapCanvas />
-            </div>
-            {/* Empty state overlay */}
-            {locations.length === 0 && (
-              <MapEmptyState
-                onSearchClick={handleFocusSearch}
-                onLoadDemo={handleLoadDemo}
-              />
-            )}
-            {/* City label overlay */}
-            <AnimatePresence>
-              {currentCityLabel && (
-                <motion.div
-                  key={currentCityLabel}
-                  initial={{
-                    opacity: 0,
-                    y: 20,
-                    scale: 0.8,
-                    filter: "blur(8px)",
-                  }}
-                  animate={{
-                    opacity: 1,
-                    y: 0,
-                    scale: 1,
-                    filter: "blur(0px)",
-                  }}
-                  exit={{
-                    opacity: 0,
-                    y: -10,
-                    scale: 0.95,
-                    filter: "blur(4px)",
-                  }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 25,
-                  }}
-                  className="absolute top-6 left-1/2 -translate-x-1/2 z-10 rounded-lg bg-background/90 backdrop-blur-sm border shadow-lg px-5 py-2"
-                  style={{
-                    textShadow:
-                      "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)",
-                  }}
-                >
-                  <p
-                    className="font-semibold flex items-center gap-2"
-                    style={{ fontSize: `${cityLabelSize}px` }}
-                  >
-                    <svg
-                      className="w-4 h-4 text-indigo-500 flex-shrink-0"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    {currentCityLabel}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {/* Photo overlay */}
-            <PhotoOverlay
-              photos={visiblePhotos}
-              visible={showPhotoOverlay}
-              photoLayout={visiblePhotoLocation?.photoLayout}
-              opacity={photoOverlayOpacity}
-            />
-            {/* Photo layout editor */}
-            {editingLocation && editingLocation.photos.length > 0 && (
-              <PhotoLayoutEditor
-                location={editingLocation}
-                onClose={() => setEditingLocationId(null)}
-              />
-            )}
-            {/* Playback controls — hidden when photo layout editor is open */}
-            {hasSegments && !(editingLocation && editingLocation.photos.length > 0) && (
-              <PlaybackControls
-                onPlay={handlePlay}
-                onPause={handlePause}
-                onReset={handleReset}
-                onSeek={handleSeek}
-                hintMessage={playHintMessage}
-                onHintDismiss={() => dismissHint("playPreview")}
-              />
-            )}
-          </div>
-        ) : (
-          <div className="flex-1 relative flex items-center justify-center bg-gray-900/95">
-            <div
-              ref={mapContainerRef}
-              className="relative bg-background rounded-lg overflow-hidden shadow-2xl border border-gray-700"
-              style={{
-                ...mapContainerStyle,
-                maxHeight: "100%",
-                maxWidth: "100%",
-                width: "auto",
-                height: "100%",
-              }}
-            >
-              <MapCanvas />
-              {/* Empty state overlay */}
-              {locations.length === 0 && (
-                <MapEmptyState
-                  onSearchClick={handleFocusSearch}
+        <div className="relative flex-1 min-w-0 overflow-hidden bg-slate-950">
+          {viewportRatio === "free" ? (
+            <div ref={stageViewportRef} className="absolute inset-0">
+              <div ref={mapContainerRef} className="relative h-full w-full">
+                <MapStage
+                  cityLabelSize={cityLabelSize}
+                  currentCityLabel={currentCityLabel}
+                  editingLocation={editingLocation}
+                  hasSegments={hasSegments}
+                  photos={visiblePhotos}
+                  photoLayout={visiblePhotoLocation?.photoLayout}
+                  photoOverlayOpacity={photoOverlayOpacity}
+                  playHintMessage={playHintMessage}
+                  showPhotoOverlay={showPhotoOverlay}
+                  showEmptyState={locations.length === 0}
+                  onFocusSearch={handleFocusSearch}
+                  onHintDismiss={() => dismissHint("playPreview")}
                   onLoadDemo={handleLoadDemo}
-                />
-              )}
-              {/* City label overlay */}
-              <AnimatePresence>
-                {currentCityLabel && (
-                  <motion.div
-                    key={currentCityLabel}
-                    initial={{
-                      opacity: 0,
-                      y: 20,
-                      scale: 0.8,
-                      filter: "blur(8px)",
-                    }}
-                    animate={{
-                      opacity: 1,
-                      y: 0,
-                      scale: 1,
-                      filter: "blur(0px)",
-                    }}
-                    exit={{
-                      opacity: 0,
-                      y: -10,
-                      scale: 0.95,
-                      filter: "blur(4px)",
-                    }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 300,
-                      damping: 25,
-                    }}
-                    className="absolute top-6 left-1/2 -translate-x-1/2 z-10 rounded-lg bg-background/90 backdrop-blur-sm border shadow-lg px-5 py-2"
-                    style={{
-                      textShadow:
-                        "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)",
-                    }}
-                  >
-                    <p
-                      className="font-semibold flex items-center gap-2"
-                      style={{ fontSize: `${cityLabelSize}px` }}
-                    >
-                      <svg
-                        className="w-4 h-4 text-indigo-500 flex-shrink-0"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      {currentCityLabel}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              {/* Photo overlay */}
-              <PhotoOverlay
-                photos={visiblePhotos}
-                visible={showPhotoOverlay}
-                photoLayout={visiblePhotoLocation?.photoLayout}
-                opacity={photoOverlayOpacity}
-              />
-              {/* Photo layout editor */}
-              {editingLocation && editingLocation.photos.length > 0 && (
-                <PhotoLayoutEditor
-                  location={editingLocation}
-                  onClose={() => setEditingLocationId(null)}
-                />
-              )}
-              {/* Playback controls — hidden when photo layout editor is open */}
-              {hasSegments && !(editingLocation && editingLocation.photos.length > 0) && (
-                <PlaybackControls
-                  onPlay={handlePlay}
                   onPause={handlePause}
+                  onPlay={handlePlay}
                   onReset={handleReset}
                   onSeek={handleSeek}
-                  hintMessage={playHintMessage}
-                  onHintDismiss={() => dismissHint("playPreview")}
+                  onStopEditingLayout={() => setEditingLocationId(null)}
                 />
+              </div>
+            </div>
+          ) : (
+            <div
+              ref={stageViewportRef}
+              className="flex h-full w-full items-center justify-center p-3 md:p-6"
+            >
+              {constrainedMapSize && (
+                <div
+                  ref={mapContainerRef}
+                  className="relative overflow-hidden rounded-lg border border-white/10 bg-background shadow-2xl"
+                  style={{
+                    width: constrainedMapSize.width,
+                    height: constrainedMapSize.height,
+                  }}
+                >
+                  <MapStage
+                    cityLabelSize={cityLabelSize}
+                    currentCityLabel={currentCityLabel}
+                    editingLocation={editingLocation}
+                    hasSegments={hasSegments}
+                    photos={visiblePhotos}
+                    photoLayout={visiblePhotoLocation?.photoLayout}
+                    photoOverlayOpacity={photoOverlayOpacity}
+                    playHintMessage={playHintMessage}
+                    showPhotoOverlay={showPhotoOverlay}
+                    showEmptyState={locations.length === 0}
+                    onFocusSearch={handleFocusSearch}
+                    onHintDismiss={() => dismissHint("playPreview")}
+                    onLoadDemo={handleLoadDemo}
+                    onPause={handlePause}
+                    onPlay={handlePlay}
+                    onReset={handleReset}
+                    onSeek={handleSeek}
+                    onStopEditingLayout={() => setEditingLocationId(null)}
+                  />
+                </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {/* Mobile bottom sheet — hidden during playback */}
       {!isPlaying && (
