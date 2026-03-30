@@ -579,7 +579,7 @@ export class VideoExporter {
         try {
           return await this.exportWithWebCodecs(
             offscreen, offCtx, canvas, scaleX, scaleY,
-            targetW, targetH, totalFrames, totalDuration, fps, onProgress
+            targetW, targetH, totalFrames, totalDuration, fps, onProgress, captured
           );
         } catch (webCodecsError) {
           console.warn("WebCodecs export failed, falling back to server:", webCodecsError);
@@ -589,13 +589,13 @@ export class VideoExporter {
           this.hideAllSegments();
           return await this.exportWithServer(
             offscreen, offCtx, canvas, scaleX, scaleY,
-            totalFrames, totalDuration, fps, signal, onProgress
+            totalFrames, totalDuration, fps, signal, onProgress, captured
           );
         }
       } else {
         return await this.exportWithServer(
           offscreen, offCtx, canvas, scaleX, scaleY,
-          totalFrames, totalDuration, fps, signal, onProgress
+          totalFrames, totalDuration, fps, signal, onProgress, captured
         );
       }
     } finally {
@@ -647,45 +647,35 @@ export class VideoExporter {
     totalFrames: number,
     totalDuration: number,
     fps: number,
-    onProgress: ProgressCallback
+    onProgress: ProgressCallback,
+    captured: { routeDraw: AnimationEvent | null; progress: AnimationEvent | null }
   ): Promise<Blob | null> {
-    const captured = { routeDraw: null as AnimationEvent | null, progress: null as AnimationEvent | null };
-    const onRouteDrawEvent = (e: AnimationEvent) => { captured.routeDraw = e; };
-    const onProgressEvent = (e: AnimationEvent) => { captured.progress = e; };
-    this.engine.on("routeDrawProgress", onRouteDrawEvent);
-    this.engine.on("progress", onProgressEvent);
-
     const webCodecsExporter = new WebCodecsExporter({
       width: targetW,
       height: targetH,
       fps,
     });
 
-    try {
-      for (let i = 0; i < totalFrames; i++) {
-        if (this.cancelled) return null;
-
-        await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
-        webCodecsExporter.addFrame(offscreen, i);
-
-        onProgress({
-          phase: "capturing",
-          current: i + 1,
-          total: totalFrames,
-          encodingMethod: "webcodecs",
-        });
-      }
-
+    for (let i = 0; i < totalFrames; i++) {
       if (this.cancelled) return null;
 
-      onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "webcodecs" });
-      const blob = await webCodecsExporter.finalize();
-      onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "webcodecs" });
-      return blob;
-    } finally {
-      this.engine.off("routeDrawProgress", onRouteDrawEvent);
-      this.engine.off("progress", onProgressEvent);
+      await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
+      webCodecsExporter.addFrame(offscreen, i);
+
+      onProgress({
+        phase: "capturing",
+        current: i + 1,
+        total: totalFrames,
+        encodingMethod: "webcodecs",
+      });
     }
+
+    if (this.cancelled) return null;
+
+    onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "webcodecs" });
+    const blob = await webCodecsExporter.finalize();
+    onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "webcodecs" });
+    return blob;
   }
 
   private async exportWithServer(
@@ -698,123 +688,103 @@ export class VideoExporter {
     totalDuration: number,
     fps: number,
     signal: AbortSignal,
-    onProgress: ProgressCallback
+    onProgress: ProgressCallback,
+    captured: { routeDraw: AnimationEvent | null; progress: AnimationEvent | null }
   ): Promise<Blob | null> {
-    const captured = { routeDraw: null as AnimationEvent | null, progress: null as AnimationEvent | null };
-    const onRouteDrawEvent = (e: AnimationEvent) => { captured.routeDraw = e; };
-    const onProgressEvent = (e: AnimationEvent) => { captured.progress = e; };
-    this.engine.on("routeDrawProgress", onRouteDrawEvent);
-    this.engine.on("progress", onProgressEvent);
+    const startRes = await fetch("/api/encode-video/start", {
+      method: "POST",
+      signal,
+    });
+    if (!startRes.ok) {
+      throw new Error("Failed to start encoding session");
+    }
+    const { sessionId } = (await startRes.json()) as { sessionId: string };
 
-    try {
-      const startRes = await fetch("/api/encode-video/start", {
-        method: "POST",
-        signal,
-      });
-      if (!startRes.ok) {
-        throw new Error("Failed to start encoding session");
-      }
-      const { sessionId } = (await startRes.json()) as { sessionId: string };
-
-      for (let i = 0; i < totalFrames; i++) {
-        if (this.cancelled) return null;
-
-        await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
-
-        const blob = await new Promise<Blob>((resolve, reject) => {
-          offscreen.toBlob(
-            (b) =>
-              b ? resolve(b) : reject(new Error("Frame capture failed")),
-            "image/jpeg",
-            0.92
-          );
-        });
-
-        const formData = new FormData();
-        formData.append("sessionId", sessionId);
-        formData.append("frameIndex", String(i + 1));
-        formData.append(
-          "frame",
-          blob,
-          `frame${String(i + 1).padStart(5, "0")}.jpg`
-        );
-
-        const uploadRes = await fetch("/api/encode-video/frame", {
-          method: "POST",
-          body: formData,
-          signal,
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error(`Failed to upload frame ${i + 1}`);
-        }
-
-        onProgress({
-          phase: "capturing",
-          current: i + 1,
-          total: totalFrames,
-          encodingMethod: "server",
-        });
-      }
-
+    for (let i = 0; i < totalFrames; i++) {
       if (this.cancelled) return null;
 
-      onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "server" });
+      await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
 
-      const response = await fetch("/api/encode-video", {
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        offscreen.toBlob(
+          (b) =>
+            b ? resolve(b) : reject(new Error("Frame capture failed")),
+          "image/jpeg",
+          0.92
+        );
+      });
+
+      const formData = new FormData();
+      formData.append("sessionId", sessionId);
+      formData.append("frameIndex", String(i + 1));
+      formData.append(
+        "frame",
+        blob,
+        `frame${String(i + 1).padStart(5, "0")}.jpg`
+      );
+
+      const uploadRes = await fetch("/api/encode-video/frame", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, fps: String(fps) }),
+        body: formData,
         signal,
       });
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Server encoding failed: ${text}`);
+      if (!uploadRes.ok) {
+        throw new Error(`Failed to upload frame ${i + 1}`);
       }
 
-      onProgress({ phase: "encoding", current: 1, total: 1, encodingMethod: "server" });
-
-      const mp4Blob = await response.blob();
-      onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "server" });
-
-      return mp4Blob;
-    } finally {
-      this.engine.off("routeDrawProgress", onRouteDrawEvent);
-      this.engine.off("progress", onProgressEvent);
+      onProgress({
+        phase: "capturing",
+        current: i + 1,
+        total: totalFrames,
+        encodingMethod: "server",
+      });
     }
+
+    if (this.cancelled) return null;
+
+    onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "server" });
+
+    const response = await fetch("/api/encode-video", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, fps: String(fps) }),
+      signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Server encoding failed: ${text}`);
+    }
+
+    onProgress({ phase: "encoding", current: 1, total: 1, encodingMethod: "server" });
+
+    const mp4Blob = await response.blob();
+    onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "server" });
+
+    return mp4Blob;
   }
 
   private waitForMapIdle(): Promise<void> {
     return new Promise((resolve) => {
       this.map.triggerRepaint();
 
-      const checkReady = () => {
-        if (!this.map.isMoving() && this.map.areTilesLoaded()) {
-          return true;
-        }
-        return false;
-      };
-
-      if (checkReady()) {
-        resolve();
-        return;
-      }
-
-      let elapsed = 0;
-      const interval = setInterval(() => {
-        elapsed += 100;
-        if (checkReady() || elapsed >= 5000) {
-          clearInterval(interval);
-          resolve();
-        }
-      }, 100);
-
-      const onIdle = () => {
-        clearInterval(interval);
+      let resolved = false;
+      const done = () => {
+        if (resolved) return;
+        resolved = true;
         resolve();
       };
-      this.map.once("idle", onIdle);
+
+      // Always wait for the idle event so the canvas reflects the current
+      // camera position and layer visibility set by jumpTo / setLayoutProperty.
+      // Without this, checkReady() would resolve immediately after jumpTo()
+      // because isMoving()===false and tiles are already loaded, but the
+      // canvas hasn't been repainted yet.
+      this.map.once("idle", done);
+
+      // Safety timeout in case idle never fires
+      setTimeout(done, 5000);
     });
   }
 }
