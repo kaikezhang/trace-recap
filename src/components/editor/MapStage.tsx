@@ -148,7 +148,7 @@ export default function MapStage({
       </AnimatePresence>
       {/* Route segment indicator — inside the map container */}
       <AnimatePresence>
-        {isPlaying && !showPhotoOverlay && fromCity && toCity && (
+        {isPlaying && !showPhotoOverlay && !currentCityLabel && fromCity && toCity && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
