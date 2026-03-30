@@ -13,6 +13,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useMap } from "./MapContext";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
+import type { PhotoMeta } from "@/lib/photoLayout";
 import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo } from "@/types";
 
 interface PhotoLayoutEditorProps {
@@ -28,6 +29,47 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "single", label: "Single", icon: ImageIcon, template: "auto" },
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
 ];
+
+/* ── Load real photo dimensions for WYSIWYG preview ── */
+
+function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
+  const aspectCacheRef = useRef(new Map<string, number>());
+  const photoKey = photos.map((p) => `${p.id}:${p.url}`).join("|");
+
+  const buildMetas = (): PhotoMeta[] =>
+    photos.map((p) => ({
+      id: p.id,
+      aspect: aspectCacheRef.current.get(p.url) ?? 4 / 3,
+    }));
+
+  const [metas, setMetas] = useState<PhotoMeta[]>(() => buildMetas());
+
+  useEffect(() => {
+    setMetas(buildMetas());
+    if (photos.length === 0) return;
+
+    let cancelled = false;
+    photos.forEach((photo) => {
+      if (aspectCacheRef.current.has(photo.url)) return;
+      const img = new Image();
+      img.onload = () => {
+        if (cancelled) return;
+        aspectCacheRef.current.set(photo.url, img.naturalWidth / img.naturalHeight);
+        setMetas(buildMetas());
+      };
+      img.onerror = () => {
+        if (cancelled) return;
+        aspectCacheRef.current.set(photo.url, 4 / 3);
+        setMetas(buildMetas());
+      };
+      img.src = photo.url;
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoKey]);
+
+  return metas;
+}
 
 /* ── Unified preview using actual layout functions ── */
 
@@ -48,10 +90,7 @@ function LayoutPreview({
 }) {
   const containerWidthPx = 500; // reference width for gap calculation
 
-  const metas = useMemo(
-    () => photos.map((p) => ({ id: p.id, aspect: 1 })),
-    [photos]
-  );
+  const metas = usePhotoDimensions(photos);
 
   const rects = useMemo(() => {
     if (template === "auto") {
@@ -151,15 +190,15 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       });
     };
 
-    if (map.loaded()) {
-      // Map tiles loaded; wait for one more idle to ensure render is flushed
+    if (map.isStyleLoaded() && map.loaded()) {
+      // Style and tiles loaded; wait for one more idle to ensure render is flushed
       map.once("idle", capture);
+      // Trigger a repaint so idle fires even if map is already idle
+      map.triggerRepaint();
     } else {
-      // Map hasn't finished loading yet
-      map.once("load", () => {
-        if (cancelled) return;
-        map.once("idle", capture);
-      });
+      // Map hasn't finished loading yet — listen for idle which fires after
+      // style load + tile rendering completes
+      map.once("idle", capture);
     }
 
     return () => {
@@ -301,7 +340,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                 {location.photos.length} photo{location.photos.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={onClose} aria-label="Close photo layout editor" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
               <X className="h-5 w-5 text-gray-500" />
             </button>
           </div>
@@ -316,7 +355,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           {/* Bottom controls */}
           <div className="shrink-0 border-t border-gray-100 bg-white">
             {/* Layout style selector — horizontal pills */}
-            <div className="flex items-center gap-2 px-4 py-3">
+            <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
               {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
@@ -340,6 +379,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   <button
                     key={photo.id}
                     onClick={() => setSelectedPhotoIndex(i)}
+                    aria-label={`Select photo ${i + 1}${selectedPhotoIndex === i ? " (selected)" : ""}`}
                     className={`shrink-0 w-[60px] h-[60px] rounded-lg overflow-hidden transition-all ${
                       selectedPhotoIndex === i
                         ? "ring-2 ring-indigo-500 ring-offset-2"
@@ -348,7 +388,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   >
                     <img
                       src={photo.url}
-                      alt=""
+                      alt={`Photo ${i + 1} thumbnail`}
                       className="w-full h-full object-cover"
                       style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
                     />
@@ -387,7 +427,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                 {location.photos.length} photo{location.photos.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={onClose} aria-label="Close photo layout editor" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
               <X className="h-5 w-5 text-gray-500" />
             </button>
           </div>
@@ -430,6 +470,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   <button
                     key={photo.id}
                     onClick={() => setSelectedPhotoIndex(i)}
+                    aria-label={`Select photo ${i + 1}${selectedPhotoIndex === i ? " (selected)" : ""}`}
                     className={`w-full aspect-square rounded-lg overflow-hidden transition-all ${
                       selectedPhotoIndex === i
                         ? "ring-2 ring-indigo-500 ring-offset-2"
@@ -438,7 +479,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   >
                     <img
                       src={photo.url}
-                      alt=""
+                      alt={`Photo ${i + 1} thumbnail`}
                       className="w-full h-full object-cover"
                       style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
                     />
