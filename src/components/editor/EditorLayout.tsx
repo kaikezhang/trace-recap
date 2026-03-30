@@ -212,7 +212,7 @@ function EditorContent() {
 
       const textFieldExpr =
         cityLabelLang === "zh"
-          ? (["coalesce", ["get", "name_zh-Hant"], ["get", "name_zh-Hans"], ["get", "name"]] as mapboxgl.ExpressionSpecification)
+          ? (["coalesce", ["get", "name_zh-Hans"], ["get", "name_zh-Hant"], ["get", "name"]] as mapboxgl.ExpressionSpecification)
           : (["coalesce", ["get", "name_en"], ["get", "name"]] as mapboxgl.ExpressionSpecification);
 
       for (const layer of style.layers) {

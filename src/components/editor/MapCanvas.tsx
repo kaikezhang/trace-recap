@@ -90,7 +90,7 @@ export default function MapCanvas() {
         // Forward geocode English name → Chinese (avoids granularity mismatch)
         let nameZh: string | undefined;
         try {
-          const resZh = await fetch(`/api/geocode?q=${encodeURIComponent(name)}&language=zh`);
+          const resZh = await fetch(`/api/geocode?q=${encodeURIComponent(name)}&language=zh-Hans`);
           const dataZh = await resZh.json();
           nameZh = dataZh.features?.[0]?.text || dataZh.features?.[0]?.place_name || undefined;
         } catch { /* non-critical */ }

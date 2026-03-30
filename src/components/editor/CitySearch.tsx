@@ -118,7 +118,7 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
       try {
         const name = result.text || result.place_name;
         const res = await fetch(
-          `/api/geocode?q=${encodeURIComponent(name)}&language=zh`
+          `/api/geocode?q=${encodeURIComponent(name)}&language=zh-Hans`
         );
         const data = await res.json();
         nameZh =
