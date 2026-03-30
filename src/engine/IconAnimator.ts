@@ -129,13 +129,11 @@ export class IconAnimator {
     const key = `${mode}-${direction}`;
     if (key === this.currentPngKey && this.usingSolid) return;
 
-    // Switch visibility: show PNG, hide Lottie
-    if (!this.usingSolid) {
-      this.hideLottie();
-      this.imgEl.style.display = "block";
-      this.lottieEl.style.display = "none";
-      this.usingSolid = true;
-    }
+    // Always ensure correct visibility (handles initial state + lottie→solid transitions)
+    this.hideLottie();
+    this.imgEl.style.display = "block";
+    this.lottieEl.style.display = "none";
+    this.usingSolid = true;
 
     this.currentPngKey = key;
     this.currentMode = null;
@@ -176,12 +174,10 @@ export class IconAnimator {
 
   /** Switch to a Lottie animation (outline/soft styles) */
   private setLottieMode(mode: TransportMode, iconStyle: TransportIconStyle) {
-    // Switch visibility: hide PNG, show Lottie
-    if (this.usingSolid) {
-      this.imgEl.style.display = "none";
-      this.lottieEl.style.display = "block";
-      this.usingSolid = false;
-    }
+    // Always ensure correct visibility (handles initial state + solid→lottie transitions)
+    this.imgEl.style.display = "none";
+    this.lottieEl.style.display = "block";
+    this.usingSolid = false;
 
     if (mode === this.currentMode && iconStyle === this.currentIconStyle) return;
 
@@ -301,7 +297,7 @@ export class IconAnimator {
     this.containerEl.style.width = `${size}px`;
     this.containerEl.style.height = `${size}px`;
     this.containerEl.style.opacity = showIcon ? String(opacity) : "0";
-    this.containerEl.style.display = showIcon ? "block" : "none";
+    this.containerEl.style.display = showIcon ? "flex" : "none";
 
     this.lastState = {
       visible: showIcon && opacity > 0,
