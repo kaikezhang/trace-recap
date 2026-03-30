@@ -246,21 +246,11 @@ export class AnimationEngine {
         // Minimum 1.5s for variable portion so short legs aren't invisible
         const effectiveVariable = Math.max(variableForGroup, 1.5);
 
-        if (isFromWaypoint && isToWaypoint) {
-          // Pure waypoint transit: minimal zoom phases, most time to FLY
-          zoomOutDur = effectiveVariable * 0.08;
-          zoomInDur = effectiveVariable * 0.08;
-          flyDur = effectiveVariable - zoomOutDur - zoomInDur;
-        } else if (isToWaypoint) {
-          // Flying TO a waypoint: small zoom-out, no zoom-in (passing through)
-          zoomOutDur = effectiveVariable * 0.12;
-          zoomInDur = effectiveVariable * 0.05;
-          flyDur = effectiveVariable - zoomOutDur - zoomInDur;
-        } else if (isFromWaypoint) {
-          // Flying FROM a waypoint: small zoom-out, normal zoom-in
-          zoomOutDur = effectiveVariable * 0.08;
-          zoomInDur = effectiveVariable * 0.18;
-          flyDur = effectiveVariable - zoomOutDur - zoomInDur;
+        if (isFromWaypoint || isToWaypoint) {
+          // Waypoint segments: no zoom, no stop — 100% FLY
+          zoomOutDur = 0;
+          zoomInDur = 0;
+          flyDur = effectiveVariable;
         } else {
           // Normal segment: allocate most time to FLY
           zoomOutDur = effectiveVariable * 0.12;
