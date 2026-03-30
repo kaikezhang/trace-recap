@@ -237,7 +237,31 @@ export default function TopToolbar() {
                 ref={settingsPanelRef}
                 className="absolute right-0 top-full mt-2 z-50 w-64 rounded-lg border bg-background p-4 shadow-lg space-y-4"
               >
-                <p className="text-sm font-semibold">City Label Settings</p>
+                <p className="text-sm font-semibold">Settings</p>
+                {/* Map Style */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Map Style</label>
+                  <div className="flex gap-2">
+                    {([
+                      { value: "light", label: "Light" },
+                      { value: "dark", label: "Dark" },
+                      { value: "satellite", label: "Satellite" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                          mapStyle === opt.value
+                            ? "bg-indigo-500 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
+                        onClick={() => setMapStyle(opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <hr className="border-gray-100" />
                 {/* Language toggle */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Language</label>
@@ -352,29 +376,7 @@ export default function TopToolbar() {
                 Save Route
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Map className="h-4 w-4" />
-                  Map Style
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuRadioGroup
-                    value={mapStyle}
-                    onValueChange={(v) => setMapStyle(v as MapStyle)}
-                  >
-                    <DropdownMenuRadioItem value="light">
-                      Light
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="dark">
-                      Dark
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="satellite">
-                      Satellite
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSeparator />
+
               <DropdownMenuItem onClick={() => setExportDialogOpen(true)}>
                 <Download className="h-4 w-4" />
                 Export Video
