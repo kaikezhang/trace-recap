@@ -191,8 +191,21 @@ function EditorContent() {
     return () => observer.disconnect();
   }, [constrainedMapSize?.height, constrainedMapSize?.width, map, viewportRatio]);
   // Apply language to Mapbox base map labels when cityLabelLang changes
+  // Also re-apply after style reloads (e.g. map style switch)
   useEffect(() => {
     if (!map) return;
+
+    // Only target name-label layers (place, settlement, country, state, etc.)
+    // Skip shield/transit/ref layers whose text-field uses other properties
+    const NAME_LAYER_PATTERNS = [
+      "settlement", "place", "country", "state", "continent",
+      "city", "town", "village", "island", "region", "capital",
+    ];
+
+    const isNameLabelLayer = (layerId: string): boolean => {
+      const id = layerId.toLowerCase();
+      return NAME_LAYER_PATTERNS.some((p) => id.includes(p));
+    };
 
     const applyMapLanguage = () => {
       const style = map.getStyle();
@@ -205,6 +218,7 @@ function EditorContent() {
 
       for (const layer of style.layers) {
         if (layer.type !== "symbol") continue;
+        if (!isNameLabelLayer(layer.id)) continue;
         const textField = map.getLayoutProperty(layer.id, "text-field");
         if (textField != null) {
           map.setLayoutProperty(layer.id, "text-field", textFieldExpr);
@@ -214,9 +228,12 @@ function EditorContent() {
 
     if (map.isStyleLoaded()) {
       applyMapLanguage();
-    } else {
-      map.once("style.load", applyMapLanguage);
     }
+    // Re-apply on every style reload (map style change)
+    map.on("style.load", applyMapLanguage);
+    return () => {
+      map.off("style.load", applyMapLanguage);
+    };
   }, [map, cityLabelLang]);
 
   const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
