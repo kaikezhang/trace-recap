@@ -107,22 +107,26 @@ export class IconAnimator {
     const totalLength = turf.length(line);
     const coords = routeLine.coordinates;
 
-    // Use start bearing for first half, end bearing for second half
-    // This handles great circle routes (e.g. Seoul→Seattle: north then south)
-    // without per-frame computation overhead
     const startPt = coords[0] as [number, number];
     const endPt = coords[coords.length - 1] as [number, number];
-    const midIdx = Math.floor(coords.length / 2);
-    const midPt = coords[midIdx] as [number, number];
-
-    const isSecondHalf = (phase === "FLY" && progress > 0.5) || phase === "ZOOM_IN" || phase === "ARRIVE";
-    const bearing = isSecondHalf
-      ? turf.bearing(turf.point(midPt), turf.point(endPt))
-      : turf.bearing(turf.point(startPt), turf.point(midPt));
-    const direction = bearingToDirection(bearing);
 
     // Determine which sub-segment the current position is on for the correct icon
     const mode = this.getTransportModeAtProgress(group, totalLength, phase, progress);
+
+    // Only flights use mid-point direction change (great circle routes curve significantly)
+    // All other transport modes use fixed start→end bearing
+    let bearing: number;
+    if (mode === "flight") {
+      const midIdx = Math.floor(coords.length / 2);
+      const midPt = coords[midIdx] as [number, number];
+      const isSecondHalf = (phase === "FLY" && progress > 0.5) || phase === "ZOOM_IN" || phase === "ARRIVE";
+      bearing = isSecondHalf
+        ? turf.bearing(turf.point(midPt), turf.point(endPt))
+        : turf.bearing(turf.point(startPt), turf.point(midPt));
+    } else {
+      bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
+    }
+    const direction = bearingToDirection(bearing);
     this.setIcon(mode, direction);
 
     let position: [number, number];
