@@ -14,6 +14,150 @@ export interface PhotoMeta {
   aspect: number; // naturalWidth / naturalHeight
 }
 
+interface LayoutSlot {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const MIN_ASPECT = 0.25;
+const MIN_CONTAINER_ASPECT = 0.1;
+const PORTRAIT_THRESHOLD = 0.9;
+
+function safeAspect(aspect: number): number {
+  return Math.max(aspect, MIN_ASPECT);
+}
+
+function safeContainerAspect(containerAspect: number): number {
+  return Math.max(containerAspect, MIN_CONTAINER_ASPECT);
+}
+
+function heightForWidth(width: number, photoAspect: number, containerAspect: number): number {
+  return width / safeAspect(photoAspect) / safeContainerAspect(containerAspect);
+}
+
+function widthForHeight(height: number, photoAspect: number, containerAspect: number): number {
+  return height * safeAspect(photoAspect) * safeContainerAspect(containerAspect);
+}
+
+function fitPhotoToSlot(slot: LayoutSlot, photo: PhotoMeta, containerAspect: number): PhotoRect {
+  const fittedHeight = heightForWidth(slot.width, photo.aspect, containerAspect);
+  if (fittedHeight <= slot.height) {
+    return {
+      x: slot.x,
+      y: slot.y + (slot.height - fittedHeight) / 2,
+      width: slot.width,
+      height: fittedHeight,
+    };
+  }
+
+  const fittedWidth = widthForHeight(slot.height, photo.aspect, containerAspect);
+  return {
+    x: slot.x + (slot.width - fittedWidth) / 2,
+    y: slot.y,
+    width: fittedWidth,
+    height: slot.height,
+  };
+}
+
+function layoutRows(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  gap: number,
+  rows: number[][]
+): PhotoRect[] {
+  if (rows.length === 0) return [];
+
+  const innerWidth = 1 - gap * 2;
+  const innerHeight = 1 - gap * (rows.length + 1);
+  const rowHeights = rows.map((row) => {
+    const rowAspectSum = row.reduce((sum, photoIndex) => sum + safeAspect(photos[photoIndex]?.aspect ?? 1), 0);
+    return innerWidth / rowAspectSum / safeContainerAspect(containerAspect);
+  });
+  const totalHeight = rowHeights.reduce((sum, height) => sum + height, 0);
+  const scale = totalHeight > 0 ? Math.min(1, innerHeight / totalHeight) : 1;
+  const scaledHeights = rowHeights.map((height) => height * scale);
+  const usedHeight = scaledHeights.reduce((sum, height) => sum + height, 0);
+  const rects: PhotoRect[] = new Array(photos.length);
+
+  let y = gap + (innerHeight - usedHeight) / 2;
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
+    const rowHeight = scaledHeights[rowIndex];
+    const rowWidths = row.map((photoIndex) => widthForHeight(rowHeight, photos[photoIndex]?.aspect ?? 1, containerAspect));
+    const usedWidth = rowWidths.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, row.length - 1);
+    let x = gap + (innerWidth - usedWidth) / 2;
+
+    for (let i = 0; i < row.length; i++) {
+      const photoIndex = row[i];
+      rects[photoIndex] = {
+        x,
+        y,
+        width: rowWidths[i],
+        height: rowHeight,
+      };
+      x += rowWidths[i] + gap;
+    }
+
+    y += rowHeight + gap;
+  }
+
+  return rects;
+}
+
+function fillSlots(
+  photos: PhotoMeta[],
+  slots: LayoutSlot[],
+  containerAspect: number,
+  order?: number[]
+): PhotoRect[] {
+  const rects: PhotoRect[] = new Array(photos.length);
+  const indices = order ?? photos.map((_, index) => index);
+
+  for (let i = 0; i < Math.min(indices.length, slots.length); i++) {
+    const photoIndex = indices[i];
+    rects[photoIndex] = fitPhotoToSlot(slots[i], photos[photoIndex], containerAspect);
+  }
+
+  return rects;
+}
+
+function scaleRectsToInnerBounds(rects: PhotoRect[], gap: number): PhotoRect[] {
+  if (rects.length === 0) return rects;
+
+  const minX = Math.min(...rects.map((rect) => rect.x));
+  const minY = Math.min(...rects.map((rect) => rect.y));
+  const maxX = Math.max(...rects.map((rect) => rect.x + rect.width));
+  const maxY = Math.max(...rects.map((rect) => rect.y + rect.height));
+
+  const boundsWidth = maxX - minX;
+  const boundsHeight = maxY - minY;
+  const available = 1 - gap * 2;
+  const scale = Math.min(
+    1,
+    boundsWidth > 0 ? available / boundsWidth : 1,
+    boundsHeight > 0 ? available / boundsHeight : 1
+  );
+
+  if (scale === 1 && minX >= gap && minY >= gap && maxX <= 1 - gap && maxY <= 1 - gap) {
+    return rects;
+  }
+
+  const scaledWidth = boundsWidth * scale;
+  const scaledHeight = boundsHeight * scale;
+  const offsetX = gap + (available - scaledWidth) / 2;
+  const offsetY = gap + (available - scaledHeight) / 2;
+
+  return rects.map((rect) => ({
+    ...rect,
+    x: offsetX + (rect.x - minX) * scale,
+    y: offsetY + (rect.y - minY) * scale,
+    width: rect.width * scale,
+    height: rect.height * scale,
+  }));
+}
+
 /**
  * Compute layout rects for N photos (1-9) based on their aspect ratios.
  * All returned values are fractions of the container (0-1).
@@ -32,219 +176,123 @@ export function computeAutoLayout(
 
   switch (n) {
     case 1:
-      return layoutOne(photos, gap);
+      return layoutOne(photos, containerAspect, gap);
     case 2:
-      return layoutTwo(photos, gap);
+      return layoutTwo(photos, containerAspect, gap);
     case 3:
-      return layoutThree(photos, gap);
+      return layoutThree(photos, containerAspect, gap);
     case 4:
-      return layoutFour(gap);
+      return layoutFour(photos, containerAspect, gap);
     case 5:
-      return layoutFive(gap);
+      return layoutFive(photos, containerAspect, gap);
     case 6:
-      return layoutSix(containerAspect, gap);
+      return layoutSix(photos, containerAspect, gap);
     case 7:
-      return layoutSeven(gap);
+      return layoutSeven(photos, containerAspect, gap);
     case 8:
-      return layoutEight(gap);
+      return layoutEight(photos, containerAspect, gap);
     case 9:
-      return layoutNine(gap);
+      return layoutNine(photos, containerAspect, gap);
     default:
       // For >9 just use 3x3 grid with first 9
-      return layoutNine(gap);
+      return layoutNine(photos.slice(0, 9), containerAspect, gap);
   }
 }
 
-/** 1 photo: centered. Landscape = full width; portrait = 60% width centered. */
-function layoutOne(photos: PhotoMeta[], gap: number): PhotoRect[] {
-  const isLandscape = photos[0].aspect >= 1;
-  if (isLandscape) {
-    const w = 1 - gap * 2;
-    const h = w / photos[0].aspect;
-    return [{ x: gap, y: (1 - h) / 2, width: w, height: Math.min(h, 1 - gap * 2) }];
-  }
-  // Portrait
-  const w = 0.6;
-  const h = Math.min(w / photos[0].aspect, 1 - gap * 2);
-  const actualW = Math.min(w, h * photos[0].aspect);
-  return [{ x: (1 - actualW) / 2, y: (1 - h) / 2, width: actualW, height: h }];
+/** 1 photo: fit within the container while preserving the photo aspect. */
+function layoutOne(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  return fillSlots(
+    photos,
+    [{ x: gap, y: gap, width: 1 - gap * 2, height: 1 - gap * 2 }],
+    containerAspect
+  );
 }
 
 /** 2 photos: side by side if both landscape/square; stacked if both portrait; mixed: landscape top, portrait below. */
-function layoutTwo(photos: PhotoMeta[], gap: number): PhotoRect[] {
-  const isP0 = photos[0].aspect < 0.9;
-  const isP1 = photos[1].aspect < 0.9;
+function layoutTwo(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  const portraitFlags = photos.map((photo) => safeAspect(photo.aspect) < PORTRAIT_THRESHOLD);
+  const portraitCount = portraitFlags.filter(Boolean).length;
 
-  if (!isP0 && !isP1) {
-    // Both landscape/square — side by side
-    const w = (1 - gap * 3) / 2;
-    const h = 0.7;
-    return [
-      { x: gap, y: (1 - h) / 2, width: w, height: h },
-      { x: gap * 2 + w, y: (1 - h) / 2, width: w, height: h },
-    ];
+  if (portraitCount === 1) {
+    const landscapeIndex = portraitFlags[0] ? 1 : 0;
+    const portraitIndex = portraitFlags[0] ? 0 : 1;
+    return layoutRows(photos, containerAspect, gap, [[landscapeIndex], [portraitIndex]]);
   }
 
-  if (isP0 && isP1) {
-    // Both portrait — stacked vertically
-    const h = (1 - gap * 3) / 2;
-    const w = 0.6;
-    const xOff = (1 - w) / 2;
-    return [
-      { x: xOff, y: gap, width: w, height: h },
-      { x: xOff, y: gap * 2 + h, width: w, height: h },
-    ];
+  if (portraitCount === 2) {
+    return containerAspect >= 1
+      ? layoutRows(photos, containerAspect, gap, [[0, 1]])
+      : layoutRows(photos, containerAspect, gap, [[0], [1]]);
   }
 
-  // Mixed: landscape on top, portrait below
-  const landscapeIdx = isP0 ? 1 : 0;
-  const portraitIdx = isP0 ? 0 : 1;
-  const topH = 0.5 - gap;
-  const botH = 0.5 - gap;
-  const rects: PhotoRect[] = [];
-  rects[landscapeIdx] = { x: gap, y: gap, width: 1 - gap * 2, height: topH };
-  const botW = 0.5;
-  rects[portraitIdx] = { x: (1 - botW) / 2, y: gap * 2 + topH, width: botW, height: botH };
-  return rects;
+  return containerAspect >= 1
+    ? layoutRows(photos, containerAspect, gap, [[0, 1]])
+    : layoutRows(photos, containerAspect, gap, [[0], [1]]);
 }
 
 /** 3 photos: 1 big left (60%) + 2 small right. If all portraits: 3 equal columns. */
-function layoutThree(photos: PhotoMeta[], gap: number): PhotoRect[] {
-  const allPortrait = photos.every((p) => p.aspect < 0.9);
+function layoutThree(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  const portraitFlags = photos.map((photo) => safeAspect(photo.aspect) < PORTRAIT_THRESHOLD);
+  const portraitIndices = photos
+    .map((_, index) => index)
+    .filter((index) => portraitFlags[index]);
+  const landscapeIndices = photos
+    .map((_, index) => index)
+    .filter((index) => !portraitFlags[index]);
 
-  if (allPortrait) {
-    // 3 equal columns
-    const w = (1 - gap * 4) / 3;
-    const h = 0.8;
-    const yOff = (1 - h) / 2;
-    return [
-      { x: gap, y: yOff, width: w, height: h },
-      { x: gap * 2 + w, y: yOff, width: w, height: h },
-      { x: gap * 3 + w * 2, y: yOff, width: w, height: h },
-    ];
+  if (landscapeIndices.length === 3 && containerAspect < 1) {
+    return layoutRows(photos, containerAspect, gap, [[0], [1], [2]]);
   }
 
-  // 1 big left (60%), 2 small right stacked
-  const leftW = 0.6 - gap * 1.5;
-  const rightW = 0.4 - gap * 1.5;
-  const fullH = 1 - gap * 2;
-  const rightH = (fullH - gap) / 2;
+  if (portraitIndices.length === 3 && containerAspect >= 1) {
+    return layoutRows(photos, containerAspect, gap, [[0, 1, 2]]);
+  }
 
-  return [
-    { x: gap, y: gap, width: leftW, height: fullH },
-    { x: gap * 2 + leftW, y: gap, width: rightW, height: rightH },
-    { x: gap * 2 + leftW, y: gap * 2 + rightH, width: rightW, height: rightH },
-  ];
+  if (landscapeIndices.length === 1 && portraitIndices.length === 2) {
+    return layoutRows(photos, containerAspect, gap, [[landscapeIndices[0]], portraitIndices]);
+  }
+
+  if (landscapeIndices.length === 2 && portraitIndices.length === 1) {
+    return containerAspect < 1
+      ? layoutRows(photos, containerAspect, gap, landscapeIndices.map((index) => [index]).concat([[portraitIndices[0]]]))
+      : layoutRows(photos, containerAspect, gap, [landscapeIndices, [portraitIndices[0]]]);
+  }
+
+  return containerAspect >= 1
+    ? layoutRows(photos, containerAspect, gap, [[0, 1], [2]])
+    : layoutRows(photos, containerAspect, gap, [[0], [1, 2]]);
 }
 
 /** 4 photos: 2x2 grid */
-function layoutFour(gap: number): PhotoRect[] {
-  const w = (1 - gap * 3) / 2;
-  const h = (1 - gap * 3) / 2;
-  return [
-    { x: gap, y: gap, width: w, height: h },
-    { x: gap * 2 + w, y: gap, width: w, height: h },
-    { x: gap, y: gap * 2 + h, width: w, height: h },
-    { x: gap * 2 + w, y: gap * 2 + h, width: w, height: h },
-  ];
+function layoutFour(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  return layoutRows(photos, containerAspect, gap, [[0, 1], [2, 3]]);
 }
 
 /** 5 photos: top row 2 (60% height), bottom row 3 (40% height) */
-function layoutFive(gap: number): PhotoRect[] {
-  const topH = 0.6 - gap * 1.5;
-  const botH = 0.4 - gap * 1.5;
-  const topW = (1 - gap * 3) / 2;
-  const botW = (1 - gap * 4) / 3;
-
-  return [
-    { x: gap, y: gap, width: topW, height: topH },
-    { x: gap * 2 + topW, y: gap, width: topW, height: topH },
-    { x: gap, y: gap * 2 + topH, width: botW, height: botH },
-    { x: gap * 2 + botW, y: gap * 2 + topH, width: botW, height: botH },
-    { x: gap * 3 + botW * 2, y: gap * 2 + topH, width: botW, height: botH },
-  ];
+function layoutFive(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  return layoutRows(photos, containerAspect, gap, [[0, 1], [2, 3, 4]]);
 }
 
 /** 6 photos: 2x3 or 3x2 depending on container aspect */
-function layoutSix(containerAspect: number, gap: number): PhotoRect[] {
-  if (containerAspect >= 1) {
-    // Landscape container: 2 rows, 3 columns
-    const w = (1 - gap * 4) / 3;
-    const h = (1 - gap * 3) / 2;
-    return [
-      { x: gap, y: gap, width: w, height: h },
-      { x: gap * 2 + w, y: gap, width: w, height: h },
-      { x: gap * 3 + w * 2, y: gap, width: w, height: h },
-      { x: gap, y: gap * 2 + h, width: w, height: h },
-      { x: gap * 2 + w, y: gap * 2 + h, width: w, height: h },
-      { x: gap * 3 + w * 2, y: gap * 2 + h, width: w, height: h },
-    ];
-  }
-  // Portrait container: 3 rows, 2 columns
-  const w = (1 - gap * 3) / 2;
-  const h = (1 - gap * 4) / 3;
-  return [
-    { x: gap, y: gap, width: w, height: h },
-    { x: gap * 2 + w, y: gap, width: w, height: h },
-    { x: gap, y: gap * 2 + h, width: w, height: h },
-    { x: gap * 2 + w, y: gap * 2 + h, width: w, height: h },
-    { x: gap, y: gap * 3 + h * 2, width: w, height: h },
-    { x: gap * 2 + w, y: gap * 3 + h * 2, width: w, height: h },
-  ];
+function layoutSix(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  return containerAspect >= 1
+    ? layoutRows(photos, containerAspect, gap, [[0, 1, 2], [3, 4, 5]])
+    : layoutRows(photos, containerAspect, gap, [[0, 1], [2, 3], [4, 5]]);
 }
 
 /** 7 photos: top row 3 (55% height), bottom row 4 (45% height) */
-function layoutSeven(gap: number): PhotoRect[] {
-  const topH = 0.55 - gap * 1.5;
-  const botH = 0.45 - gap * 1.5;
-  const topW = (1 - gap * 4) / 3;
-  const botW = (1 - gap * 5) / 4;
-
-  return [
-    { x: gap, y: gap, width: topW, height: topH },
-    { x: gap * 2 + topW, y: gap, width: topW, height: topH },
-    { x: gap * 3 + topW * 2, y: gap, width: topW, height: topH },
-    { x: gap, y: gap * 2 + topH, width: botW, height: botH },
-    { x: gap * 2 + botW, y: gap * 2 + topH, width: botW, height: botH },
-    { x: gap * 3 + botW * 2, y: gap * 2 + topH, width: botW, height: botH },
-    { x: gap * 4 + botW * 3, y: gap * 2 + topH, width: botW, height: botH },
-  ];
+function layoutSeven(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  return layoutRows(photos, containerAspect, gap, [[0, 1, 2], [3, 4, 5, 6]]);
 }
 
 /** 8 photos: top 3, middle 3, bottom 2 (wider) */
-function layoutEight(gap: number): PhotoRect[] {
-  const rowH = (1 - gap * 4) / 3;
-  const w3 = (1 - gap * 4) / 3;
-  const w2 = (1 - gap * 3) / 2;
-
-  return [
-    { x: gap, y: gap, width: w3, height: rowH },
-    { x: gap * 2 + w3, y: gap, width: w3, height: rowH },
-    { x: gap * 3 + w3 * 2, y: gap, width: w3, height: rowH },
-    { x: gap, y: gap * 2 + rowH, width: w3, height: rowH },
-    { x: gap * 2 + w3, y: gap * 2 + rowH, width: w3, height: rowH },
-    { x: gap * 3 + w3 * 2, y: gap * 2 + rowH, width: w3, height: rowH },
-    { x: gap, y: gap * 3 + rowH * 2, width: w2, height: rowH },
-    { x: gap * 2 + w2, y: gap * 3 + rowH * 2, width: w2, height: rowH },
-  ];
+function layoutEight(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  return layoutRows(photos, containerAspect, gap, [[0, 1, 2], [3, 4, 5], [6, 7]]);
 }
 
 /** 9 photos: 3x3 grid */
-function layoutNine(gap: number): PhotoRect[] {
-  const w = (1 - gap * 4) / 3;
-  const h = (1 - gap * 4) / 3;
-  const rects: PhotoRect[] = [];
-  for (let row = 0; row < 3; row++) {
-    for (let col = 0; col < 3; col++) {
-      rects.push({
-        x: gap + col * (w + gap),
-        y: gap + row * (h + gap),
-        width: w,
-        height: h,
-      });
-    }
-  }
-  return rects;
+function layoutNine(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  return layoutRows(photos, containerAspect, gap, [[0, 1, 2], [3, 4, 5], [6, 7, 8]]);
 }
 
 /**
@@ -263,13 +311,14 @@ function seededRandom(seed: string): () => number {
 }
 
 /** Scatter: semi-random positions with rotation, like photos on a table */
-function layoutScatter(photos: PhotoMeta[], gap: number): PhotoRect[] {
+function layoutScatter(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
   if (n === 1) {
-    const w = 0.5;
-    const h = 0.5;
-    return [{ x: (1 - w) / 2, y: (1 - h) / 2, width: w, height: h, rotation: 0 }];
+    return [{
+      ...fitPhotoToSlot({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }, photos[0], containerAspect),
+      rotation: 0,
+    }];
   }
 
   // Seed based on photo IDs for deterministic layout
@@ -284,8 +333,13 @@ function layoutScatter(photos: PhotoMeta[], gap: number): PhotoRect[] {
   for (let i = 0; i < n; i++) {
     // Size variation: 80-110% of base
     const sizeScale = 0.8 + rand() * 0.3;
-    const w = baseSize * sizeScale;
-    const h = baseSize * sizeScale;
+    const fitted = fitPhotoToSlot(
+      { x: 0, y: 0, width: baseSize * sizeScale, height: baseSize * sizeScale },
+      photos[i],
+      containerAspect
+    );
+    const w = fitted.width;
+    const h = fitted.height;
 
     // Random position within bounds
     const maxX = 1 - w - margin;
@@ -437,21 +491,21 @@ export function computeTemplateLayout(
 
   switch (template) {
     case "grid":
-      return layoutGrid(photos.length, g, customProportions);
+      return layoutGrid(photos, containerAspect, g, customProportions);
     case "hero":
-      return layoutHero(photos.length, g, customProportions);
+      return layoutHero(photos, containerAspect, g, customProportions);
     case "masonry":
-      return layoutMasonry(photos, g);
+      return layoutMasonry(photos, containerAspect, g);
     case "filmstrip":
-      return layoutFilmstrip(photos, g);
+      return layoutFilmstrip(photos, containerAspect, g);
     case "scatter":
-      return layoutScatter(photos, g);
+      return layoutScatter(photos, containerAspect, g);
     case "polaroid":
-      return layoutPolaroid(photos, g);
+      return layoutPolaroid(photos, containerAspect, g);
     case "overlap":
-      return layoutOverlap(photos.length, g);
+      return layoutOverlap(photos, containerAspect, g);
     case "full":
-      return layoutFull(photos.length);
+      return layoutFull(photos, containerAspect);
     default:
       return computeAutoLayout(photos, containerAspect, gapPx, widthPx);
   }
@@ -459,10 +513,12 @@ export function computeTemplateLayout(
 
 /** Grid: equal-sized cells filling rows/columns, with optional custom proportions */
 function layoutGrid(
-  n: number,
+  photos: PhotoMeta[],
+  containerAspect: number,
   gap: number,
   customProportions?: { rows?: number[]; cols?: number[] }
 ): PhotoRect[] {
+  const n = photos.length;
   if (n === 0) return [];
   const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);
@@ -479,7 +535,7 @@ function layoutGrid(
   const availH = 1 - gap * (rows + 1);
   const rowHeights = rowWeights.map((w: number) => (w / totalRowWeight) * availH);
 
-  const rects: PhotoRect[] = [];
+  const slots: LayoutSlot[] = [];
   for (let i = 0; i < n; i++) {
     const row = Math.floor(i / cols);
     const col = i % cols;
@@ -487,27 +543,31 @@ function layoutGrid(
     for (let c = 0; c < col; c++) x += colWidths[c] + gap;
     let y = gap;
     for (let r = 0; r < row; r++) y += rowHeights[r] + gap;
-    rects.push({
+    slots.push({
       x,
       y,
       width: colWidths[col],
       height: rowHeights[row],
     });
   }
-  return rects;
+  return fillSlots(photos, slots, containerAspect);
 }
 
 /** Hero: first photo large (~60% area), remaining in smaller grid */
 function layoutHero(
-  n: number,
+  photos: PhotoMeta[],
+  containerAspect: number,
   gap: number,
   customProportions?: { rows?: number[]; cols?: number[] }
 ): PhotoRect[] {
+  const n = photos.length;
   if (n === 0) return [];
   if (n === 1) {
-    const w = 1 - gap * 2;
-    const h = 1 - gap * 2;
-    return [{ x: gap, y: gap, width: w, height: h }];
+    return fillSlots(
+      photos,
+      [{ x: gap, y: gap, width: 1 - gap * 2, height: 1 - gap * 2 }],
+      containerAspect
+    );
   }
 
   // Custom proportions: cols[0] = hero weight, cols[1] = right panel weight
@@ -521,16 +581,14 @@ function layoutHero(
   const rows = Math.min(remaining, 3);
   const cellH = (heroH - gap * (rows - 1)) / rows;
 
-  const rects: PhotoRect[] = [
-    { x: gap, y: gap, width: heroW, height: heroH },
-  ];
+  const slots: LayoutSlot[] = [{ x: gap, y: gap, width: heroW, height: heroH }];
 
   for (let i = 0; i < remaining; i++) {
     const row = i % rows;
     const col = Math.floor(i / rows);
     const colCount = Math.ceil(remaining / rows);
     const cellW = colCount > 1 ? (rightW - gap * (colCount - 1)) / colCount : rightW;
-    rects.push({
+    slots.push({
       x: gap * 2 + heroW + col * (cellW + gap),
       y: gap + row * (cellH + gap),
       width: cellW,
@@ -538,17 +596,19 @@ function layoutHero(
     });
   }
 
-  return rects;
+  return fillSlots(photos, slots, containerAspect);
 }
 
 /** Masonry: alternating tall and short photos in columns */
-function layoutMasonry(photos: PhotoMeta[], gap: number): PhotoRect[] {
+function layoutMasonry(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
   if (n === 1) {
-    const w = 1 - gap * 2;
-    const h = 1 - gap * 2;
-    return [{ x: gap, y: gap, width: w, height: h }];
+    return fillSlots(
+      photos,
+      [{ x: gap, y: gap, width: 1 - gap * 2, height: 1 - gap * 2 }],
+      containerAspect
+    );
   }
 
   const cols = n <= 2 ? 2 : 3;
@@ -562,29 +622,18 @@ function layoutMasonry(photos: PhotoMeta[], gap: number): PhotoRect[] {
     for (let c = 1; c < cols; c++) {
       if (colTops[c] < colTops[minCol]) minCol = c;
     }
-    // Alternate height: tall (0.5) for even indices, short (0.3) for odd
-    const cellH = i % 2 === 0 ? 0.45 : 0.3;
+    const cellH = heightForWidth(colW, photos[i].aspect, containerAspect);
     const x = gap + minCol * (colW + gap);
     const y = colTops[minCol];
     rects[i] = { x, y, width: colW, height: cellH };
     colTops[minCol] = y + cellH + gap;
   }
 
-  // Normalize: scale all rects so the tallest column fits within [0, 1]
-  const maxBottom = Math.max(...colTops);
-  if (maxBottom > 1) {
-    const scale = (1 - gap) / (maxBottom - gap);
-    for (const r of rects) {
-      r.y = gap + (r.y - gap) * scale;
-      r.height *= scale;
-    }
-  }
-
-  return rects;
+  return scaleRectsToInnerBounds(rects, gap);
 }
 
 /** Polaroid: photos as Polaroid-style cards with white borders, slight rotation, scattered */
-function layoutPolaroid(photos: PhotoMeta[], gap: number): PhotoRect[] {
+function layoutPolaroid(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
 
@@ -592,10 +641,11 @@ function layoutPolaroid(photos: PhotoMeta[], gap: number): PhotoRect[] {
   const rand = seededRandom(seed);
 
   if (n === 1) {
-    const w = 0.4;
-    const h = 0.5;
     const rotation = (rand() - 0.5) * 10;
-    return [{ x: (1 - w) / 2, y: (1 - h) / 2, width: w, height: h, rotation }];
+    return [{
+      ...fitPhotoToSlot({ x: 0.3, y: 0.25, width: 0.4, height: 0.5 }, { ...photos[0], aspect: photos[0].aspect * 0.88 }, containerAspect),
+      rotation,
+    }];
   }
 
   const baseSize = Math.min(0.42, 0.85 / Math.sqrt(n));
@@ -604,8 +654,13 @@ function layoutPolaroid(photos: PhotoMeta[], gap: number): PhotoRect[] {
   const rects: PhotoRect[] = [];
   for (let i = 0; i < n; i++) {
     const sizeScale = 0.85 + rand() * 0.3;
-    const w = baseSize * sizeScale;
-    const h = baseSize * sizeScale * 1.15; // taller for Polaroid proportions
+    const fitted = fitPhotoToSlot(
+      { x: 0, y: 0, width: baseSize * sizeScale, height: baseSize * sizeScale * 1.15 },
+      { ...photos[i], aspect: photos[i].aspect * 0.88 },
+      containerAspect
+    );
+    const w = fitted.width;
+    const h = fitted.height;
 
     const maxX = 1 - w - margin;
     const maxY = 1 - h - margin;
@@ -653,12 +708,14 @@ function layoutPolaroid(photos: PhotoMeta[], gap: number): PhotoRect[] {
 }
 
 /** Overlap: photos stacked with depth, each offset right and down */
-function layoutOverlap(n: number, gap: number): PhotoRect[] {
+function layoutOverlap(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  const n = photos.length;
   if (n === 0) return [];
   if (n === 1) {
-    const w = 0.8;
-    const h = 0.8;
-    return [{ x: (1 - w) / 2, y: (1 - h) / 2, width: w, height: h, rotation: 0 }];
+    return [{
+      ...fitPhotoToSlot({ x: 0.1, y: 0.1, width: 0.8, height: 0.8 }, photos[0], containerAspect),
+      rotation: 0,
+    }];
   }
 
   const rects: PhotoRect[] = [];
@@ -684,35 +741,42 @@ function layoutOverlap(n: number, gap: number): PhotoRect[] {
     const y = startY + i * offsetStep;
     // Slight rotation variation
     const rotation = i === 0 ? 0 : ((i % 2 === 0 ? 1 : -1) * (1 + i * 0.8));
-    rects.push({ x, y, width: scale, height: scale, rotation });
+    rects.push({
+      ...fitPhotoToSlot({ x, y, width: scale, height: scale }, photos[i], containerAspect),
+      rotation,
+    });
   }
 
   return rects;
 }
 
-/** Full: single photo fills entire container edge-to-edge */
-function layoutFull(n: number): PhotoRect[] {
-  if (n === 0) return [];
-  // Only show first photo, full bleed
-  return [{ x: 0, y: 0, width: 1, height: 1 }];
+/** Full: single photo fits the whole container while preserving its aspect. */
+function layoutFull(photos: PhotoMeta[], containerAspect: number): PhotoRect[] {
+  if (photos.length === 0) return [];
+  return fillSlots(
+    [photos[0]],
+    [{ x: 0, y: 0, width: 1, height: 1 }],
+    containerAspect
+  );
 }
 
 /** Filmstrip: single horizontal row, all same height */
-function layoutFilmstrip(photos: PhotoMeta[], gap: number): PhotoRect[] {
+function layoutFilmstrip(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
 
-  const rowH = 0.7;
-  const yOff = (1 - rowH) / 2;
-
-  // Width proportional to aspect ratio
-  const totalAspect = photos.reduce((sum, p) => sum + Math.max(p.aspect, 0.5), 0);
+  const totalAspect = photos.reduce((sum, photo) => sum + safeAspect(photo.aspect), 0);
+  const innerWidth = 1 - gap * 2;
   const availW = 1 - gap * (n + 1);
+  const availH = 1 - gap * 2;
+  const rowH = Math.min(availH, availW / totalAspect / safeContainerAspect(containerAspect));
+  const usedW = photos.reduce((sum, photo) => sum + widthForHeight(rowH, photo.aspect, containerAspect), 0)
+    + gap * Math.max(0, n - 1);
+  const yOff = (1 - rowH) / 2;
+  let x = gap + (innerWidth - usedW) / 2;
   const rects: PhotoRect[] = [];
-  let x = gap;
   for (let i = 0; i < n; i++) {
-    const aspect = Math.max(photos[i].aspect, 0.5);
-    const w = (aspect / totalAspect) * availW;
+    const w = widthForHeight(rowH, photos[i].aspect, containerAspect);
     rects.push({ x, y: yOff, width: w, height: rowH });
     x += w + gap;
   }
