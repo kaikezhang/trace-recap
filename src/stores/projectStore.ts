@@ -667,7 +667,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           // Forward geocode English name → Chinese: more reliable than reverse geocode
           // which returns the nearest place at a finer granularity (e.g. district instead of city)
           const res = await fetch(
-            `/api/geocode?q=${encodeURIComponent(loc.name)}&language=zh`,
+            `/api/geocode?q=${encodeURIComponent(loc.name)}&language=zh-Hans`,
           );
           const data = await res.json();
           const nameZh =
