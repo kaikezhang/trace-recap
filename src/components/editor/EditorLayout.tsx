@@ -179,16 +179,21 @@ function EditorContent() {
   }, [map, viewportRatio]);
 
   useEffect(() => {
-    if (!map || !mapContainerRef.current) return;
-
+    if (!map) return;
     map.resize();
+  }, [constrainedMapSize?.height, constrainedMapSize?.width, map]);
+
+  useEffect(() => {
+    const mapContainer = mapContainerRef.current;
+    if (!map || !mapContainer) return;
 
     const observer = new ResizeObserver(() => {
       map.resize();
     });
-    observer.observe(mapContainerRef.current);
+    observer.observe(mapContainer);
     return () => observer.disconnect();
-  }, [constrainedMapSize?.height, constrainedMapSize?.width, map, viewportRatio]);
+  }, [map]);
+
   const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
   const currentCityLabelZh = useAnimationStore((s) => s.currentCityLabelZh);
   const currentCityLabel =

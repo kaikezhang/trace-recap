@@ -5,7 +5,7 @@ export interface ViewportDimensions {
   height: number;
 }
 
-const EXPORT_HEIGHT_CANDIDATES = [1080, 720] as const;
+const EXPORT_HEIGHT = 1080;
 
 export function parseViewportRatio(
   viewportRatio: AspectRatio,
@@ -39,12 +39,7 @@ export function computeContainedViewportSize(
 
   const aspectRatio = ratio.width / ratio.height;
   let targetWidth = Math.min(availableWidth, availableHeight * aspectRatio);
-  let targetHeight = targetWidth / aspectRatio;
-
-  if (targetHeight > availableHeight) {
-    targetHeight = availableHeight;
-    targetWidth = targetHeight * aspectRatio;
-  }
+  const targetHeight = targetWidth / aspectRatio;
 
   return {
     width: Math.round(targetWidth),
@@ -62,15 +57,8 @@ export function getExportViewportSize(
     return { width: canvasWidth, height: canvasHeight };
   }
 
-  for (const exportHeight of EXPORT_HEIGHT_CANDIDATES) {
-    const exportWidth = Math.round(exportHeight * (ratio.width / ratio.height));
-    if (Number.isFinite(exportWidth) && exportWidth > 0) {
-      return {
-        width: exportWidth,
-        height: exportHeight,
-      };
-    }
-  }
-
-  return { width: canvasWidth, height: canvasHeight };
+  return {
+    width: Math.round(EXPORT_HEIGHT * (ratio.width / ratio.height)),
+    height: EXPORT_HEIGHT,
+  };
 }
