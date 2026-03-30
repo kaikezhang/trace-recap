@@ -8,6 +8,9 @@ import {
   LayoutTemplate,
   Image as ImageIcon,
   Images,
+  Layers,
+  Square,
+  Maximize,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
@@ -21,13 +24,16 @@ interface PhotoLayoutEditorProps {
   onClose: () => void;
 }
 
-type LayoutStyle = "grid" | "collage" | "single" | "carousel";
+type LayoutStyle = "grid" | "collage" | "single" | "carousel" | "polaroid" | "overlap" | "full";
 
 const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; template: LayoutTemplateType | "auto" }[] = [
   { id: "grid", label: "Grid", icon: LayoutGrid, template: "grid" },
   { id: "collage", label: "Collage", icon: LayoutTemplate, template: "hero" },
   { id: "single", label: "Single", icon: ImageIcon, template: "auto" },
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
+  { id: "polaroid", label: "Polaroid", icon: Square, template: "polaroid" },
+  { id: "overlap", label: "Overlap", icon: Layers, template: "overlap" },
+  { id: "full", label: "Full", icon: Maximize, template: "full" },
 ];
 
 /* ── Map-backed preview container ── */
@@ -173,6 +179,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     if (activeTemplate === "grid") return "grid";
     if (activeTemplate === "hero") return "collage";
     if (activeTemplate === "filmstrip") return "carousel";
+    if (activeTemplate === "polaroid") return "polaroid";
+    if (activeTemplate === "overlap") return "overlap";
+    if (activeTemplate === "full") return "full";
     return "single";
   })();
 

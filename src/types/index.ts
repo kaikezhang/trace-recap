@@ -81,7 +81,7 @@ export interface ExportSettings {
   routeLabelBottomPercent?: number; // Route label bottom position % (default 15)
 }
 
-export type LayoutTemplate = "grid" | "hero" | "masonry" | "filmstrip" | "scatter";
+export type LayoutTemplate = "grid" | "hero" | "masonry" | "filmstrip" | "scatter" | "polaroid" | "overlap" | "full";
 
 export interface PhotoLayout {
   mode: "auto" | "manual";
