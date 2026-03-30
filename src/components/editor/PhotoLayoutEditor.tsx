@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   LayoutGrid,
@@ -232,18 +233,26 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   }, []);
 
   // Compute numeric aspect ratio from viewport ratio setting
+  // For "free", use the actual map canvas aspect ratio so the preview matches
   const previewAspect = useMemo(() => {
     if (viewportRatio === "free") {
+      if (map) {
+        const canvas = map.getCanvas();
+        if (canvas.width > 0 && canvas.height > 0) {
+          return canvas.width / canvas.height;
+        }
+      }
+      // Fallback to panel size if map not available
       if (panelSize && panelSize.width > 0 && panelSize.height > 0) {
         return panelSize.width / panelSize.height;
       }
-      return 16 / 9; // fallback
+      return 16 / 9; // last resort fallback
     }
     const [w, h] = viewportRatio.split(":").map(Number);
     return w / h;
-  }, [viewportRatio, panelSize]);
+  }, [viewportRatio, panelSize, map]);
 
-  // Compute fitted preview container style for non-free ratios
+  // Compute fitted preview container style
   const previewContainerStyle = useMemo<React.CSSProperties>(() => {
     if (viewportRatio === "free" || !panelSize) {
       return { width: "100%", height: "100%" };
@@ -317,7 +326,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     />
   );
 
-  return (
+  // Portal to body to escape overflow-hidden ancestors (MapStage container)
+  return createPortal(
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
         {/* ── Mobile layout ── */}
@@ -498,6 +508,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
