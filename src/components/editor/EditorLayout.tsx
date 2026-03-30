@@ -195,16 +195,13 @@ function EditorContent() {
   useEffect(() => {
     if (!map) return;
 
-    // Only target name-label layers (place, settlement, country, state, etc.)
-    // Skip shield/transit/ref layers whose text-field uses other properties
-    const NAME_LAYER_PATTERNS = [
-      "settlement", "place", "country", "state", "continent",
-      "city", "town", "village", "island", "region", "capital",
-    ];
-
-    const isNameLabelLayer = (layerId: string): boolean => {
-      const id = layerId.toLowerCase();
-      return NAME_LAYER_PATTERNS.some((p) => id.includes(p));
+    // Check whether a layer's text-field expression references a 'name' property
+    // (e.g. "name", "name_en", "name_zh-Hans"). Shields, transit refs, and highway
+    // markers use properties like "ref", "shield_text", "house_num" — skip those.
+    const textFieldReferencesName = (textField: unknown): boolean => {
+      if (textField == null) return false;
+      const str = JSON.stringify(textField);
+      return /\bname/.test(str);
     };
 
     const applyMapLanguage = () => {
@@ -218,11 +215,9 @@ function EditorContent() {
 
       for (const layer of style.layers) {
         if (layer.type !== "symbol") continue;
-        if (!isNameLabelLayer(layer.id)) continue;
         const textField = map.getLayoutProperty(layer.id, "text-field");
-        if (textField != null) {
-          map.setLayoutProperty(layer.id, "text-field", textFieldExpr);
-        }
+        if (!textFieldReferencesName(textField)) continue;
+        map.setLayoutProperty(layer.id, "text-field", textFieldExpr);
       }
     };
 
