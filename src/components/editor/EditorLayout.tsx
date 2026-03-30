@@ -407,6 +407,10 @@ function EditorContent() {
     engine.on("complete", () => {
       setPlaybackState("idle");
       setCurrentSegmentIndex(0);
+      // On mobile, scroll back to top to show toolbar
+      if (window.innerWidth < 768) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     });
 
     return () => {
@@ -431,11 +435,19 @@ function EditorContent() {
     }
     engineRef.current?.play();
     setPlaybackState("playing");
+    // On mobile, scroll down to hide the toolbar for full-screen map
+    if (window.innerWidth < 768) {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    }
   }, [map, setPlaybackState]);
 
   const handlePause = useCallback(() => {
     engineRef.current?.pause();
     setPlaybackState("paused");
+    // On mobile, scroll back to top to show toolbar
+    if (window.innerWidth < 768) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }, [setPlaybackState]);
 
   const handleReset = useCallback(() => {
