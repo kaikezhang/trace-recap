@@ -10,6 +10,7 @@ import {
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
+import { getExportViewportSize } from "@/lib/viewportRatio";
 import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
 
 export type ExportProgress = {
@@ -547,9 +548,11 @@ export class VideoExporter {
     const canvas = this.map.getCanvas();
     const useWebCodecs = isWebCodecsSupported();
 
-    // WYSIWYG: use the actual map canvas dimensions
-    const targetW = canvas.width;
-    const targetH = canvas.height;
+    const { width: targetW, height: targetH } = getExportViewportSize(
+      this.settings.viewportRatio ?? "free",
+      canvas.width,
+      canvas.height,
+    );
 
     await this.preloadIcons();
     await this.preloadPhotos();
@@ -568,8 +571,8 @@ export class VideoExporter {
     const offCtx = offscreen.getContext("2d");
     if (!offCtx) throw new Error("Failed to create offscreen 2D context");
 
-    const scaleX = targetW / canvas.clientWidth;
-    const scaleY = targetH / canvas.clientHeight;
+    const scaleX = targetW / Math.max(canvas.clientWidth, 1);
+    const scaleY = targetH / Math.max(canvas.clientHeight, 1);
 
     try {
       if (useWebCodecs) {
