@@ -25,16 +25,17 @@ export default function BottomSheet({
   const locations = useProjectStore((s) => s.locations);
   const bottomSheetState = useUIStore((s) => s.bottomSheetState);
   const setBottomSheetState = useUIStore((s) => s.setBottomSheetState);
-  const [viewportHeight, setViewportHeight] = useState(
-    typeof window !== "undefined" ? window.innerHeight : 0
-  );
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setViewportHeight(window.innerHeight);
+    setMounted(true);
+
     const updateViewportHeight = () => {
       setViewportHeight(window.innerHeight);
     };
 
-    updateViewportHeight();
     window.addEventListener("resize", updateViewportHeight);
     return () => window.removeEventListener("resize", updateViewportHeight);
   }, []);
@@ -103,6 +104,8 @@ export default function BottomSheet({
   const toggleSheet = () => {
     setBottomSheetState(bottomSheetState === "collapsed" ? "half" : "collapsed");
   };
+
+  if (!mounted) return null;
 
   return (
     <>
