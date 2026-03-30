@@ -462,7 +462,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     if (activeTemplate === "full") return "full";
     return "single";
   })();
-  const isRandomLayoutActive = activeTemplate !== "auto" && RANDOM_LAYOUT_TEMPLATES.includes(activeTemplate);
+  const isRandomLayoutActive = activeTemplate !== "auto" && RANDOM_LAYOUT_TEMPLATES.includes(activeTemplate) && location.photos.length > 1;
   const selectedEnterAnimation: PhotoAnimationOption = layout.enterAnimation ?? "default";
   const selectedExitAnimation: PhotoAnimationOption = layout.exitAnimation ?? "default";
   const enterAnimationOptions = useMemo(

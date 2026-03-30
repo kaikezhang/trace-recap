@@ -298,7 +298,17 @@ function layoutJustifiedRows(
       aspectSum
     );
   });
-  const usedHeight = rowHeights.reduce((sum, height) => sum + height, 0) + gap * Math.max(0, rows.length - 1);
+  let usedHeight = rowHeights.reduce((sum, height) => sum + height, 0) + gap * Math.max(0, rows.length - 1);
+
+  // Scale all rows proportionally if they overflow the container
+  if (usedHeight > innerHeight) {
+    const scale = innerHeight / usedHeight;
+    for (let i = 0; i < rowHeights.length; i++) {
+      rowHeights[i] *= scale;
+    }
+    usedHeight = innerHeight;
+  }
+
   const rects: PhotoRect[] = new Array(photos.length);
 
   let y = gap + Math.max(0, (innerHeight - usedHeight) / 2);
