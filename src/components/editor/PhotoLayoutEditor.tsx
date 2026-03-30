@@ -190,14 +190,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       });
     };
 
-    if (map.isStyleLoaded() && map.loaded()) {
-      // Style and tiles loaded; wait for one more idle to ensure render is flushed
-      map.once("idle", capture);
-      // Trigger a repaint so idle fires even if map is already idle
-      map.triggerRepaint();
+    if (map.isStyleLoaded() && map.loaded() && map.idle()) {
+      // Map is already fully rendered and idle — capture immediately
+      capture();
     } else {
-      // Map hasn't finished loading yet — listen for idle which fires after
-      // style load + tile rendering completes
+      // Map is still loading or rendering — capture once it settles
       map.once("idle", capture);
     }
 
