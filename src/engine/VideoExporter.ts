@@ -536,17 +536,6 @@ export class VideoExporter {
     ctx.fill();
   }
 
-  /** Calculate target export dimensions from aspect ratio and resolution settings */
-  private getTargetDimensions(): { width: number; height: number } {
-    const res = this.settings.resolution; // height in pixels (720 or 1080)
-    const ar = this.settings.aspectRatio;
-    if (ar === "9:16") {
-      return { width: Math.round(res * 9 / 16), height: res };
-    }
-    // 16:9 (default)
-    return { width: Math.round(res * 16 / 9), height: res };
-  }
-
   async export(onProgress: ProgressCallback): Promise<Blob | null> {
     const { fps } = this.settings;
     this.cancelled = false;
@@ -558,7 +547,9 @@ export class VideoExporter {
     const canvas = this.map.getCanvas();
     const useWebCodecs = isWebCodecsSupported();
 
-    const { width: targetW, height: targetH } = this.getTargetDimensions();
+    // WYSIWYG: use the actual map canvas dimensions
+    const targetW = canvas.width;
+    const targetH = canvas.height;
 
     await this.preloadIcons();
     await this.preloadPhotos();

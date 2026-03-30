@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { AspectRatio } from "@/types";
 
 export type BottomSheetState = "collapsed" | "half" | "full";
 
@@ -10,7 +11,7 @@ interface UIState {
   bottomSheetState: BottomSheetState;
   cityLabelSize: number; // CSS font size in px (default 18)
   cityLabelLang: "en" | "zh"; // City label language
-  exportAspectRatio: "16:9" | "9:16"; // Export aspect ratio (also used for photo layout preview)
+  viewportRatio: AspectRatio; // WYSIWYG viewport aspect ratio
 
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -19,7 +20,7 @@ interface UIState {
   setBottomSheetState: (state: BottomSheetState) => void;
   setCityLabelSize: (size: number) => void;
   setCityLabelLang: (lang: "en" | "zh") => void;
-  setExportAspectRatio: (ratio: "16:9" | "9:16") => void;
+  setViewportRatio: (ratio: AspectRatio) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -30,7 +31,7 @@ export const useUIStore = create<UIState>((set) => ({
   bottomSheetState: "collapsed",
   cityLabelSize: 18,
   cityLabelLang: "en",
-  exportAspectRatio: "16:9",
+  viewportRatio: "free",
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
@@ -39,5 +40,5 @@ export const useUIStore = create<UIState>((set) => ({
   setBottomSheetState: (bottomSheetState) => set({ bottomSheetState }),
   setCityLabelSize: (cityLabelSize) => set({ cityLabelSize }),
   setCityLabelLang: (cityLabelLang) => set({ cityLabelLang }),
-  setExportAspectRatio: (exportAspectRatio) => set({ exportAspectRatio }),
+  setViewportRatio: (viewportRatio) => set({ viewportRatio }),
 }));
