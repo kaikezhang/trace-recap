@@ -333,6 +333,61 @@ export class VideoExporter {
     ctx.fillText(label, dotX + dotRadius + dotGap, dotY);
   }
 
+  /** Draw "CityA → CityB" route label at bottom of canvas during FLY phase */
+  private drawRouteLabel(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    scaleX: number,
+    captured: { progress: AnimationEvent | null },
+    baseFontSize: number = 14
+  ): void {
+    const progress = captured.progress;
+    if (!progress) return;
+    // Only show during FLY phase (not during ARRIVE/HOVER when city label shows)
+    if (progress.phase !== "FLY") return;
+    if (progress.cityLabel) return; // city label is showing, don't overlap
+
+    const groups = this.engine.getGroups();
+    const group = groups[progress.groupIndex];
+    if (!group) return;
+
+    const fromName = group.fromLoc.name;
+    const toName = group.toLoc.name;
+    if (!fromName || !toName) return;
+
+    const label = `${fromName} → ${toName}`;
+    const fontSize = baseFontSize * scaleX;
+    const font = `500 ${fontSize}px system-ui, -apple-system, sans-serif`;
+    ctx.font = font;
+    const metrics = ctx.measureText(label);
+
+    const padH = 16 * scaleX;
+    const padV = 8 * scaleX;
+    const boxWidth = padH + metrics.width + padH;
+    const boxHeight = padV + fontSize * 1.2 + padV;
+    const x = (canvasWidth - boxWidth) / 2;
+    const bottomPercent = this.settings.routeLabelBottomPercent ?? 15;
+    const y = canvasHeight - Math.max(80 * scaleX, canvasHeight * bottomPercent / 100) - boxHeight;
+    const radius = boxHeight / 2;
+
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.12)";
+    ctx.shadowBlur = 8 * scaleX;
+    ctx.shadowOffsetY = 2 * scaleX;
+
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxWidth, boxHeight, radius);
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.fill();
+    ctx.restore();
+
+    ctx.font = font;
+    ctx.fillStyle = "#374151";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + padH, y + boxHeight / 2);
+  }
+
   private applyRouteDrawFromCapture(captured: { routeDraw: AnimationEvent | null }): void {
     if (captured.routeDraw) {
       this.applyRouteDrawProgress(captured.routeDraw);
@@ -633,6 +688,7 @@ export class VideoExporter {
     offCtx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height);
     this.drawVehicleIcon(offCtx, scaleX, scaleY);
     this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
+    this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
     this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured);
   }
 

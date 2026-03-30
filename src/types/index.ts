@@ -77,6 +77,8 @@ export interface ExportSettings {
   cityLabelSize?: number; // CSS font size in px (default 18)
   cityLabelLang?: "en" | "zh";
   viewportRatio?: AspectRatio;
+  routeLabelSize?: number; // Route label font size in px (default 14)
+  routeLabelBottomPercent?: number; // Route label bottom position % (default 15)
 }
 
 export type LayoutTemplate = "grid" | "hero" | "masonry" | "filmstrip" | "scatter";
