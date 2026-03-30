@@ -57,6 +57,14 @@ export const MAP_STYLES: Record<MapStyle, string> = {
 
 // ── Runtime paint override helpers for custom styles ──
 
+/** Safely set a paint property — no-op if the layer doesn't exist */
+function safePaint(map: mapboxgl.Map, layerId: string, prop: string, value: unknown) {
+  if (map.getLayer(layerId)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.setPaintProperty(layerId, prop as any, value);
+  }
+}
+
 function overrideLayers(
   map: mapboxgl.Map,
   fn: (layer: mapboxgl.LayerSpecification) => void,
@@ -78,7 +86,7 @@ function applyMonochromeOverrides(map: mapboxgl.Map) {
       map.setPaintProperty(layer.id, "text-color", "#666666");
     }
   });
-  map.setPaintProperty("background", "background-color", "#f5f5f5");
+  safePaint(map, "background", "background-color", "#f5f5f5");
 }
 
 function applyVintageOverrides(map: mapboxgl.Map) {
@@ -91,7 +99,7 @@ function applyVintageOverrides(map: mapboxgl.Map) {
       map.setPaintProperty(layer.id, "text-color", "#6b4e2e");
     }
   });
-  map.setPaintProperty("background", "background-color", "#f5ead6");
+  safePaint(map, "background", "background-color", "#f5ead6");
 }
 
 function applyBlueprintOverrides(map: mapboxgl.Map) {
@@ -104,7 +112,7 @@ function applyBlueprintOverrides(map: mapboxgl.Map) {
       map.setPaintProperty(layer.id, "text-color", "#8ab4e8");
     }
   });
-  map.setPaintProperty("background", "background-color", "#0f1d36");
+  safePaint(map, "background", "background-color", "#0f1d36");
 }
 
 function applyPastelOverrides(map: mapboxgl.Map) {
@@ -117,7 +125,7 @@ function applyPastelOverrides(map: mapboxgl.Map) {
       map.setPaintProperty(layer.id, "text-color", "#7d6e8a");
     }
   });
-  map.setPaintProperty("background", "background-color", "#f3eef8");
+  safePaint(map, "background", "background-color", "#f3eef8");
 }
 
 function applyMidnightOverrides(map: mapboxgl.Map) {
@@ -130,7 +138,7 @@ function applyMidnightOverrides(map: mapboxgl.Map) {
       map.setPaintProperty(layer.id, "text-color", "#a08dd6");
     }
   });
-  map.setPaintProperty("background", "background-color", "#0e0a2e");
+  safePaint(map, "background", "background-color", "#0e0a2e");
 }
 
 export interface MapStyleConfig {
