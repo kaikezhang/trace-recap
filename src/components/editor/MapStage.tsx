@@ -8,6 +8,7 @@ import PhotoLayoutEditor from "./PhotoLayoutEditor";
 import MapEmptyState from "./MapEmptyState";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import type { Location, Photo, PhotoLayout } from "@/types";
 
 interface MapStageProps {
@@ -34,9 +35,11 @@ interface MapStageProps {
 function CityLabelOverlay({
   cityLabel,
   cityLabelSize,
+  cityLabelTopPercent,
 }: {
   cityLabel: string;
   cityLabelSize: number;
+  cityLabelTopPercent: number;
 }) {
   return (
     <motion.div
@@ -64,8 +67,9 @@ function CityLabelOverlay({
         stiffness: 300,
         damping: 25,
       }}
-      className="absolute top-6 left-1/2 z-10 -translate-x-1/2 rounded-lg border bg-background/90 px-5 py-2 shadow-lg backdrop-blur-sm"
+      className="absolute left-1/2 z-10 -translate-x-1/2 rounded-lg border bg-background/90 px-5 py-2 shadow-lg backdrop-blur-sm"
       style={{
+        top: `${cityLabelTopPercent}%`,
         textShadow:
           "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)",
       }}
@@ -119,6 +123,8 @@ export default function MapStage({
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
+  const cityLabelTopPercent = useUIStore((s) => s.cityLabelTopPercent);
+  const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
 
   const isPlaying = playbackState === "playing";
   const currentSegment = segments[currentSegmentIndex];
@@ -143,6 +149,7 @@ export default function MapStage({
           <CityLabelOverlay
             cityLabel={currentCityLabel}
             cityLabelSize={cityLabelSize}
+            cityLabelTopPercent={cityLabelTopPercent}
           />
         )}
       </AnimatePresence>
@@ -153,7 +160,8 @@ export default function MapStage({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="absolute bottom-20 left-1/2 z-10 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-full px-4 py-1.5 shadow-lg text-xs font-medium text-gray-700"
+            className="absolute left-1/2 z-10 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-full px-4 py-1.5 shadow-lg text-xs font-medium text-gray-700"
+            style={{ bottom: `max(80px, ${routeLabelBottomPercent}%)` }}
           >
             {fromCity} → {toCity}
           </motion.div>

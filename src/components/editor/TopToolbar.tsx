@@ -64,6 +64,10 @@ export default function TopToolbar() {
   const setCityLabelSize = useUIStore((s) => s.setCityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const setCityLabelLang = useUIStore((s) => s.setCityLabelLang);
+  const cityLabelTopPercent = useUIStore((s) => s.cityLabelTopPercent);
+  const setCityLabelTopPercent = useUIStore((s) => s.setCityLabelTopPercent);
+  const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
+  const setRouteLabelBottomPercent = useUIStore((s) => s.setRouteLabelBottomPercent);
   const undo = useHistoryStore((s) => s.undo);
   const redo = useHistoryStore((s) => s.redo);
   const canUndo = useHistoryStore((s) => s.canUndo);
@@ -267,6 +271,38 @@ export default function TopToolbar() {
                     onValueChange={(v) => {
                       const val = Array.isArray(v) ? v[0] : v;
                       setCityLabelSize(val);
+                    }}
+                  />
+                </div>
+                {/* City label position slider */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    City Label Position: {cityLabelTopPercent}%
+                  </label>
+                  <Slider
+                    value={[cityLabelTopPercent]}
+                    min={0}
+                    max={30}
+                    step={1}
+                    onValueChange={(v) => {
+                      const val = Array.isArray(v) ? v[0] : v;
+                      setCityLabelTopPercent(val);
+                    }}
+                  />
+                </div>
+                {/* Route label position slider */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Route Label Position: {routeLabelBottomPercent}%
+                  </label>
+                  <Slider
+                    value={[routeLabelBottomPercent]}
+                    min={5}
+                    max={40}
+                    step={1}
+                    onValueChange={(v) => {
+                      const val = Array.isArray(v) ? v[0] : v;
+                      setRouteLabelBottomPercent(val);
                     }}
                   />
                 </div>
