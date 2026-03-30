@@ -119,7 +119,7 @@ function EditorContent() {
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
-  const setBottomSheetExpanded = useUIStore((s) => s.setBottomSheetExpanded);
+  const setBottomSheetState = useUIStore((s) => s.setBottomSheetState);
   const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
   const currentCityLabelZh = useAnimationStore((s) => s.currentCityLabelZh);
   const currentCityLabel =
@@ -533,9 +533,9 @@ function EditorContent() {
       typeof window !== "undefined" &&
       window.innerWidth < 768
     ) {
-      setBottomSheetExpanded(true);
+      setBottomSheetState("half");
     }
-  }, [searchHintMessage, setBottomSheetExpanded]);
+  }, [searchHintMessage, setBottomSheetState]);
 
   const handleFocusSearch = useCallback(() => {
     searchRef.current?.focus();

@@ -37,7 +37,7 @@ export default function PlaybackControls({
   const currentTime = useAnimationStore((s) => s.currentTime);
   const totalDuration = useAnimationStore((s) => s.totalDuration);
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
-  const bottomSheetExpanded = useUIStore((s) => s.bottomSheetExpanded);
+  const bottomSheetState = useUIStore((s) => s.bottomSheetState);
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
 
@@ -53,13 +53,18 @@ export default function PlaybackControls({
     ? locations.find((l) => l.id === currentSegment.toId)?.name
     : null;
 
+  const controlsBottomClass =
+    bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[120px]";
+  const hideOnMobile = bottomSheetState === "full";
+
   return (
     <div
       className={[
+        hideOnMobile ? "hidden md:flex" : "flex",
         "flex flex-col items-center",
         // Mobile: fixed full-width, z above BottomSheet (z-50)
         "fixed left-0 right-0 z-[60] transition-[bottom] duration-300 ease-out",
-        bottomSheetExpanded ? "bottom-[60vh]" : "bottom-14",
+        controlsBottomClass,
         // Desktop: override to absolute, centered floating pill
         "md:absolute md:z-10 md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto",
       ].join(" ")}
@@ -96,7 +101,7 @@ export default function PlaybackControls({
         </Button>
         <div className="relative">
           <button
-            className="h-12 w-12 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 hover:bg-indigo-600 active:scale-95 md:h-12 md:w-12"
             onClick={isPlaying ? onPause : onPlay}
             aria-label={isPlaying ? "Pause" : "Play"}
           >
@@ -117,6 +122,7 @@ export default function PlaybackControls({
         </div>
         <div className="flex-1 md:flex-none md:w-48">
           <Slider
+            className="h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5"
             value={[progress]}
             min={0}
             max={100}
@@ -127,7 +133,7 @@ export default function PlaybackControls({
             }}
           />
         </div>
-        <span className="text-xs text-muted-foreground min-w-[70px] text-right">
+        <span className="min-w-[70px] text-right text-sm text-muted-foreground md:text-xs">
           {formatTime(currentTime)} / {formatTime(totalDuration)}
         </span>
       </div>
