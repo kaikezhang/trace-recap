@@ -13,8 +13,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useMap } from "./MapContext";
-import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
-import type { PhotoMeta } from "@/lib/photoLayout";
+import PhotoOverlay from "./PhotoOverlay";
 import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo } from "@/types";
 
 interface PhotoLayoutEditorProps {
@@ -30,108 +29,6 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "single", label: "Single", icon: ImageIcon, template: "auto" },
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
 ];
-
-/* ── Load real photo dimensions for WYSIWYG preview ── */
-
-function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
-  const aspectCacheRef = useRef(new Map<string, number>());
-  const photoKey = photos.map((p) => `${p.id}:${p.url}`).join("|");
-
-  const buildMetas = (): PhotoMeta[] =>
-    photos.map((p) => ({
-      id: p.id,
-      aspect: aspectCacheRef.current.get(p.url) ?? 4 / 3,
-    }));
-
-  const [metas, setMetas] = useState<PhotoMeta[]>(() => buildMetas());
-
-  useEffect(() => {
-    setMetas(buildMetas());
-    if (photos.length === 0) return;
-
-    let cancelled = false;
-    photos.forEach((photo) => {
-      if (aspectCacheRef.current.has(photo.url)) return;
-      const img = new Image();
-      img.onload = () => {
-        if (cancelled) return;
-        aspectCacheRef.current.set(photo.url, img.naturalWidth / img.naturalHeight);
-        setMetas(buildMetas());
-      };
-      img.onerror = () => {
-        if (cancelled) return;
-        aspectCacheRef.current.set(photo.url, 4 / 3);
-        setMetas(buildMetas());
-      };
-      img.src = photo.url;
-    });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoKey]);
-
-  return metas;
-}
-
-/* ── Unified preview using actual layout functions ── */
-
-function LayoutPreview({
-  photos,
-  borderRadius,
-  template,
-  gap,
-  customProportions,
-  containerAspect,
-}: {
-  photos: Photo[];
-  borderRadius: number;
-  template: LayoutTemplateType | "auto";
-  gap: number;
-  customProportions?: { rows?: number[]; cols?: number[] };
-  containerAspect: number;
-}) {
-  const containerWidthPx = 500; // reference width for gap calculation
-
-  const metas = usePhotoDimensions(photos);
-
-  const rects = useMemo(() => {
-    if (template === "auto") {
-      return computeAutoLayout(metas, containerAspect, gap, containerWidthPx);
-    }
-    return computeTemplateLayout(metas, containerAspect, template, gap, containerWidthPx, customProportions);
-  }, [metas, containerAspect, template, gap, containerWidthPx, customProportions]);
-
-  return (
-    <div className="relative w-full h-full">
-      {rects.map((rect, i) => {
-        if (i >= photos.length) return null;
-        const photo = photos[i];
-        return (
-          <div
-            key={photo.id}
-            className="absolute overflow-hidden"
-            style={{
-              left: `${rect.x * 100}%`,
-              top: `${rect.y * 100}%`,
-              width: `${rect.width * 100}%`,
-              height: `${rect.height * 100}%`,
-              borderRadius: `${borderRadius}px`,
-              transform: rect.rotation ? `rotate(${rect.rotation}deg)` : undefined,
-            }}
-          >
-            <img
-              src={photo.url}
-              alt=""
-              className="w-full h-full object-cover"
-              style={{
-                objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%`,
-              }}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ── Map-backed preview container ── */
 
@@ -168,8 +65,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const activeTemplate: LayoutTemplateType | "auto" =
     layout.mode === "manual" && layout.template ? layout.template : "auto";
-  const borderRadiusValue = layout.borderRadius ?? 8;
-  const gapValue = layout.gap ?? 8;
   const photoOrder = layout.order ?? location.photos.map((p) => p.id);
 
   // Capture map snapshot once when editor opens (wait for full render)
@@ -316,13 +211,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   if (location.photos.length === 0) return null;
 
   const layoutPreviewNode = (
-    <LayoutPreview
+    <PhotoOverlay
       photos={orderedPhotos}
-      borderRadius={borderRadiusValue}
-      template={activeTemplate}
-      gap={gapValue}
-      customProportions={layout.customProportions}
-      containerAspect={previewAspect}
+      visible={true}
+      photoLayout={layout}
+      opacity={1}
     />
   );
 
