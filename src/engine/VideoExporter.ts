@@ -10,7 +10,7 @@ import {
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
 import { resolvePhotoAnimations } from "@/lib/photoAnimation";
-import { isSolidStyle } from "@/lib/transportIcons";
+import { isSolidStyle, resolveIconVariant } from "@/lib/transportIcons";
 import type { IconDirection } from "@/lib/transportIcons";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import { getExportViewportSize } from "@/lib/viewportRatio";
@@ -61,7 +61,7 @@ export class VideoExporter {
     const iconAnimator = this.engine.getIconAnimator();
     const seen = new Set<string>();
     const iconVariants = this.engine.getSegments().filter((segment) => {
-      const key = `${segment.transportMode}:${segment.iconStyle}`;
+      const key = `${segment.transportMode}:${resolveIconVariant(segment.transportMode, segment.iconVariant)}:${segment.iconStyle}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

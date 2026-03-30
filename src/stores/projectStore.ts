@@ -453,7 +453,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     useHistoryStore.getState().pushState();
     return set((state) => ({
       segments: state.segments.map((s) =>
-        s.id === segmentId ? { ...s, transportMode: mode, geometry: null } : s,
+        s.id === segmentId ? { ...s, transportMode: mode, iconVariant: undefined, geometry: null } : s,
       ),
     }));
   },

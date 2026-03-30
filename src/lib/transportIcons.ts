@@ -60,7 +60,8 @@ export function getTransportIconAssetKey(
   style: TransportIconStyle,
   variant?: IconVariant,
 ): string {
-  const v = variant && variant !== getDefaultVariant(mode) ? variant : "";
+  const resolved = resolveIconVariant(mode, variant);
+  const v = resolved !== getDefaultVariant(mode) ? resolved : "";
   return v ? `${mode}:${v}:${style}` : `${mode}:${style}`;
 }
 
@@ -69,7 +70,8 @@ export function getTransportIconAssetPath(
   style: TransportIconStyle,
   variant?: IconVariant,
 ): string {
-  const v = variant && variant !== getDefaultVariant(mode) ? variant : "";
+  const resolved = resolveIconVariant(mode, variant);
+  const v = resolved !== getDefaultVariant(mode) ? resolved : "";
   return v ? `/lottie/${mode}-${v}-${style}.json` : `/lottie/${mode}-${style}.json`;
 }
 
