@@ -776,15 +776,13 @@ export class VideoExporter {
         resolve();
       };
 
-      // Always wait for the idle event so the canvas reflects the current
-      // camera position and layer visibility set by jumpTo / setLayoutProperty.
-      // Without this, checkReady() would resolve immediately after jumpTo()
-      // because isMoving()===false and tiles are already loaded, but the
-      // canvas hasn't been repainted yet.
-      this.map.once("idle", done);
+      // Use 'render' event for speed — fires after each repaint, much faster
+      // than 'idle' which waits for all tiles/resources to settle.
+      // For export, tiles are typically already cached from preview playback.
+      this.map.once("render", done);
 
-      // Safety timeout in case idle never fires
-      setTimeout(done, 5000);
+      // Short safety timeout — tiles should already be cached
+      setTimeout(done, 200);
     });
   }
 }
