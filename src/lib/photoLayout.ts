@@ -668,7 +668,10 @@ function layoutOverlap(n: number, gap: number): PhotoRect[] {
   const scaleStep = n > 1 ? (maxScale - minScale) / (n - 1) : 0;
 
   // Offset each photo slightly right and down
-  const offsetStep = 0.06;
+  // Reduce offsetStep dynamically so all photos fit within [0, 1]
+  const maxOffset = 0.06;
+  const maxTotalOffset = (1 - maxScale) / 2; // max offset that keeps startPos >= 0
+  const offsetStep = Math.min(maxOffset, n > 1 ? maxTotalOffset / (n - 1) : maxOffset);
   // Center the stack
   const totalOffsetX = offsetStep * (n - 1);
   const totalOffsetY = offsetStep * (n - 1);
