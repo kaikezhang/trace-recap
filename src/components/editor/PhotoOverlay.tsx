@@ -13,6 +13,7 @@ interface PhotoOverlayProps {
   visible: boolean;
   photoLayout?: PhotoLayout;
   opacity?: number; // 0-1, for fade-out transition
+  containerMode?: "viewport" | "parent"; // 'parent' uses 100% sizing instead of vw/vh
 }
 
 interface PhotoMeta extends Photo {
@@ -64,7 +65,7 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
   return dims;
 }
 
-export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1 }: PhotoOverlayProps) {
+export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1, containerMode = "viewport" }: PhotoOverlayProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const metas = usePhotoDimensions(photos);
   const hasPhotos = metas.length > 0;
@@ -81,11 +82,14 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
   // When a fixed ratio is set, the parent map container already has that aspect ratio,
   // so we use percentage-based sizing to stay within bounds. For "free", keep vw/vh.
   const containerStyle = useMemo(() => {
+    if (containerMode === "parent") {
+      return { width: "100%", height: "100%" };
+    }
     if (viewportRatio === "free") {
       return { width: "95vw", height: "88vh" };
     }
     return { width: "95%", height: "88%" };
-  }, [viewportRatio]);
+  }, [viewportRatio, containerMode]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });

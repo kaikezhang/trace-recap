@@ -216,6 +216,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       visible={true}
       photoLayout={layout}
       opacity={1}
+      containerMode="parent"
     />
   );
 
