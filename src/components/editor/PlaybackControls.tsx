@@ -39,9 +39,12 @@ export default function PlaybackControls({
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
 
-  const controlsBottomClass =
-    bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[132px]";
-  const hideOnMobile = bottomSheetState === "full";
+  // During playback, BottomSheet is hidden → controls go to bottom
+  // Otherwise, position above the BottomSheet
+  const controlsBottomClass = isPlaying
+    ? "bottom-0"
+    : bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[132px]";
+  const hideOnMobile = !isPlaying && bottomSheetState === "full";
 
   return (
     <div
