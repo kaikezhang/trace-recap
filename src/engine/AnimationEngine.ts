@@ -264,16 +264,10 @@ export class AnimationEngine {
           zoomInDur = Math.max(rawZoomIn, minZoomIn);
           flyDur = effectiveVariable - zoomInDur;
         } else {
-          // Normal segment: full zoom phases
-          zoomOutDur = effectiveVariable * 0.2;
-          const minZoomIn = 2.5;
-          const rawZoomIn = effectiveVariable * 0.2;
-          zoomInDur = Math.max(rawZoomIn, minZoomIn);
-          flyDur = effectiveVariable - zoomOutDur - zoomInDur;
-          if (flyDur < 0.5) {
-            flyDur = 0.5;
-            zoomInDur = effectiveVariable - zoomOutDur - flyDur;
-          }
+          // Normal segment: allocate most time to FLY
+          zoomOutDur = effectiveVariable * 0.12;
+          zoomInDur = effectiveVariable * 0.18;
+          flyDur = effectiveVariable - zoomOutDur - zoomInDur; // ~70% to FLY
         }
       }
 
