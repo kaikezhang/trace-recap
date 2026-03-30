@@ -44,3 +44,5 @@ next-env.d.ts
 
 # Auto-generated
 next-env.d.ts
+next-env.d.ts
+package-lock.json
