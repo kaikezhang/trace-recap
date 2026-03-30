@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ChevronUp, MapPin } from "lucide-react";
+import { motion, type PanInfo } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -21,63 +23,148 @@ export default function BottomSheet({
   onDismissSearchHint,
 }: BottomSheetProps) {
   const locations = useProjectStore((s) => s.locations);
-  const expanded = useUIStore((s) => s.bottomSheetExpanded);
-  const toggleBottomSheet = useUIStore((s) => s.toggleBottomSheet);
-  const setBottomSheetExpanded = useUIStore((s) => s.setBottomSheetExpanded);
+  const bottomSheetState = useUIStore((s) => s.bottomSheetState);
+  const setBottomSheetState = useUIStore((s) => s.setBottomSheetState);
+  const [viewportHeight, setViewportHeight] = useState(0);
+
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      setViewportHeight(window.innerHeight);
+    };
+
+    updateViewportHeight();
+    window.addEventListener("resize", updateViewportHeight);
+    return () => window.removeEventListener("resize", updateViewportHeight);
+  }, []);
+
+  const collapsedHeight = 120;
+  const maxSheetHeight = viewportHeight > 0 ? viewportHeight * 0.85 : 0;
+  const halfVisibleHeight = viewportHeight > 0 ? viewportHeight * 0.5 : 0;
+  const collapsedOffset = Math.max(maxSheetHeight - collapsedHeight, 0);
+  const halfOffset = Math.max(maxSheetHeight - halfVisibleHeight, 0);
+  const stateOffsets = {
+    collapsed: collapsedOffset,
+    half: halfOffset,
+    full: 0,
+  };
+  const currentOffset = stateOffsets[bottomSheetState];
+  const stopsLabel = `${locations.length} ${locations.length === 1 ? "stop" : "stops"}`;
+
+  const snapToNearestState = (offset: number) => {
+    const nearestState = (Object.entries(stateOffsets) as Array<
+      [keyof typeof stateOffsets, number]
+    >).reduce((closest, current) => {
+      return Math.abs(current[1] - offset) < Math.abs(closest[1] - offset)
+        ? current
+        : closest;
+    })[0];
+    setBottomSheetState(nearestState);
+  };
+
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (viewportHeight === 0) return;
+
+    const nextOffset = Math.min(
+      Math.max(currentOffset + info.offset.y, 0),
+      collapsedOffset,
+    );
+    const draggedUp = info.offset.y < -100 || info.velocity.y < -700;
+    const draggedDown = info.offset.y > 100 || info.velocity.y > 700;
+
+    if (draggedUp) {
+      if (bottomSheetState === "collapsed") {
+        setBottomSheetState("half");
+        return;
+      }
+
+      if (bottomSheetState === "half") {
+        setBottomSheetState("full");
+        return;
+      }
+    }
+
+    if (draggedDown) {
+      if (bottomSheetState === "full") {
+        setBottomSheetState("half");
+        return;
+      }
+
+      if (bottomSheetState === "half") {
+        setBottomSheetState("collapsed");
+        return;
+      }
+    }
+
+    snapToNearestState(nextOffset);
+  };
+
+  const toggleSheet = () => {
+    setBottomSheetState(bottomSheetState === "collapsed" ? "half" : "collapsed");
+  };
 
   return (
     <>
-      {/* Backdrop overlay when expanded */}
-      {expanded && (
+      {/* Backdrop overlay only in full state */}
+      {bottomSheetState === "full" && (
         <div
           className="fixed inset-0 z-40 bg-black/30"
-          onClick={() => setBottomSheetExpanded(false)}
+          onClick={() => setBottomSheetState("half")}
         />
       )}
 
       {/* Bottom sheet */}
-      <div
-        className={`fixed left-0 right-0 z-50 bg-background border-t rounded-t-2xl shadow-2xl transition-[bottom] duration-300 ease-out ${
-          expanded ? "bottom-0" : "bottom-[calc(-60vh+56px)]"
-        }`}
-        style={{ height: "60vh" }}
+      <motion.div
+        drag="y"
+        dragConstraints={{ top: 0, bottom: collapsedOffset }}
+        dragElastic={0.08}
+        dragMomentum={false}
+        initial={false}
+        animate={{ y: currentOffset }}
+        onDragEnd={handleDragEnd}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+        className="fixed bottom-0 left-0 right-0 z-50 flex flex-col overflow-hidden rounded-t-[24px] border-t bg-background shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
+        style={{ height: maxSheetHeight || "85vh" }}
       >
-        {/* Drag handle + collapsed bar */}
-        <div
-          className="flex w-full items-center justify-between px-4 h-14 cursor-pointer"
-          onClick={toggleBottomSheet}
-          role="button"
-          tabIndex={0}
-          aria-expanded={expanded}
-          aria-label="Toggle route panel"
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleBottomSheet(); }}
-        >
-          <div className="flex items-center gap-2">
-            <div className="mx-auto w-10 h-1 rounded-full bg-muted-foreground/30 absolute top-2 left-1/2 -translate-x-1/2" />
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">
-              {locations.length} {locations.length === 1 ? "stop" : "stops"}
-            </span>
+        <div className="shrink-0 px-4 pb-2 pt-3" style={{ height: collapsedHeight }}>
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-300" />
+          <div
+            className="mb-2 flex items-center justify-between"
+            onClick={toggleSheet}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                toggleSheet();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-expanded={bottomSheetState !== "collapsed"}
+            aria-label="Toggle route panel"
+          >
+            <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700">
+              <MapPin className="h-4 w-4" />
+              <span>{stopsLabel}</span>
+            </div>
+            <ChevronUp
+              className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
+                bottomSheetState === "collapsed" ? "" : "rotate-180"
+              }`}
+            />
           </div>
-          <ChevronUp
-            className={`h-4 w-4 text-muted-foreground transition-transform duration-300 ${
-              expanded ? "rotate-180" : ""
-            }`}
+          <CitySearch
+            className="p-0"
+            hintMessage={searchHintMessage}
+            onHintDismiss={onDismissSearchHint}
+            inputClassName="h-10"
           />
         </div>
 
-
-        {/* Expanded content */}
-        <div className="flex flex-col overflow-hidden" style={{ height: "calc(60vh - 56px)" }}>
-          <CitySearch
-            hintMessage={searchHintMessage}
-            onHintDismiss={onDismissSearchHint}
-          />
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/60">
           <ScrollArea className="flex-1 min-h-0">
             <RouteList onLocationClick={onLocationClick} onEditLayout={onEditLayout} />
           </ScrollArea>
         </div>
-      </div>
+      </motion.div>
     </>
   );
 }

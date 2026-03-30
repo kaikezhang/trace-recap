@@ -86,7 +86,7 @@ export default function ExportDialog() {
   const [exportError, setExportError] = useState<string | null>(null);
   const exporterRef = useRef<VideoExporter | null>(null);
 
-  const handleExport = useCallback(async () => {
+  const startExport = useCallback(async (settings: ExportSettings) => {
     if (!map || segments.length === 0) return;
 
     setIsExporting(true);
@@ -95,16 +95,12 @@ export default function ExportDialog() {
     setProgress(null);
     setExportError(null);
 
-    const settings: ExportSettings = {
-      aspectRatio,
-      resolution: parseInt(resolution),
-      fps: FPS,
+    const engine = new AnimationEngine(map, locations, segments);
+    const exporter = new VideoExporter(engine, map, {
+      ...settings,
       cityLabelSize,
       cityLabelLang,
-    };
-
-    const engine = new AnimationEngine(map, locations, segments);
-    const exporter = new VideoExporter(engine, map, settings);
+    });
     exporterRef.current = exporter;
 
     try {
@@ -132,7 +128,23 @@ export default function ExportDialog() {
       setIsExporting(false);
       exporterRef.current = null;
     }
-  }, [map, locations, segments, aspectRatio, resolution, cityLabelSize, cityLabelLang]);
+  }, [map, locations, segments, cityLabelSize, cityLabelLang]);
+
+  const handleQuickExport = () => {
+    void startExport({
+      aspectRatio: "16:9",
+      resolution: 720,
+      fps: 24,
+    });
+  };
+
+  const handleConfiguredExport = () => {
+    void startExport({
+      aspectRatio,
+      resolution: parseInt(resolution, 10),
+      fps: FPS,
+    });
+  };
 
   const handleCancel = () => {
     exporterRef.current?.cancel();
@@ -282,7 +294,7 @@ export default function ExportDialog() {
           {/* Quick Export button */}
           <Button
             className="w-full h-12 bg-indigo-500 hover:bg-indigo-600 text-base font-medium"
-            onClick={handleExport}
+            onClick={handleQuickExport}
             disabled={segments.length === 0}
           >
             Quick Export (720p)
@@ -371,6 +383,14 @@ export default function ExportDialog() {
                       }}
                     />
                   </div>
+
+                  <Button
+                    className="h-11 w-full"
+                    onClick={handleConfiguredExport}
+                    disabled={segments.length === 0}
+                  >
+                    Start Export
+                  </Button>
                 </div>
               </motion.div>
             )}

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Search, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/stores/projectStore";
 import { useMap } from "./MapContext";
 import OnboardingHint from "./OnboardingHint";
@@ -17,6 +18,8 @@ interface GeoResult {
 interface CitySearchProps {
   hintMessage?: string;
   onHintDismiss?: () => void;
+  className?: string;
+  inputClassName?: string;
 }
 
 export interface CitySearchHandle {
@@ -38,7 +41,7 @@ function splitPlaceName(placeName: string): { city: string; region: string } {
 }
 
 const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
-  function CitySearch({ hintMessage, onHintDismiss }, ref) {
+  function CitySearch({ hintMessage, onHintDismiss, className, inputClassName }, ref) {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<GeoResult[]>([]);
     const [isOpen, setIsOpen] = useState(false);
@@ -139,7 +142,7 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
     };
 
     return (
-      <div ref={containerRef} className="relative p-3">
+      <div ref={containerRef} className={cn("relative p-3", className)}>
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -147,11 +150,11 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
             placeholder={PLACEHOLDER_CITIES[placeholderIndex]}
             value={query}
             onChange={(e) => search(e.target.value)}
-            className={[
+            className={cn([
               "pl-9 h-11 text-base transition-all duration-200",
               "focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10",
               !query && !placeholderVisible ? "placeholder:opacity-0" : "placeholder:opacity-100",
-            ].join(" ")}
+            ].join(" "), inputClassName)}
           />
         </div>
         {hintMessage && onHintDismiss && (
