@@ -201,12 +201,19 @@ export class CameraController {
 
       case "FLY": {
         const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
-        // Pre-zoom in last 30% of FLY to preload destination tiles
-        let zoom = gc.flyZoom;
-        if (eased > 0.7) {
+        // Start zoom from where previous segment ended (prevArriveZoom)
+        // Smoothly transition to this segment's flyZoom, then pre-zoom toward arriveZoom
+        let zoom: number;
+        if (eased < 0.15 && Math.abs(prevArriveZoom - gc.flyZoom) > 0.5) {
+          // Smooth transition from previous zoom to flyZoom in first 15%
+          zoom = lerp(prevArriveZoom, gc.flyZoom, eased / 0.15);
+        } else if (eased > 0.7) {
+          // Pre-zoom in last 30% toward arriveZoom
           const preZoomProgress = (eased - 0.7) / 0.3;
           const midZoom = gc.flyZoom + (gc.arriveZoom - gc.flyZoom) * 0.3;
           zoom = lerp(gc.flyZoom, midZoom, preZoomProgress);
+        } else {
+          zoom = gc.flyZoom;
         }
         return { center, zoom, bearing: 0, pitch: 0 };
       }
