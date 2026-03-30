@@ -68,6 +68,8 @@ export default function TopToolbar() {
   const setCityLabelTopPercent = useUIStore((s) => s.setCityLabelTopPercent);
   const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
   const setRouteLabelBottomPercent = useUIStore((s) => s.setRouteLabelBottomPercent);
+  const routeLabelSize = useUIStore((s) => s.routeLabelSize);
+  const setRouteLabelSize = useUIStore((s) => s.setRouteLabelSize);
   const undo = useHistoryStore((s) => s.undo);
   const redo = useHistoryStore((s) => s.redo);
   const canUndo = useHistoryStore((s) => s.canUndo);
@@ -303,6 +305,22 @@ export default function TopToolbar() {
                     onValueChange={(v) => {
                       const val = Array.isArray(v) ? v[0] : v;
                       setRouteLabelBottomPercent(val);
+                    }}
+                  />
+                </div>
+                {/* Route label size slider */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Route Label Size: {routeLabelSize}px
+                  </label>
+                  <Slider
+                    value={[routeLabelSize]}
+                    min={10}
+                    max={32}
+                    step={1}
+                    onValueChange={(v) => {
+                      const val = Array.isArray(v) ? v[0] : v;
+                      setRouteLabelSize(val);
                     }}
                   />
                 </div>

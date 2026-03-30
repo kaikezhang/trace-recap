@@ -125,6 +125,7 @@ export default function MapStage({
   const segments = useProjectStore((s) => s.segments);
   const cityLabelTopPercent = useUIStore((s) => s.cityLabelTopPercent);
   const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
+  const routeLabelSize = useUIStore((s) => s.routeLabelSize);
 
   const isPlaying = playbackState === "playing";
   const currentSegment = segments[currentSegmentIndex];
@@ -160,8 +161,8 @@ export default function MapStage({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="absolute left-1/2 z-10 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-full px-4 py-1.5 shadow-lg text-xs font-medium text-gray-700"
-            style={{ bottom: `max(80px, ${routeLabelBottomPercent}%)` }}
+            className="absolute left-1/2 z-10 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-full px-4 py-1.5 shadow-lg font-medium text-gray-700"
+            style={{ bottom: `max(80px, ${routeLabelBottomPercent}%)`, fontSize: `${routeLabelSize}px` }}
           >
             {fromCity} → {toCity}
           </motion.div>
