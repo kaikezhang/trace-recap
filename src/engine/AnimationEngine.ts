@@ -299,7 +299,7 @@ export class AnimationEngine {
       const segDuration =
         hoverTime + zoomOutDur + flyDur + zoomInDur + arriveDur;
 
-      console.log(`[AnimEngine] group ${i}: ${group.fromLoc.name}→${group.toLoc.name} | hover=${hoverTime.toFixed(2)}s zoom_out=${zoomOutDur.toFixed(2)}s FLY=${flyDur.toFixed(2)}s zoom_in=${zoomInDur.toFixed(2)}s arrive=${arriveDur.toFixed(2)}s | total=${segDuration.toFixed(2)}s`);
+
 
       // Use the first segment's id as the timeline entry id
       timeline.push({
