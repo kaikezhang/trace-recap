@@ -138,6 +138,8 @@ export class IconAnimator {
     }
 
     this.currentPngKey = key;
+    this.currentMode = null;
+    this.currentIconStyle = null;
     this.imgEl.src = getTransportIconPngPath(mode, direction);
   }
 
