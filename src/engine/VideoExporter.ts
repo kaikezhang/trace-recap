@@ -691,8 +691,8 @@ export class VideoExporter {
       // --- Compute animation transform for this photo ---
       let animTransform: { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number };
 
-      if (exitAnimStyle !== "none" && exitProgress > 0) {
-        // Exit animation
+      if (exitProgress > 0) {
+        // Exit animations always run during fade-out; "none" maps to opacity-only parity with PhotoOverlay.
         const staggerOffset = count > 1 ? (count - 1 - i) / (count - 1) * 0.4 : 0;
         const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
         animTransform = this.getExitTransform(exitAnimStyle, exitProgress, photoExitT, i, count);
