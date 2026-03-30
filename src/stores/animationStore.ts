@@ -67,6 +67,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       currentCityLabelZh: null,
       visiblePhotos: [],
       showPhotoOverlay: false,
-      photoOverlayOpacity: 1,
+      photoOverlayOpacity: 0,
     }),
 }));
