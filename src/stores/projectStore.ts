@@ -126,25 +126,41 @@ function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
 
-function serializeProjectState(
+/** Convert a blob: URL to a data: URL for persistence */
+async function blobUrlToDataUrl(url: string): Promise<string> {
+  if (!url.startsWith("blob:")) return url;
+  try {
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return url;
+  }
+}
+
+async function serializeProjectState(
   locations: Location[],
   segments: Segment[],
   mapStyle: MapStyle,
   segmentTimingOverrides: Record<string, number>,
   name?: string,
-): PersistedProjectData {
-  const exportedLocations = locations.map((loc) => ({
+): Promise<PersistedProjectData> {
+  const exportedLocations = await Promise.all(locations.map(async (loc) => ({
     name: loc.name,
     nameZh: loc.nameZh,
     coordinates: loc.coordinates as [number, number],
     isWaypoint: loc.isWaypoint ?? false,
     ...(loc.photos.length > 0
       ? {
-          photos: loc.photos.map((photo) => ({
-            url: photo.url,
+          photos: await Promise.all(loc.photos.map(async (photo) => ({
+            url: await blobUrlToDataUrl(photo.url),
             caption: photo.caption,
             ...(photo.focalPoint ? { focalPoint: photo.focalPoint } : {}),
-          })),
+          }))),
         }
       : {}),
     ...(loc.photoLayout
@@ -162,7 +178,7 @@ function serializeProjectState(
           },
         }
       : {}),
-  }));
+  })));
 
   return {
     name: name ?? DEFAULT_ROUTE_NAME,
@@ -433,10 +449,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Persist cleared state to IndexedDB immediately so reload doesn't resurrect old data
     const { currentProjectId, currentProjectName } = get();
     if (currentProjectId) {
-      const data = serializeProjectState([], [], DEFAULT_MAP_STYLE, {}, currentProjectName);
-      const meta = buildProjectMeta(currentProjectId, currentProjectName, []);
-      void saveProject(meta, data).then(() => {
-        lastSavedProjectJson = JSON.stringify(data);
+      void serializeProjectState([], [], DEFAULT_MAP_STYLE, {}, currentProjectName).then((data) => {
+        const meta = buildProjectMeta(currentProjectId, currentProjectName, []);
+        void saveProject(meta, data).then(() => {
+          lastSavedProjectJson = JSON.stringify(data);
+        });
       });
     }
   },
@@ -906,7 +923,7 @@ async function persistCurrentProject(state: ProjectState): Promise<void> {
   const { currentProjectId, currentProjectName, locations, segments, mapStyle, segmentTimingOverrides } = state;
   if (!currentProjectId) return;
 
-  const data = serializeProjectState(locations, segments, mapStyle, segmentTimingOverrides, currentProjectName);
+  const data = await serializeProjectState(locations, segments, mapStyle, segmentTimingOverrides, currentProjectName);
   const meta = buildProjectMeta(currentProjectId, currentProjectName, locations);
 
   await saveProject(meta, data);
@@ -939,12 +956,12 @@ export function initializeProjectPersistence(
       clearTimeout(persistTimeout);
     }
 
-    persistTimeout = setTimeout(() => {
+    persistTimeout = setTimeout(async () => {
       const projectId = state.currentProjectId;
       if (!projectId) return;
 
       const nextProjectJson = JSON.stringify(
-        serializeProjectState(
+        await serializeProjectState(
           state.locations,
           state.segments,
           state.mapStyle,
@@ -957,7 +974,7 @@ export function initializeProjectPersistence(
         return;
       }
 
-      const data = serializeProjectState(
+      const data = await serializeProjectState(
         state.locations,
         state.segments,
         state.mapStyle,

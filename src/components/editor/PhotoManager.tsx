@@ -7,13 +7,10 @@ import { useProjectStore } from "@/stores/projectStore";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-function readFileAsDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+function createPhotoURL(file: File): string {
+  // Use blob URL instead of data URL — keeps image data out of JS memory
+  // Blob URLs are lightweight string references (~50 bytes vs 4MB+ for data URLs)
+  return URL.createObjectURL(file);
 }
 
 async function processImageFiles(
@@ -31,12 +28,8 @@ async function processImageFiles(
       console.warn(`Skipped "${file.name}": exceeds 10MB limit (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
       continue;
     }
-    try {
-      const url = await readFileAsDataURL(file);
-      addPhoto(locationId, { url });
-    } catch (err) {
-      console.warn(`Failed to read "${file.name}":`, err);
-    }
+    const url = createPhotoURL(file);
+    addPhoto(locationId, { url });
   }
 }
 
