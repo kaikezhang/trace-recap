@@ -40,7 +40,7 @@ export default function PlaybackControls({
   const isPlaying = playbackState === "playing";
 
   const controlsBottomClass =
-    bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[120px]";
+    bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[132px]";
   const hideOnMobile = bottomSheetState === "full";
 
   return (
