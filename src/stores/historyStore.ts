@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { useProjectStore } from "./projectStore";
+import { useProjectStore, invalidateSerializationCache } from "./projectStore";
 import type { Location, Segment, MapStyle } from "@/types";
 
 interface HistorySnapshot {
@@ -78,6 +78,7 @@ export const useHistoryStore = create<HistoryState>((set) => ({
       const redoStack = [...state.redoStack, current];
 
       restoreSnapshot(snapshot);
+      invalidateSerializationCache();
 
       return {
         undoStack,
@@ -104,6 +105,7 @@ export const useHistoryStore = create<HistoryState>((set) => ({
       const undoStack = [...state.undoStack, current];
 
       restoreSnapshot(snapshot);
+      invalidateSerializationCache();
 
       return {
         undoStack,

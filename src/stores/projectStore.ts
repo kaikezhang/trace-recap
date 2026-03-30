@@ -151,11 +151,25 @@ const serializedLocationCache = new Map<string, SerializedLocation>();
 function markLocationDirty(locationId: string): void {
   dirtyLocationIds.add(locationId);
   serializedLocationCache.delete(locationId);
+  locationDirtyVersion.set(locationId, (locationDirtyVersion.get(locationId) ?? 0) + 1);
 }
 
 function clearDirtyTracking(): void {
   dirtyLocationIds.clear();
   serializedLocationCache.clear();
+  locationDirtyVersion.clear();
+}
+
+/** Invalidate all serialization caches and mark all locations dirty (e.g. after undo/redo) */
+export function invalidateSerializationCache(): void {
+  const { locations } = useProjectStore.getState();
+  serializedLocationCache.clear();
+  dirtyLocationIds.clear();
+  locationDirtyVersion.clear();
+  for (const loc of locations) {
+    dirtyLocationIds.add(loc.id);
+    locationDirtyVersion.set(loc.id, (locationDirtyVersion.get(loc.id) ?? 0) + 1);
+  }
 }
 
 /** Convert a blob: URL to a data: URL for persistence (cached) */
@@ -211,6 +225,9 @@ async function serializeLocation(loc: Location): Promise<SerializedLocation> {
   };
 }
 
+/** Version counter per location — incremented on each markLocationDirty() call */
+const locationDirtyVersion = new Map<string, number>();
+
 async function serializeProjectState(
   locations: Location[],
   segments: Segment[],
@@ -218,10 +235,16 @@ async function serializeProjectState(
   segmentTimingOverrides: Record<string, number>,
   name?: string,
 ): Promise<PersistedProjectData> {
+  // Snapshot dirty versions at save start to detect concurrent edits
+  const dirtySnapshotVersions = new Map<string, number>();
+  for (const locId of dirtyLocationIds) {
+    dirtySnapshotVersions.set(locId, locationDirtyVersion.get(locId) ?? 0);
+  }
+
   const exportedLocations = await Promise.all(locations.map(async (loc) => {
     // Use cached serialization for clean locations (no photo changes)
     const cached = serializedLocationCache.get(loc.id);
-    if (cached && !dirtyLocationIds.has(loc.id)) {
+    if (cached && !dirtySnapshotVersions.has(loc.id)) {
       // Re-serialize cheap fields (name, coords, waypoint) but reuse photo data
       const updated: SerializedLocation = {
         ...cached,
@@ -236,8 +259,13 @@ async function serializeProjectState(
 
     // Full serialization (expensive blob→dataURL for photos)
     const serialized = await serializeLocation(loc);
-    serializedLocationCache.set(loc.id, serialized);
-    dirtyLocationIds.delete(loc.id);
+    // Only update cache/clear dirty if version hasn't changed during async save
+    const snapshotVersion = dirtySnapshotVersions.get(loc.id);
+    const currentVersion = locationDirtyVersion.get(loc.id) ?? 0;
+    if (snapshotVersion === undefined || snapshotVersion === currentVersion) {
+      serializedLocationCache.set(loc.id, serialized);
+      dirtyLocationIds.delete(loc.id);
+    }
     return serialized;
   }));
 
