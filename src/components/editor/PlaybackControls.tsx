@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -23,7 +24,7 @@ function formatTime(seconds: number): string {
   return `${m}:${String(rem).padStart(2, "0")}`;
 }
 
-export default function PlaybackControls({
+export default memo(function PlaybackControls({
   onPlay,
   onPause,
   onReset,
@@ -118,4 +119,4 @@ export default function PlaybackControls({
       </div>
     </div>
   );
-}
+});

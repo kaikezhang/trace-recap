@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -13,6 +13,7 @@ import {
   setSegmentSourceData,
 } from "./routeSegmentSources";
 import { useProjectStore } from "@/stores/projectStore";
+import { useLocationsForMap } from "@/stores/selectors";
 import { useAnimationStore } from "@/stores/animationStore";
 import { MAPBOX_TOKEN, getDefaultMapOptions, applyStyleOverrides } from "@/lib/mapbox";
 import { MAP_STYLES } from "@/lib/constants";
@@ -33,7 +34,7 @@ const MODE_LINE_STYLES: Record<
   bicycle: { color: "#14b8a6", dasharray: [3, 3] },
 };
 
-export default function MapCanvas() {
+export default memo(function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
@@ -41,7 +42,7 @@ export default function MapCanvas() {
   const [mapLoaded, setMapLoaded] = useState(false);
   const { setMap } = useMap();
   const addLocation = useProjectStore((s) => s.addLocation);
-  const locations = useProjectStore((s) => s.locations);
+  const locations = useLocationsForMap();
   const segments = useProjectStore((s) => s.segments);
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const playbackState = useAnimationStore((s) => s.playbackState);
@@ -454,4 +455,4 @@ export default function MapCanvas() {
       </AnimatePresence>
     </div>
   );
-}
+});
