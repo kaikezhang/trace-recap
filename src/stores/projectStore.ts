@@ -7,6 +7,7 @@ import type {
   PhotoLayout,
   TransportMode,
   TransportIconStyle,
+  IconVariant,
   MapStyle,
   ProjectMeta,
 } from "@/types";
@@ -45,6 +46,7 @@ export interface ImportRouteData {
     toIndex: number;
     transportMode: TransportMode;
     iconStyle?: TransportIconStyle;
+    iconVariant?: IconVariant;
   }[];
   timingOverrides?: Record<string, number>;
   mapStyle?: MapStyle;
@@ -86,6 +88,10 @@ interface ProjectState {
   setSegmentIconStyle: (
     segmentId: string,
     iconStyle: TransportIconStyle,
+  ) => void;
+  setSegmentIconVariant: (
+    segmentId: string,
+    variant: IconVariant,
   ) => void;
   setSegmentGeometry: (segmentId: string, geometry: GeoJSON.LineString) => void;
   setSegmentTiming: (segmentId: string, duration: number | null) => void;
@@ -280,6 +286,7 @@ async function serializeProjectState(
       toIndex: locations.findIndex((location) => location.id === segment.toId),
       transportMode: segment.transportMode,
       iconStyle: segment.iconStyle,
+      ...(segment.iconVariant ? { iconVariant: segment.iconVariant } : {}),
     })),
     ...(Object.keys(segmentTimingOverrides).length > 0
       ? {
@@ -446,7 +453,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     useHistoryStore.getState().pushState();
     return set((state) => ({
       segments: state.segments.map((s) =>
-        s.id === segmentId ? { ...s, transportMode: mode, geometry: null } : s,
+        s.id === segmentId ? { ...s, transportMode: mode, iconVariant: undefined, geometry: null } : s,
       ),
     }));
   },
@@ -456,6 +463,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return set((state) => ({
       segments: state.segments.map((segment) =>
         segment.id === segmentId ? { ...segment, iconStyle } : segment,
+      ),
+    }));
+  },
+
+  setSegmentIconVariant: (segmentId, variant) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => ({
+      segments: state.segments.map((segment) =>
+        segment.id === segmentId ? { ...segment, iconVariant: variant } : segment,
       ),
     }));
   },
@@ -626,6 +642,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         toIndex: locations.findIndex((l) => l.id === seg.toId),
         transportMode: seg.transportMode,
         iconStyle: seg.iconStyle,
+        ...(seg.iconVariant ? { iconVariant: seg.iconVariant } : {}),
       })),
       ...(Object.keys(segmentTimingOverrides).length > 0
         ? {
@@ -684,6 +701,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         toId: locations[seg.toIndex].id,
         transportMode: seg.transportMode,
         iconStyle: resolveTransportIconStyle(seg.iconStyle),
+        ...(seg.iconVariant ? { iconVariant: seg.iconVariant } : {}),
         geometry: null,
       }));
 
