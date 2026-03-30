@@ -340,7 +340,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
                 initial={enter.initial}
                 animate={animateValues}
                 transition={exitProgress > 0
-                  ? { duration: 0.15, ease: "easeOut" }
+                  ? { duration: 0.5, ease: "easeOut" }
                   : enter.transition
                 }
                 className="absolute overflow-hidden drop-shadow-xl"

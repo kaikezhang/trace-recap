@@ -461,9 +461,13 @@ export class AnimationEngine {
           showPhotos = true;
           photoOpacity = 1;
         } else if (phase === "ZOOM_OUT") {
-          // ZOOM_OUT: fade from 1 → 0
+          // ZOOM_OUT: slow fade from 1 → 0.3 (exit animation plays during this)
           showPhotos = true;
-          photoOpacity = 1 - phaseProgress;
+          photoOpacity = 1 - phaseProgress * 0.7;
+        } else if (phase === "FLY" && phaseProgress < 0.3) {
+          // Continue fading through first 30% of FLY for smoother exit
+          showPhotos = true;
+          photoOpacity = 0.3 * (1 - phaseProgress / 0.3);
         }
       }
     }
