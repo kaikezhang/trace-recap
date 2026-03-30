@@ -70,6 +70,7 @@ export default function ExportDialog() {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const routeLabelSize = useUIStore((s) => s.routeLabelSize);
   const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
+  const photoAnimation = useUIStore((s) => s.photoAnimation);
 
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
@@ -97,6 +98,7 @@ export default function ExportDialog() {
       viewportRatio,
       routeLabelSize,
       routeLabelBottomPercent,
+      photoAnimation,
     });
     exporterRef.current = exporter;
 
@@ -130,7 +132,7 @@ export default function ExportDialog() {
       setIsExporting(false);
       exporterRef.current = null;
     }
-  }, [map, locations, segments, cityLabelSize, cityLabelLang, viewportRatio, routeLabelSize, routeLabelBottomPercent]);
+  }, [map, locations, segments, cityLabelSize, cityLabelLang, viewportRatio, routeLabelSize, routeLabelBottomPercent, photoAnimation]);
 
   const handleQuickExport = () => {
     void startExport({

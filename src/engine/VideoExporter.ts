@@ -1,6 +1,6 @@
 import * as turf from "@turf/turf";
 import type mapboxgl from "mapbox-gl";
-import type { ExportSettings, Photo, TransportMode } from "@/types";
+import type { ExportSettings, Photo, PhotoAnimation, TransportMode } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 import type { AnimationEvent } from "./AnimationEngine";
 import {
@@ -41,6 +41,8 @@ export class VideoExporter {
   private abortController: AbortController | null = null;
   private iconImages: Map<string, HTMLImageElement> = new Map();
   private photoImages: Map<string, PreloadedPhoto> = new Map();
+  /** Track when photos first appeared (frame index) per group, for enter animation timing */
+  private photoShowStartFrame: Map<number, number> = new Map();
 
   constructor(
     engine: AnimationEngine,
@@ -410,13 +412,160 @@ export class VideoExporter {
     }
   }
 
+  /** Cubic ease-out: matches framer-motion's default easeOut */
+  private easeOut(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  /** Compute per-photo canvas transforms for enter animation */
+  private getEnterTransform(
+    style: PhotoAnimation,
+    progress: number, // 0→1 eased
+    index: number,
+    total: number,
+  ): { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number } {
+    const p = progress;
+    switch (style) {
+      case "none":
+        return { opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
+      case "fade":
+        return { opacity: p, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
+      case "scale":
+        return {
+          opacity: p,
+          scaleX: 0.6 + 0.4 * p,
+          scaleY: 0.6 + 0.4 * p,
+          translateX: 0,
+          translateY: 60 * (1 - p),
+          rotate: 0,
+          blur: 8 * (1 - p),
+        };
+      case "slide":
+        return {
+          opacity: p,
+          scaleX: 1,
+          scaleY: 1,
+          translateX: (index % 2 === 0 ? -80 : 80) * (1 - p),
+          translateY: 0,
+          rotate: 0,
+          blur: 0,
+        };
+      case "flip":
+        // Simulate flip via horizontal scale (1→0→1 mapped from rotateY 90→0)
+        return {
+          opacity: p,
+          scaleX: Math.abs(Math.cos((1 - p) * Math.PI / 2)),
+          scaleY: 1,
+          translateX: 0,
+          translateY: 0,
+          rotate: 0,
+          blur: 0,
+        };
+      case "scatter": {
+        const angle = (index / Math.max(total, 1)) * 2 * Math.PI;
+        const dist = 200;
+        return {
+          opacity: p,
+          scaleX: 0.4 + 0.6 * p,
+          scaleY: 0.4 + 0.6 * p,
+          translateX: Math.cos(angle) * dist * (1 - p),
+          translateY: Math.sin(angle) * dist * (1 - p),
+          rotate: (index % 2 === 0 ? -30 : 30) * (1 - p),
+          blur: 0,
+        };
+      }
+      case "typewriter":
+        return {
+          opacity: p,
+          scaleX: 0.8 + 0.2 * p,
+          scaleY: 0.8 + 0.2 * p,
+          translateX: 0,
+          translateY: 20 * (1 - p),
+          rotate: 0,
+          blur: 0,
+        };
+    }
+  }
+
+  /** Compute per-photo canvas transforms for exit animation */
+  private getExitTransform(
+    style: PhotoAnimation,
+    exitProgress: number, // 0→1 overall exit
+    photoExitT: number, // 0→1 per-photo staggered
+    index: number,
+    total: number,
+  ): { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number } {
+    const t = photoExitT;
+    switch (style) {
+      case "none":
+        return { opacity: 1 - exitProgress, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
+      case "fade":
+        return { opacity: 1 - t, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
+      case "scale":
+        return {
+          opacity: 1 - t,
+          scaleX: 1 - t * 0.4,
+          scaleY: 1 - t * 0.4,
+          translateX: 0,
+          translateY: -t * 60,
+          rotate: t * (index % 2 === 0 ? -12 : 12),
+          blur: t * 6,
+        };
+      case "slide":
+        return {
+          opacity: 1 - t,
+          scaleX: 1,
+          scaleY: 1,
+          translateX: (index % 2 === 0 ? -1 : 1) * t * 120,
+          translateY: 0,
+          rotate: 0,
+          blur: 0,
+        };
+      case "flip":
+        return {
+          opacity: 1 - t * 0.8,
+          scaleX: Math.abs(Math.cos(t * Math.PI / 2)),
+          scaleY: 1,
+          translateX: 0,
+          translateY: 0,
+          rotate: 0,
+          blur: 0,
+        };
+      case "scatter": {
+        const angle = (index / 4) * 2 * Math.PI;
+        const dist = 200;
+        return {
+          opacity: 1 - t,
+          scaleX: 1 - t * 0.5,
+          scaleY: 1 - t * 0.5,
+          translateX: Math.cos(angle) * dist * t,
+          translateY: Math.sin(angle) * dist * t,
+          rotate: (index % 2 === 0 ? -25 : 25) * t,
+          blur: t * 4,
+        };
+      }
+      case "typewriter":
+        return {
+          opacity: 1 - t,
+          scaleX: 1 - t * 0.2,
+          scaleY: 1 - t * 0.2,
+          translateX: 0,
+          translateY: t * -30,
+          rotate: 0,
+          blur: 0,
+        };
+    }
+  }
+
   /** Draw photo overlays onto the offscreen canvas during ARRIVE phases */
   private drawPhotos(
     ctx: CanvasRenderingContext2D,
     canvasWidth: number,
     canvasHeight: number,
     scaleX: number,
-    captured: { progress: AnimationEvent | null }
+    captured: { progress: AnimationEvent | null },
+    frameIndex: number,
+    fps: number,
   ): void {
     const progress = captured.progress;
     if (!progress || !progress.showPhotos) return;
@@ -487,6 +636,23 @@ export class VideoExporter {
     const count = loaded.length;
     const isPolaroid = layout?.template === "polaroid";
 
+    // --- Photo animation timing ---
+    const animStyle = this.settings.photoAnimation ?? "scale";
+    const groupIdx = progress.groupIndex;
+
+    // Track when photos first appeared for this group
+    if (!this.photoShowStartFrame.has(groupIdx)) {
+      this.photoShowStartFrame.set(groupIdx, frameIndex);
+    }
+    const enterStartFrame = this.photoShowStartFrame.get(groupIdx)!;
+
+    // Enter animation: ~0.4s per photo, with per-photo stagger
+    const enterDurationSec = 0.4;
+    const enterDurationFrames = enterDurationSec * fps;
+
+    // Exit: derive from photoOpacity (1 = fully visible, 0 = fully gone)
+    const exitProgress = 1 - (progress.photoOpacity ?? 1); // 0 = no exit, 1 = fully exited
+
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
       const { photo, preloaded } = loaded[i];
@@ -518,11 +684,39 @@ export class VideoExporter {
       const centerX = rx + frameW / 2;
       const centerY = ry + frameH / 2;
 
-      ctx.save();
-      ctx.translate(centerX, centerY);
-      if (rotation !== 0) {
-        ctx.rotate((rotation * Math.PI) / 180);
+      // --- Compute animation transform for this photo ---
+      let animTransform: { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number };
+
+      if (animStyle !== "none" && exitProgress > 0) {
+        // Exit animation
+        const staggerOffset = count > 1 ? (count - 1 - i) / (count - 1) * 0.4 : 0;
+        const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
+        animTransform = this.getExitTransform(animStyle, exitProgress, photoExitT, i, count);
+      } else if (animStyle !== "none") {
+        // Enter animation with per-photo stagger
+        const staggerDelaySec = animStyle === "typewriter" ? i * 0.2 : i * 0.08;
+        const staggerDelayFrames = staggerDelaySec * fps;
+        const elapsed = frameIndex - enterStartFrame - staggerDelayFrames;
+        const rawProgress = Math.max(0, Math.min(1, elapsed / enterDurationFrames));
+        const easedProgress = this.easeOut(rawProgress);
+        animTransform = this.getEnterTransform(animStyle, easedProgress, i, count);
+      } else {
+        animTransform = { opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, rotate: 0, blur: 0 };
       }
+
+      // Skip fully transparent photos
+      if (animTransform.opacity <= 0) {
+        continue;
+      }
+
+      ctx.save();
+      ctx.globalAlpha = animTransform.opacity;
+      if (animTransform.blur > 0) {
+        ctx.filter = `blur(${animTransform.blur * scaleX}px)`;
+      }
+      ctx.translate(centerX + animTransform.translateX * scaleX, centerY + animTransform.translateY * scaleX);
+      ctx.rotate((rotation + animTransform.rotate) * Math.PI / 180);
+      ctx.scale(animTransform.scaleX, animTransform.scaleY);
 
       if (isPolaroid) {
         // Polaroid: white card with thicker bottom padding and shadow
@@ -666,6 +860,7 @@ export class VideoExporter {
     const { fps } = this.settings;
     this.cancelled = false;
     this.abortController = new AbortController();
+    this.photoShowStartFrame.clear();
     const { signal } = this.abortController;
 
     const totalDuration = this.engine.getTotalDuration();
@@ -759,7 +954,13 @@ export class VideoExporter {
     this.drawVehicleIcon(offCtx, scaleX, scaleY);
     this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
-    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured);
+    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured, frameIndex, fps);
+
+    // Clear photo start tracking when photos stop showing so re-entry is tracked fresh
+    const capturedProgress = captured.progress as AnimationEvent | null;
+    if (!capturedProgress || !capturedProgress.showPhotos) {
+      this.photoShowStartFrame.clear();
+    }
   }
 
   private async exportWithWebCodecs(

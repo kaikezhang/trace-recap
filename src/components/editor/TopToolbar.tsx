@@ -41,7 +41,7 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import type { AspectRatio, MapStyle } from "@/types";
+import type { AspectRatio, MapStyle, PhotoAnimation } from "@/types";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +70,8 @@ export default function TopToolbar() {
   const setRouteLabelBottomPercent = useUIStore((s) => s.setRouteLabelBottomPercent);
   const routeLabelSize = useUIStore((s) => s.routeLabelSize);
   const setRouteLabelSize = useUIStore((s) => s.setRouteLabelSize);
+  const photoAnimation = useUIStore((s) => s.photoAnimation);
+  const setPhotoAnimation = useUIStore((s) => s.setPhotoAnimation);
   const undo = useHistoryStore((s) => s.undo);
   const redo = useHistoryStore((s) => s.redo);
   const canUndo = useHistoryStore((s) => s.canUndo);
@@ -347,6 +349,34 @@ export default function TopToolbar() {
                       setRouteLabelSize(val);
                     }}
                   />
+                </div>
+                <hr className="border-gray-100" />
+                {/* Photo animation selector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Photo Animation</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      { value: "scale", label: "Scale" },
+                      { value: "fade", label: "Fade" },
+                      { value: "slide", label: "Slide" },
+                      { value: "flip", label: "Flip" },
+                      { value: "scatter", label: "Scatter" },
+                      { value: "typewriter", label: "Typewriter" },
+                      { value: "none", label: "None" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                          photoAnimation === opt.value
+                            ? "bg-indigo-500 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
+                        onClick={() => setPhotoAnimation(opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

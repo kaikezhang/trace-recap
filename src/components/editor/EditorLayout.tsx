@@ -100,6 +100,7 @@ function EditorContent() {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
   const importRoute = useProjectStore((s) => s.importRoute);
+  const clearRoute = useProjectStore((s) => s.clearRoute);
   const regenerateSegmentGeometries = useProjectStore(
     (s) => s.regenerateSegmentGeometries,
   );
@@ -276,6 +277,7 @@ function EditorContent() {
     demoLoadedRef.current = true;
 
     const loadDemoProject = async () => {
+      clearRoute();
       importRoute(demoProject);
       await regenerateSegmentGeometries();
 

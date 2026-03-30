@@ -79,6 +79,7 @@ export interface ExportSettings {
   viewportRatio?: AspectRatio;
   routeLabelSize?: number; // Route label font size in px (default 14)
   routeLabelBottomPercent?: number; // Route label bottom position % (default 15)
+  photoAnimation?: PhotoAnimation;
 }
 
 export type LayoutTemplate = "grid" | "hero" | "masonry" | "filmstrip" | "scatter" | "polaroid" | "overlap" | "full";
@@ -94,6 +95,8 @@ export interface PhotoLayout {
     cols?: number[];       // relative column widths
   };
 }
+
+export type PhotoAnimation = "scale" | "fade" | "slide" | "flip" | "scatter" | "typewriter" | "none";
 
 export type MapStyle = "light" | "dark" | "satellite";
 
