@@ -34,11 +34,11 @@ function safeContainerAspect(containerAspect: number): number {
 }
 
 function heightForWidth(width: number, photoAspect: number, containerAspect: number): number {
-  return width / safeAspect(photoAspect) / safeContainerAspect(containerAspect);
+  return (width * safeContainerAspect(containerAspect)) / safeAspect(photoAspect);
 }
 
 function widthForHeight(height: number, photoAspect: number, containerAspect: number): number {
-  return height * safeAspect(photoAspect) * safeContainerAspect(containerAspect);
+  return (height * safeAspect(photoAspect)) / safeContainerAspect(containerAspect);
 }
 
 function fitPhotoToSlot(slot: LayoutSlot, photo: PhotoMeta, containerAspect: number): PhotoRect {
@@ -73,7 +73,7 @@ function layoutRows(
   const innerHeight = 1 - gap * (rows.length + 1);
   const rowHeights = rows.map((row) => {
     const rowAspectSum = row.reduce((sum, photoIndex) => sum + safeAspect(photos[photoIndex]?.aspect ?? 1), 0);
-    return innerWidth / rowAspectSum / safeContainerAspect(containerAspect);
+    return (innerWidth * safeContainerAspect(containerAspect)) / rowAspectSum;
   });
   const totalHeight = rowHeights.reduce((sum, height) => sum + height, 0);
   const scale = totalHeight > 0 ? Math.min(1, innerHeight / totalHeight) : 1;
@@ -769,7 +769,7 @@ function layoutFilmstrip(photos: PhotoMeta[], containerAspect: number, gap: numb
   const innerWidth = 1 - gap * 2;
   const availW = 1 - gap * (n + 1);
   const availH = 1 - gap * 2;
-  const rowH = Math.min(availH, availW / totalAspect / safeContainerAspect(containerAspect));
+  const rowH = Math.min(availH, (availW * safeContainerAspect(containerAspect)) / totalAspect);
   const usedW = photos.reduce((sum, photo) => sum + widthForHeight(rowH, photo.aspect, containerAspect), 0)
     + gap * Math.max(0, n - 1);
   const yOff = (1 - rowH) / 2;
