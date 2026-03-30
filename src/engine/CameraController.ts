@@ -201,16 +201,9 @@ export class CameraController {
 
       case "FLY": {
         const center = lerp2d(gc.fromCenter, gc.toCenter, eased);
-        // Smooth zoom transition during FLY:
-        // - First 20%: transition from prevArriveZoom to flyZoom (replaces missing ZOOM_OUT for waypoints)
-        // - Middle 50%: hold at flyZoom
-        // - Last 30%: pre-zoom toward arriveZoom (preload destination tiles)
+        // Pre-zoom in last 30% of FLY to preload destination tiles
         let zoom = gc.flyZoom;
-        if (eased < 0.2 && prevArriveZoom !== gc.flyZoom) {
-          // Smooth zoom-out at start of FLY
-          const zoomOutProgress = eased / 0.2;
-          zoom = lerp(prevArriveZoom, gc.flyZoom, zoomOutProgress);
-        } else if (eased > 0.7) {
+        if (eased > 0.7) {
           const preZoomProgress = (eased - 0.7) / 0.3;
           const midZoom = gc.flyZoom + (gc.arriveZoom - gc.flyZoom) * 0.3;
           zoom = lerp(gc.flyZoom, midZoom, preZoomProgress);
