@@ -3,11 +3,31 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   X,
   LayoutGrid,
   LayoutTemplate,
   Image as ImageIcon,
   Images,
+  GripVertical,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
@@ -22,6 +42,7 @@ interface PhotoLayoutEditorProps {
 }
 
 type LayoutStyle = "grid" | "collage" | "single" | "carousel";
+type SortablePhotoListOrientation = "horizontal" | "vertical";
 
 const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; template: LayoutTemplateType | "auto" }[] = [
   { id: "grid", label: "Grid", icon: LayoutGrid, template: "grid" },
@@ -29,6 +50,106 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "single", label: "Single", icon: ImageIcon, template: "auto" },
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
 ];
+
+function getOrderedPhotos(photos: Photo[], order: string[]): Photo[] {
+  const photoMap = new Map(photos.map((photo) => [photo.id, photo]));
+  const ordered = order
+    .map((id) => photoMap.get(id))
+    .filter((photo): photo is Photo => Boolean(photo));
+
+  for (const photo of photos) {
+    if (!ordered.some((orderedPhoto) => orderedPhoto.id === photo.id)) {
+      ordered.push(photo);
+    }
+  }
+
+  return ordered;
+}
+
+function PhotoThumbnail({
+  photo,
+  index,
+  selected,
+  orientation,
+  overlay = false,
+}: {
+  photo: Photo;
+  index: number;
+  selected: boolean;
+  orientation: SortablePhotoListOrientation;
+  overlay?: boolean;
+}) {
+  return (
+    <div
+      className={`group relative overflow-hidden rounded-lg bg-white ${
+        orientation === "vertical" ? "w-full aspect-square" : "h-[60px] w-[60px] shrink-0"
+      } ${
+        selected
+          ? "ring-2 ring-indigo-500 ring-offset-2"
+          : "ring-1 ring-transparent hover:ring-gray-300 hover:ring-offset-1"
+      } ${overlay ? "scale-105 shadow-2xl" : ""}`}
+    >
+      <img
+        src={photo.url}
+        alt={`Photo ${index + 1} thumbnail`}
+        className="h-full w-full object-cover"
+        style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
+      />
+      <div className="pointer-events-none absolute inset-x-1 top-1 flex items-center justify-between rounded-md bg-black/45 px-1.5 py-1 text-white backdrop-blur-sm">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">{index + 1}</span>
+        <GripVertical className="h-3.5 w-3.5 opacity-80" />
+      </div>
+    </div>
+  );
+}
+
+function SortablePhotoThumbnail({
+  photo,
+  index,
+  selected,
+  orientation,
+  onSelect,
+}: {
+  photo: Photo;
+  index: number;
+  selected: boolean;
+  orientation: SortablePhotoListOrientation;
+  onSelect: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: photo.id });
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={onSelect}
+      aria-label={`Select photo ${index + 1}${selected ? " (selected)" : ""}`}
+      className={`touch-none text-left transition-[box-shadow,opacity] ${
+        isDragging ? "opacity-35" : ""
+      }`}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <PhotoThumbnail
+        photo={photo}
+        index={index}
+        selected={selected}
+        orientation={orientation}
+      />
+    </button>
+  );
+}
 
 /* ── Map-backed preview container ── */
 
@@ -167,7 +288,37 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     return { width: `${w}px`, height: `${h}px` };
   }, [viewportRatio, panelSize, previewAspect]);
 
-  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const orderedPhotos = useMemo(
+    () => getOrderedPhotos(location.photos, photoOrder),
+    [location.photos, photoOrder]
+  );
+  const orderedPhotoIds = useMemo(
+    () => orderedPhotos.map((photo) => photo.id),
+    [orderedPhotos]
+  );
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string>(() => orderedPhotoIds[0] ?? "");
+  const [activeDragPhotoId, setActiveDragPhotoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (orderedPhotoIds.length === 0) {
+      setSelectedPhotoId("");
+      return;
+    }
+
+    setSelectedPhotoId((current) =>
+      current && orderedPhotoIds.includes(current) ? current : orderedPhotoIds[0]
+    );
+  }, [orderedPhotoIds]);
+
+  const sensors = useSensors(
+    useSensor(MouseSensor),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
+      },
+    })
+  );
 
   const activeStyle: LayoutStyle = (() => {
     if (activeTemplate === "grid") return "grid";
@@ -197,18 +348,43 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     [updateLayout]
   );
 
-  const orderedPhotos = (() => {
-    const photoMap = new Map(location.photos.map((p) => [p.id, p]));
-    const ordered = photoOrder
-      .map((id) => photoMap.get(id))
-      .filter((p): p is NonNullable<typeof p> => !!p);
-    for (const p of location.photos) {
-      if (!ordered.find((o) => o.id === p.id)) ordered.push(p);
-    }
-    return ordered;
-  })();
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragPhotoId(String(event.active.id));
+  }, []);
+
+  const handleDragCancel = useCallback(() => {
+    setActiveDragPhotoId(null);
+  }, []);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveDragPhotoId(null);
+
+      if (!over || active.id === over.id) {
+        return;
+      }
+
+      const oldIndex = orderedPhotoIds.indexOf(String(active.id));
+      const newIndex = orderedPhotoIds.indexOf(String(over.id));
+
+      if (oldIndex < 0 || newIndex < 0) {
+        return;
+      }
+
+      updateLayout({ order: arrayMove(orderedPhotoIds, oldIndex, newIndex) });
+    },
+    [orderedPhotoIds, updateLayout]
+  );
 
   if (location.photos.length === 0) return null;
+
+  const activeDragPhoto = activeDragPhotoId
+    ? orderedPhotos.find((photo) => photo.id === activeDragPhotoId) ?? null
+    : null;
+  const activeDragPhotoIndex = activeDragPhoto
+    ? orderedPhotos.findIndex((photo) => photo.id === activeDragPhoto.id)
+    : 0;
 
   const layoutPreviewNode = (
     <PhotoOverlay
@@ -275,27 +451,42 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
             {/* Photo thumbnails — horizontal scroll */}
             <div className="px-4 pb-3 overflow-x-auto">
-              <div className="flex gap-2">
-                {orderedPhotos.map((photo, i) => (
-                  <button
-                    key={photo.id}
-                    onClick={() => setSelectedPhotoIndex(i)}
-                    aria-label={`Select photo ${i + 1}${selectedPhotoIndex === i ? " (selected)" : ""}`}
-                    className={`shrink-0 w-[60px] h-[60px] rounded-lg overflow-hidden transition-all ${
-                      selectedPhotoIndex === i
-                        ? "ring-2 ring-indigo-500 ring-offset-2"
-                        : "hover:ring-2 hover:ring-gray-300 hover:ring-offset-1"
-                    }`}
-                  >
-                    <img
-                      src={photo.url}
-                      alt={`Photo ${i + 1} thumbnail`}
-                      className="w-full h-full object-cover"
-                      style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragCancel={handleDragCancel}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={orderedPhotoIds}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  <div className="flex gap-2">
+                    {orderedPhotos.map((photo, i) => (
+                      <SortablePhotoThumbnail
+                        key={photo.id}
+                        photo={photo}
+                        index={i}
+                        selected={selectedPhotoId === photo.id}
+                        orientation="horizontal"
+                        onSelect={() => setSelectedPhotoId(photo.id)}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+                <DragOverlay>
+                  {activeDragPhoto ? (
+                    <PhotoThumbnail
+                      photo={activeDragPhoto}
+                      index={activeDragPhotoIndex}
+                      selected={selectedPhotoId === activeDragPhoto.id}
+                      orientation="horizontal"
+                      overlay
                     />
-                  </button>
-                ))}
-              </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             </div>
 
             {/* Footer */}
@@ -366,27 +557,42 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
               <div className="p-4 pb-2">
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Photos</p>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 pt-2 space-y-2">
-                {orderedPhotos.map((photo, i) => (
-                  <button
-                    key={photo.id}
-                    onClick={() => setSelectedPhotoIndex(i)}
-                    aria-label={`Select photo ${i + 1}${selectedPhotoIndex === i ? " (selected)" : ""}`}
-                    className={`w-full aspect-square rounded-lg overflow-hidden transition-all ${
-                      selectedPhotoIndex === i
-                        ? "ring-2 ring-indigo-500 ring-offset-2"
-                        : "hover:ring-2 hover:ring-gray-300 hover:ring-offset-1"
-                    }`}
-                  >
-                    <img
-                      src={photo.url}
-                      alt={`Photo ${i + 1} thumbnail`}
-                      className="w-full h-full object-cover"
-                      style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragCancel={handleDragCancel}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={orderedPhotoIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="flex-1 overflow-y-auto p-4 pt-2 space-y-2">
+                    {orderedPhotos.map((photo, i) => (
+                      <SortablePhotoThumbnail
+                        key={photo.id}
+                        photo={photo}
+                        index={i}
+                        selected={selectedPhotoId === photo.id}
+                        orientation="vertical"
+                        onSelect={() => setSelectedPhotoId(photo.id)}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+                <DragOverlay>
+                  {activeDragPhoto ? (
+                    <PhotoThumbnail
+                      photo={activeDragPhoto}
+                      index={activeDragPhotoIndex}
+                      selected={selectedPhotoId === activeDragPhoto.id}
+                      orientation="vertical"
+                      overlay
                     />
-                  </button>
-                ))}
-              </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             </div>
           </div>
 
