@@ -72,6 +72,7 @@ interface ProjectState {
   segments: Segment[];
   mapStyle: MapStyle;
   segmentTimingOverrides: Record<string, number>;
+  segmentColors: Record<number, string>; // segmentIndex → hex color
 
   // Location CRUD
   addLocation: (
@@ -98,6 +99,8 @@ interface ProjectState {
   setSegmentGeometry: (segmentId: string, geometry: GeoJSON.LineString) => void;
   setSegmentTiming: (segmentId: string, duration: number | null) => void;
   clearAllTimingOverrides: () => void;
+  setSegmentColor: (index: number, color: string) => void;
+  clearSegmentColors: () => void;
 
   // Photo operations
   addPhoto: (
@@ -730,6 +733,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   segments: [],
   mapStyle: DEFAULT_MAP_STYLE,
   segmentTimingOverrides: {},
+  segmentColors: {},
 
   addLocation: (loc) => {
     useHistoryStore.getState().pushState();
@@ -852,6 +856,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   clearAllTimingOverrides: () => set({ segmentTimingOverrides: {} }),
 
+  setSegmentColor: (index, color) =>
+    set((state) => ({
+      segmentColors: { ...state.segmentColors, [index]: color },
+    })),
+
+  clearSegmentColors: () => set({ segmentColors: {} }),
+
   addPhoto: (locationId, photo) => {
     useHistoryStore.getState().pushState();
     markLocationDirty(locationId);
@@ -918,6 +929,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       segments: [],
       mapStyle: DEFAULT_MAP_STYLE,
       segmentTimingOverrides: {},
+      segmentColors: {},
     });
 
     const state = get();
@@ -1017,6 +1029,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       segments: parsed.segments,
       mapStyle: parsed.mapStyle,
       segmentTimingOverrides: parsed.segmentTimingOverrides,
+      segmentColors: {},
     });
   },
 
@@ -1107,6 +1120,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segments: parsed.segments,
         mapStyle: parsed.mapStyle,
         segmentTimingOverrides: parsed.segmentTimingOverrides,
+        segmentColors: {},
         projects,
       });
       lastSavedProjectJson = JSON.stringify(data);
@@ -1198,6 +1212,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segments: [],
         mapStyle: DEFAULT_MAP_STYLE,
         segmentTimingOverrides: {},
+        segmentColors: {},
       });
       lastSavedProjectJson = JSON.stringify(data);
       useHistoryStore.getState().resetHistory();
@@ -1234,6 +1249,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segments: parsed.segments,
         mapStyle: parsed.mapStyle,
         segmentTimingOverrides: parsed.segmentTimingOverrides,
+        segmentColors: {},
       });
       lastSavedProjectJson = JSON.stringify(data);
       useHistoryStore.getState().resetHistory();
@@ -1275,6 +1291,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           segments: [],
           mapStyle: DEFAULT_MAP_STYLE,
           segmentTimingOverrides: {},
+          segmentColors: {},
         });
         lastSavedProjectJson = JSON.stringify(data);
         useHistoryStore.getState().resetHistory();
@@ -1294,6 +1311,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segments: parsed.segments,
         mapStyle: parsed.mapStyle,
         segmentTimingOverrides: parsed.segmentTimingOverrides,
+        segmentColors: {},
       });
       lastSavedProjectJson = JSON.stringify(data);
       useHistoryStore.getState().resetHistory();

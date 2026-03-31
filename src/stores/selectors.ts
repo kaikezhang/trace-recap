@@ -98,6 +98,19 @@ export function useSegmentEndpoints(fromId: string, toId: string): SegmentEndpoi
 }
 
 // ---------------------------------------------------------------------------
+// Photo fingerprint: changes when any location gains/loses photos
+// ---------------------------------------------------------------------------
+
+export function usePhotoFingerprint(): string {
+  return useStoreWithEqualityFn(
+    useProjectStore,
+    (s) =>
+      s.locations.map((l) => `${l.id}:${l.photos.length}`).join(","),
+    (a, b) => a === b,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Single location by ID (for LocationCard self-subscription)
 // ---------------------------------------------------------------------------
 

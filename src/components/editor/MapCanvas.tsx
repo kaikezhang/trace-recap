@@ -13,10 +13,12 @@ import {
   setSegmentSourceData,
 } from "./routeSegmentSources";
 import { useProjectStore } from "@/stores/projectStore";
-import { useLocationsForMap } from "@/stores/selectors";
+import { useLocationsForMap, usePhotoFingerprint } from "@/stores/selectors";
 import { useAnimationStore } from "@/stores/animationStore";
+import { useUIStore } from "@/stores/uiStore";
 import { MAPBOX_TOKEN, getDefaultMapOptions, applyStyleOverrides } from "@/lib/mapbox";
 import { MAP_STYLES } from "@/lib/constants";
+import { extractDominantColor } from "@/lib/colorExtract";
 import type { TransportMode } from "@/types";
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -34,6 +36,19 @@ const MODE_LINE_STYLES: Record<
   bicycle: { color: "#14b8a6", dasharray: [3, 3] },
 };
 
+/** Resolve the line color for a segment, considering mood colors */
+function getSegmentColor(
+  segIndex: number,
+  transportMode: TransportMode,
+  segmentColors: Record<number, string>,
+  moodColorsEnabled: boolean
+): string {
+  if (moodColorsEnabled && segmentColors[segIndex]) {
+    return segmentColors[segIndex];
+  }
+  return MODE_LINE_STYLES[transportMode].color;
+}
+
 export default memo(function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
@@ -44,7 +59,11 @@ export default memo(function MapCanvas() {
   const addLocation = useProjectStore((s) => s.addLocation);
   const locations = useLocationsForMap();
   const segments = useProjectStore((s) => s.segments);
+  const segmentColors = useProjectStore((s) => s.segmentColors);
+  const setSegmentColor = useProjectStore((s) => s.setSegmentColor);
   const mapStyle = useProjectStore((s) => s.mapStyle);
+  const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
+  const photoFingerprint = usePhotoFingerprint();
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
   const currentGroupSegmentIndices = useAnimationStore((s) => s.currentGroupSegmentIndices);
@@ -109,6 +128,43 @@ export default memo(function MapCanvas() {
       map.off("click", handleClick);
     };
   }, [addLocation]);
+
+  // Auto-extract dominant colors from photos for each segment's destination
+  useEffect(() => {
+    if (!moodColorsEnabled) return;
+
+    let cancelled = false;
+    const allLocations = useProjectStore.getState().locations;
+    const allSegments = useProjectStore.getState().segments;
+    const currentColors = useProjectStore.getState().segmentColors;
+
+    for (let i = 0; i < allSegments.length; i++) {
+      const seg = allSegments[i];
+      // Use destination location's photos for this segment's color
+      const destLoc = allLocations.find((l) => l.id === seg.toId);
+      if (!destLoc || destLoc.photos.length === 0) {
+        // Clear color for segments with no photos
+        if (currentColors[i]) {
+          setSegmentColor(i, "");
+        }
+        continue;
+      }
+
+      const firstPhotoUrl = destLoc.photos[0].url;
+      extractDominantColor(firstPhotoUrl).then((color) => {
+        if (cancelled) return;
+        // Only update if different to avoid unnecessary re-renders
+        const current = useProjectStore.getState().segmentColors[i];
+        if (current !== color) {
+          setSegmentColor(i, color);
+        }
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locations, segments, moodColorsEnabled, setSegmentColor, photoFingerprint]);
 
   // Sync markers
   useEffect(() => {
@@ -198,22 +254,27 @@ export default memo(function MapCanvas() {
       }
 
       // Add/update segment layers
-      for (const seg of segments) {
+      for (let idx = 0; idx < segments.length; idx++) {
+        const seg = segments[idx];
         const srcId = SEGMENT_SOURCE_PREFIX + seg.id;
         const layerId = SEGMENT_LAYER_PREFIX + seg.id;
         const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
         const lineStyle = MODE_LINE_STYLES[seg.transportMode];
+        const color = getSegmentColor(idx, seg.transportMode, segmentColors, moodColorsEnabled);
 
         if (map.getSource(srcId)) {
           // Source exists — update geometry + paint properties
           setSegmentSourceData(map, seg.id, seg.geometry);
           if (map.getLayer(layerId)) {
-            map.setPaintProperty(layerId, "line-color", lineStyle.color);
+            map.setPaintProperty(layerId, "line-color", color);
             map.setPaintProperty(
               layerId,
               "line-dasharray",
               lineStyle.dasharray || [1, 0]
             );
+          }
+          if (map.getLayer(glowLayerId)) {
+            map.setPaintProperty(glowLayerId, "line-color", color);
           }
         } else {
           map.addSource(srcId, {
@@ -227,7 +288,7 @@ export default memo(function MapCanvas() {
             source: srcId,
             layout: { visibility: "none" },
             paint: {
-              "line-color": lineStyle.color,
+              "line-color": color,
               "line-width": 10,
               "line-opacity": 0.2,
               "line-blur": 6,
@@ -241,7 +302,7 @@ export default memo(function MapCanvas() {
             source: srcId,
             layout: { visibility: "none" },
             paint: {
-              "line-color": lineStyle.color,
+              "line-color": color,
               "line-width": 4,
               "line-dasharray": lineStyle.dasharray || [1, 0],
             },
@@ -305,7 +366,7 @@ export default memo(function MapCanvas() {
     }, 500);
 
     return () => clearTimeout(safetyTimer);
-  }, [segments]);
+  }, [segments, segmentColors, moodColorsEnabled]);
 
   // Track previous segment index to detect transitions and clear source data
   // only when the current segment actually changes (not on pause/resume).
@@ -396,11 +457,15 @@ export default memo(function MapCanvas() {
 
       // Re-add segment layers
       const currentSegments = useProjectStore.getState().segments;
-      for (const seg of currentSegments) {
+      const currentSegColors = useProjectStore.getState().segmentColors;
+      const moodEnabled = useUIStore.getState().moodColorsEnabled;
+      for (let idx = 0; idx < currentSegments.length; idx++) {
+        const seg = currentSegments[idx];
         const srcId = SEGMENT_SOURCE_PREFIX + seg.id;
         const layerId = SEGMENT_LAYER_PREFIX + seg.id;
         const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
         const lineStyle = MODE_LINE_STYLES[seg.transportMode];
+        const color = getSegmentColor(idx, seg.transportMode, currentSegColors, moodEnabled);
 
         if (map.getSource(srcId)) {
           // Source already exists (race condition) — just update data
@@ -418,7 +483,7 @@ export default memo(function MapCanvas() {
           type: "line",
           source: srcId,
           paint: {
-            "line-color": lineStyle.color,
+            "line-color": color,
             "line-width": 10,
             "line-opacity": 0.2,
             "line-blur": 6,
@@ -430,7 +495,7 @@ export default memo(function MapCanvas() {
           type: "line",
           source: srcId,
           paint: {
-            "line-color": lineStyle.color,
+            "line-color": color,
             "line-width": 4,
             "line-dasharray": lineStyle.dasharray || [1, 0],
           },
@@ -439,6 +504,25 @@ export default memo(function MapCanvas() {
       }
     });
   }, [mapStyle]);
+
+  // Apply mood colors to existing layers when segmentColors or moodColorsEnabled change
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    segments.forEach((seg, idx) => {
+      const layerId = SEGMENT_LAYER_PREFIX + seg.id;
+      const glowLayerId = SEGMENT_GLOW_LAYER_PREFIX + seg.id;
+      const color = getSegmentColor(idx, seg.transportMode, segmentColors, moodColorsEnabled);
+
+      if (map.getLayer(layerId)) {
+        map.setPaintProperty(layerId, "line-color", color);
+      }
+      if (map.getLayer(glowLayerId)) {
+        map.setPaintProperty(glowLayerId, "line-color", color);
+      }
+    });
+  }, [segmentColors, moodColorsEnabled, segments]);
 
   return (
     <div className="relative w-full h-full">
