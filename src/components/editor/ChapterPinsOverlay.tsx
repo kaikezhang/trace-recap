@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
 import ChapterPin from "./ChapterPin";
 import type { ChapterPinState } from "./ChapterPin";
@@ -25,34 +25,59 @@ export default function ChapterPinsOverlay() {
 
   const [positions, setPositions] = useState<PinPosition[]>([]);
 
-  const updatePositions = useCallback(() => {
-    if (!map) return;
-
-    const newPositions: PinPosition[] = [];
-    for (const loc of locations) {
-      if (loc.isWaypoint) continue;
-      const isVisited = visitedLocationIds.includes(loc.id);
-      const isActive = loc.id === currentArrivalLocationId;
-      if (!isVisited && !isActive) continue;
-
-      const point = map.project(loc.coordinates);
-      newPositions.push({
-        locationId: loc.id,
-        x: point.x,
-        y: point.y,
-      });
-    }
-    setPositions(newPositions);
-  }, [map, locations, visitedLocationIds, currentArrivalLocationId]);
+  // Use refs to avoid recreating the callback when store data changes
+  const locationsRef = useRef(locations);
+  locationsRef.current = locations;
+  const visitedRef = useRef(visitedLocationIds);
+  visitedRef.current = visitedLocationIds;
+  const arrivalRef = useRef(currentArrivalLocationId);
+  arrivalRef.current = currentArrivalLocationId;
 
   useEffect(() => {
     if (!map) return;
-    updatePositions();
-    map.on("move", updatePositions);
-    return () => {
-      map.off("move", updatePositions);
+
+    const update = () => {
+      const locs = locationsRef.current;
+      const visited = visitedRef.current;
+      const arrival = arrivalRef.current;
+
+      const newPositions: PinPosition[] = [];
+      for (const loc of locs) {
+        if (loc.isWaypoint) continue;
+        const isVisited = visited.includes(loc.id);
+        const isActive = loc.id === arrival;
+        if (!isVisited && !isActive) continue;
+
+        const point = map.project(loc.coordinates);
+        newPositions.push({
+          locationId: loc.id,
+          x: point.x,
+          y: point.y,
+        });
+      }
+      setPositions(newPositions);
     };
-  }, [map, updatePositions]);
+
+    update();
+    map.on("move", update);
+    return () => {
+      map.off("move", update);
+    };
+  }, [map]);
+
+  // Re-project when animation state changes (visited locations / arrival)
+  useEffect(() => {
+    if (!map) return;
+    const locs = locationsRef.current;
+    const newPositions: PinPosition[] = [];
+    for (const loc of locs) {
+      if (loc.isWaypoint) continue;
+      if (!visitedLocationIds.includes(loc.id) && loc.id !== currentArrivalLocationId) continue;
+      const point = map.project(loc.coordinates);
+      newPositions.push({ locationId: loc.id, x: point.x, y: point.y });
+    }
+    setPositions(newPositions);
+  }, [map, visitedLocationIds, currentArrivalLocationId]);
 
   const isAnimating = playbackState === "playing" || playbackState === "paused";
   if (!chapterPinsEnabled || !isAnimating) return null;

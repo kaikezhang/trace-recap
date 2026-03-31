@@ -693,8 +693,15 @@ async function persistProjectSnapshot(
     currentProjectName,
   );
 
-  const nextProjectJson = JSON.stringify(data);
+  let nextProjectJson: string;
+  try {
+    nextProjectJson = JSON.stringify(data);
+  } catch (error) {
+    console.warn("Project data too large to serialize for diff check, saving directly.", error);
+    nextProjectJson = "";
+  }
   if (
+    nextProjectJson &&
     currentProjectId === useProjectStore.getState().currentProjectId &&
     nextProjectJson === lastSavedProjectJson
   ) {

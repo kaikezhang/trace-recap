@@ -225,13 +225,17 @@ export default function BreadcrumbTrail() {
       if (animFrameRef.current !== null) {
         cancelAnimationFrame(animFrameRef.current);
       }
-      if (map.getLayer(BREADCRUMB_LAYER_ID)) map.removeLayer(BREADCRUMB_LAYER_ID);
-      if (map.getSource(BREADCRUMB_SOURCE_ID)) {
-        map.removeSource(BREADCRUMB_SOURCE_ID);
+      try {
+        if (map.getLayer(BREADCRUMB_LAYER_ID)) map.removeLayer(BREADCRUMB_LAYER_ID);
+        if (map.getSource(BREADCRUMB_SOURCE_ID)) {
+          map.removeSource(BREADCRUMB_SOURCE_ID);
+        }
+        addedImagesRef.current.forEach((id) => {
+          if (map.hasImage(id)) map.removeImage(id);
+        });
+      } catch {
+        // Map style may already be removed
       }
-      addedImagesRef.current.forEach((id) => {
-        if (map.hasImage(id)) map.removeImage(id);
-      });
       addedImagesRef.current.clear();
     };
   }, [map]);
