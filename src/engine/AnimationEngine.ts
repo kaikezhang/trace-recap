@@ -479,51 +479,6 @@ export class AnimationEngine {
       }
     }
 
-    // Scene transition metadata: track the dissolve window between locations.
-    // Transition window spans: outgoing HOVER+ZOOM_OUT → incoming ZOOM_IN.
-    // Progress goes 0 (fully outgoing) → 1 (fully incoming).
-    let sceneTransitionProgress: number | undefined;
-    let outgoingGroupIndex: number | undefined;
-    let incomingGroupIndex: number | undefined;
-    let transitionBearing: number | undefined;
-
-    if (groupIndex > 0) {
-      const prevGroup = this.groups[groupIndex - 1];
-      const prevHasPhotos = prevGroup && prevGroup.toLoc.photos.length > 0;
-      const nextHasPhotos = group.toLoc.photos.length > 0;
-
-      if (prevHasPhotos || nextHasPhotos) {
-        if (phase === "HOVER") {
-          // Early transition: outgoing photos fading out
-          sceneTransitionProgress = phaseProgress * 0.4; // 0 → 0.4
-          outgoingGroupIndex = groupIndex - 1;
-          incomingGroupIndex = groupIndex;
-        } else if (phase === "ZOOM_OUT") {
-          // Mid transition: outgoing nearly gone
-          sceneTransitionProgress = 0.4 + phaseProgress * 0.2; // 0.4 → 0.6
-          outgoingGroupIndex = groupIndex - 1;
-          incomingGroupIndex = groupIndex;
-        } else if (phase === "ZOOM_IN" && nextHasPhotos) {
-          // Late transition: incoming photos fading in
-          sceneTransitionProgress = 0.6 + phaseProgress * 0.4; // 0.6 → 1.0
-          outgoingGroupIndex = groupIndex - 1;
-          incomingGroupIndex = groupIndex;
-        }
-
-        // Compute bearing between outgoing and incoming locations
-        if (sceneTransitionProgress !== undefined && prevGroup) {
-          const fromCoords = prevGroup.toLoc.coordinates;
-          const toCoords = group.toLoc.coordinates;
-          let dLng = toCoords[0] - fromCoords[0];
-          // Normalize longitude delta for antimeridian crossings
-          if (dLng > 180) dLng -= 360;
-          if (dLng < -180) dLng += 360;
-          const dLat = toCoords[1] - fromCoords[1];
-          transitionBearing = (Math.atan2(dLng, dLat) * 180) / Math.PI;
-        }
-      }
-    }
-
     const progress = clamped / this.totalDuration;
     this.emit({
       type: "progress",
@@ -537,10 +492,12 @@ export class AnimationEngine {
       photoOpacity,
       groupIndex,
       groupSegmentIndices: segIndices,
-      sceneTransitionProgress,
-      outgoingGroupIndex,
-      incomingGroupIndex,
-      transitionBearing,
+      // Photos should disappear before the FLY phase and only reappear on ARRIVE.
+      // Keeping scene transitions disabled prevents future cities from rendering early.
+      sceneTransitionProgress: undefined,
+      outgoingGroupIndex: undefined,
+      incomingGroupIndex: undefined,
+      transitionBearing: undefined,
     });
 
     // Route draw progress for all segments in the group
