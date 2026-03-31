@@ -566,22 +566,15 @@ export class VideoExporter {
   ): void {
     const progress = captured.progress;
     if (!progress || !progress.showPhotos) return;
+    // Only draw photos during ARRIVE phase — exit animation is handled within ARRIVE's last 30%
+    // Don't draw during HOVER/ZOOM_OUT to prevent double exit animation
+    if (progress.phase !== "ARRIVE") return;
 
     const groups = this.engine.getGroups();
     const group = groups[progress.groupIndex];
     if (!group) return;
 
-    // During ARRIVE: show current destination's photos
-    // During HOVER/ZOOM_OUT/FLY fade-out: show PREVIOUS destination's photos (they're fading out)
-    let photoLoc;
-    if (progress.phase === "ARRIVE") {
-      photoLoc = group.toLoc;
-    } else if (progress.groupIndex > 0) {
-      // Fading out previous group's photos
-      photoLoc = groups[progress.groupIndex - 1].toLoc;
-    } else {
-      photoLoc = group.toLoc;
-    }
+    const photoLoc = group.toLoc;
 
     const photos: Photo[] = photoLoc.photos;
     if (photos.length === 0) return;
