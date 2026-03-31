@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import type { PlaybackState, Photo, SegmentTiming } from "@/types";
 
+export interface Breadcrumb {
+  locationId: string;
+  coordinates: [number, number]; // [lng, lat]
+  heroPhotoUrl: string;          // URL of the hero/first photo
+  cityName: string;
+  visitedAtSegment: number;      // segment index when this was visited
+}
+
 interface AnimationState {
   playbackState: PlaybackState;
   currentTime: number;
@@ -30,6 +38,8 @@ interface AnimationState {
   visitedLocationIds: string[];
   /** ID of the location currently arriving at (active chapter pin) */
   currentArrivalLocationId: string | null;
+  /** Breadcrumb thumbnails left at visited locations */
+  breadcrumbs: Breadcrumb[];
 
   setPlaybackState: (state: PlaybackState) => void;
   setCurrentTime: (time: number) => void;
@@ -52,6 +62,9 @@ interface AnimationState {
   setVisitedLocationIds: (ids: string[]) => void;
   addVisitedLocationId: (id: string) => void;
   setCurrentArrivalLocationId: (id: string | null) => void;
+  addBreadcrumb: (b: Breadcrumb) => void;
+  setBreadcrumbs: (breadcrumbs: Breadcrumb[]) => void;
+  clearBreadcrumbs: () => void;
   reset: () => void;
 }
 
@@ -76,6 +89,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   bloomElapsedTime: 0,
   visitedLocationIds: [],
   currentArrivalLocationId: null,
+  breadcrumbs: [],
 
   setPlaybackState: (playbackState) => set({ playbackState }),
   setCurrentTime: (currentTime) => set({ currentTime }),
@@ -103,6 +117,14 @@ export const useAnimationStore = create<AnimationState>((set) => ({
         : [...state.visitedLocationIds, id],
     })),
   setCurrentArrivalLocationId: (currentArrivalLocationId) => set({ currentArrivalLocationId }),
+  addBreadcrumb: (b) =>
+    set((state) => {
+      // Don't add duplicate breadcrumbs for the same location
+      if (state.breadcrumbs.some((bc) => bc.locationId === b.locationId)) return state;
+      return { breadcrumbs: [...state.breadcrumbs, b] };
+    }),
+  setBreadcrumbs: (breadcrumbs) => set({ breadcrumbs }),
+  clearBreadcrumbs: () => set({ breadcrumbs: [] }),
   reset: () =>
     set({
       playbackState: "idle",
@@ -123,5 +145,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       bloomElapsedTime: 0,
       visitedLocationIds: [],
       currentArrivalLocationId: null,
+      breadcrumbs: [],
     }),
 }));

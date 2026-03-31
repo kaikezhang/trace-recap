@@ -7,6 +7,7 @@ import PhotoOverlay from "./PhotoOverlay";
 import PhotoLayoutEditor from "./PhotoLayoutEditor";
 import MapEmptyState from "./MapEmptyState";
 import ChapterPinsOverlay from "./ChapterPinsOverlay";
+import BreadcrumbTrail from "./BreadcrumbTrail";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -167,6 +168,7 @@ export default function MapStage({
     <div className="relative h-full w-full">
       <MapCanvas />
       <ChapterPinsOverlay />
+      <BreadcrumbTrail />
       {showEmptyState && (
         <MapEmptyState
           onSearchClick={onFocusSearch}

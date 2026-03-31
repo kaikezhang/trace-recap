@@ -59,6 +59,15 @@ export class VideoExporter {
   private exportVisitedLocationIds: Set<string> = new Set();
   /** Current arrival location ID during export */
   private exportCurrentArrivalId: string | null = null;
+  /** Breadcrumbs accumulated during export (mirrors preview behavior) */
+  private exportBreadcrumbs: Array<{
+    locationId: string;
+    coordinates: [number, number];
+    heroPhotoUrl: string;
+  }> = [];
+  /** Track previous showPhotos state for breadcrumb emission during export */
+  private prevExportShowPhotos = false;
+  private prevExportPhotoLocationId: string | null = null;
 
   constructor(
     engine: AnimationEngine,
@@ -295,6 +304,104 @@ export class VideoExporter {
     const sz = state.size * scaleX;
 
     iconAnimator.drawToCanvas(ctx, px, py, sz);
+  }
+
+  /** Draw breadcrumb thumbnails at visited locations on the export canvas */
+  private drawBreadcrumbs(
+    ctx: CanvasRenderingContext2D,
+    scaleX: number,
+    scaleY: number
+  ): void {
+    const breadcrumbsEnabled = useUIStore.getState().breadcrumbsEnabled;
+    if (!breadcrumbsEnabled || this.exportBreadcrumbs.length === 0) return;
+
+    const size = 32 * scaleX;
+    const borderWidth = 2 * scaleX;
+    const halfSize = size / 2;
+
+    for (let i = 0; i < this.exportBreadcrumbs.length; i++) {
+      const bc = this.exportBreadcrumbs[i];
+      const point = this.map.project(bc.coordinates);
+      const px = point.x * scaleX;
+      const py = point.y * scaleY;
+
+      const isNewest = i === this.exportBreadcrumbs.length - 1;
+      const opacity = isNewest ? 0.8 : 0.7;
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+
+      // Clip to circle
+      ctx.beginPath();
+      ctx.arc(px, py, halfSize, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+
+      // Draw photo
+      const preloaded = this.photoImages.get(bc.heroPhotoUrl);
+      if (preloaded) {
+        const imgAspect = preloaded.aspect;
+        let sw = size;
+        let sh = size;
+        let sx = px - halfSize;
+        let sy = py - halfSize;
+        // object-fit: cover
+        if (imgAspect > 1) {
+          sw = size * imgAspect;
+          sx = px - sw / 2;
+        } else {
+          sh = size / imgAspect;
+          sy = py - sh / 2;
+        }
+        ctx.drawImage(preloaded.img, sx, sy, sw, sh);
+      }
+
+      ctx.restore();
+
+      // White border
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.beginPath();
+      ctx.arc(px, py, halfSize, 0, Math.PI * 2);
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = borderWidth;
+      ctx.stroke();
+
+      // Shadow effect
+      ctx.shadowColor = "rgba(0,0,0,0.3)";
+      ctx.shadowBlur = 8 * scaleX;
+      ctx.beginPath();
+      ctx.arc(px, py, halfSize + borderWidth / 2, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.01)";
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /** Update breadcrumb tracking during export based on animation progress events */
+  private updateExportBreadcrumbs(event: AnimationEvent): void {
+    const wasShowingPhotos = this.prevExportShowPhotos;
+    const prevLocId = this.prevExportPhotoLocationId;
+
+    if (wasShowingPhotos && !event.showPhotos && prevLocId) {
+      const locations = this.engine.getLocations();
+      const loc = locations.find((l) => l.id === prevLocId);
+      if (loc && loc.photos.length > 0 && !this.exportBreadcrumbs.some((b) => b.locationId === loc.id)) {
+        this.exportBreadcrumbs.push({
+          locationId: loc.id,
+          coordinates: loc.coordinates,
+          heroPhotoUrl: loc.photos[0].url,
+        });
+      }
+    }
+
+    this.prevExportShowPhotos = event.showPhotos;
+    if (event.showPhotos && event.phase === "ARRIVE") {
+      const segments = this.engine.getSegments();
+      const seg = segments[event.segmentIndex];
+      this.prevExportPhotoLocationId = seg?.toId ?? null;
+    }
   }
 
   /** Draw city name label on the offscreen 2D canvas, matching the preview style */
@@ -2037,6 +2144,9 @@ export class VideoExporter {
     this.photoShowStartFrame.clear();
     this.exportVisitedLocationIds.clear();
     this.exportCurrentArrivalId = null;
+    this.exportBreadcrumbs = [];
+    this.prevExportShowPhotos = false;
+    this.prevExportPhotoLocationId = null;
     const { signal } = this.abortController;
 
     const totalDuration = this.engine.getTotalDuration();
@@ -2157,6 +2267,12 @@ export class VideoExporter {
 
     offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
     offCtx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height);
+    // Update breadcrumb tracking from progress event
+    if (captured.progress) {
+      this.updateExportBreadcrumbs(captured.progress);
+    }
+    // Breadcrumbs drawn first (behind everything else)
+    this.drawBreadcrumbs(offCtx, scaleX, scaleY);
     this.drawVehicleIcon(offCtx, scaleX, scaleY);
     this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
