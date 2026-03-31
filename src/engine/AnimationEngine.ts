@@ -1,4 +1,5 @@
-import * as turf from "@turf/turf";
+import { lineString } from "@turf/helpers";
+import { length } from "@turf/length";
 import type mapboxgl from "mapbox-gl";
 import type {
   Location,
@@ -202,7 +203,7 @@ export class AnimationEngine {
     const groupLengths = this.groups.map((g) => {
       if (g.mergedGeometry && g.mergedGeometry.coordinates.length >= 2) {
         try {
-          return turf.length(turf.lineString(g.mergedGeometry.coordinates));
+          return length(lineString(g.mergedGeometry.coordinates));
         } catch {
           return 0;
         }

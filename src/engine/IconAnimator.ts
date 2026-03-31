@@ -1,5 +1,8 @@
 import mapboxgl from "mapbox-gl";
-import * as turf from "@turf/turf";
+import { along as getAlong } from "@turf/along";
+import { bearing as getBearing } from "@turf/bearing";
+import { lineString, point } from "@turf/helpers";
+import { length } from "@turf/length";
 import lottie from "lottie-web";
 import type { AnimationItem } from "lottie-web";
 import {
@@ -219,8 +222,8 @@ export class IconAnimator {
       return;
     }
 
-    const line = turf.lineString(routeLine.coordinates);
-    const totalLength = turf.length(line);
+    const line = lineString(routeLine.coordinates);
+    const totalLength = length(line);
     const coords = routeLine.coordinates;
 
     const startPt = coords[0] as [number, number];
@@ -243,10 +246,10 @@ export class IconAnimator {
       const midPt = coords[midIdx] as [number, number];
       const isSecondHalf = (phase === "FLY" && progress > 0.5) || phase === "ZOOM_IN" || phase === "ARRIVE";
       bearing = isSecondHalf
-        ? turf.bearing(turf.point(midPt), turf.point(endPt))
-        : turf.bearing(turf.point(startPt), turf.point(midPt));
+        ? getBearing(point(midPt), point(endPt))
+        : getBearing(point(startPt), point(midPt));
     } else {
-      bearing = turf.bearing(turf.point(startPt), turf.point(endPt));
+      bearing = getBearing(point(startPt), point(endPt));
     }
 
     // Choose rendering path based on icon style
@@ -272,14 +275,14 @@ export class IconAnimator {
       }
       case "ZOOM_OUT": {
         const earlyProgress = progress * 0.05;
-        const along = turf.along(line, earlyProgress * totalLength);
-        position = along.geometry.coordinates as [number, number];
+        const pointAlongRoute = getAlong(line, earlyProgress * totalLength);
+        position = pointAlongRoute.geometry.coordinates as [number, number];
         scale = lerp(1.0, 1.15, progress);
         break;
       }
       case "FLY": {
-        const along = turf.along(line, progress * totalLength);
-        position = along.geometry.coordinates as [number, number];
+        const pointAlongRoute = getAlong(line, progress * totalLength);
+        position = pointAlongRoute.geometry.coordinates as [number, number];
         scale = 1.15;
         break;
       }
@@ -468,7 +471,7 @@ export class IconAnimator {
     let accumulated = 0;
     for (const seg of group.segments) {
       if (!seg.geometry || seg.geometry.coordinates.length < 2) continue;
-      const segLength = turf.length(turf.lineString(seg.geometry.coordinates));
+      const segLength = length(lineString(seg.geometry.coordinates));
       accumulated += segLength;
       if (distance <= accumulated) {
         return seg;

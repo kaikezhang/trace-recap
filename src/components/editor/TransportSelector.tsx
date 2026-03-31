@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import * as turf from "@turf/turf";
+import { lineString } from "@turf/helpers";
+import { length } from "@turf/length";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSegmentEndpoints } from "@/stores/selectors";
@@ -215,7 +216,7 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
   // Compute distance from geometry
   const distance =
     segment.geometry && segment.geometry.coordinates.length > 1
-      ? turf.length(turf.lineString(segment.geometry.coordinates))
+      ? length(lineString(segment.geometry.coordinates))
       : null;
 
   return (
