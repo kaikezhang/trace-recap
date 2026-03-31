@@ -52,7 +52,7 @@ export class WebCodecsExporter {
     });
 
     this.encoder.configure({
-      codec: "avc1.42001f",
+      codec: "avc1.640032",  // H.264 High Profile Level 5.0 — supports up to 4096x2304
       width,
       height,
       bitrate,
