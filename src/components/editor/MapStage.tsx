@@ -13,6 +13,7 @@ import { useAnimationStore } from "@/stores/animationStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import type { Location, Photo, PhotoLayout } from "@/types";
+import { computeCityLabelTopPercent } from "@/lib/cityLabelPosition";
 import { resolveSceneTransition } from "@/lib/sceneTransition";
 
 interface MapStageProps {
@@ -59,12 +60,14 @@ function CityLabelOverlay({
         y: 20,
         scale: 0.8,
         filter: "blur(8px)",
+        top: `${cityLabelTopPercent}%`,
       }}
       animate={{
         opacity: 1,
         y: 0,
         scale: 1,
         filter: "blur(0px)",
+        top: `${cityLabelTopPercent}%`,
       }}
       exit={{
         opacity: 0,
@@ -79,7 +82,6 @@ function CityLabelOverlay({
       }}
       className="absolute left-1/2 z-10 -translate-x-1/2 rounded-lg border bg-background/90 px-5 py-2 shadow-lg backdrop-blur-sm"
       style={{
-        top: `${cityLabelTopPercent}%`,
         textShadow:
           "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)",
       }}
@@ -157,6 +159,11 @@ export default function MapStage({
   const incomingLocation = locations.find((location) => location.id === incomingPhotoLocationId);
   const effectiveTransition = resolveSceneTransition(photoLayout, globalSceneTransition);
   const isTransitioning = effectiveTransition !== "cut" && sceneTransitionProgress !== undefined;
+  const adjustedCityLabelTopPercent = computeCityLabelTopPercent(
+    cityLabelTopPercent,
+    showPhotoOverlay,
+    photoOverlayOpacity,
+  );
 
   const getPortalAccentColor = (locationId: string | null | undefined): string => {
     if (!locationId || !moodColorsEnabled) return "#ffffff";
@@ -189,7 +196,7 @@ export default function MapStage({
           <CityLabelOverlay
             cityLabel={currentCityLabel}
             cityLabelSize={cityLabelSize}
-            cityLabelTopPercent={cityLabelTopPercent}
+            cityLabelTopPercent={adjustedCityLabelTopPercent}
             emoji={currentCityEmoji}
           />
         )}
