@@ -206,16 +206,14 @@ export default memo(function MapCanvas() {
   }, [locations]);
 
   // Marker visibility during playback:
-  // Playing: only show markers for locations already visited (index <= currentSegmentIndex)
-  // Idle: show all markers
+  // Playing/Paused: hide all numbered markers (photo-based chapter pins handle display)
+  // Idle: show all markers (for editing)
   useEffect(() => {
     if (playbackState === "playing" || playbackState === "paused") {
-      locations.forEach((loc, index) => {
+      locations.forEach((loc) => {
         const marker = markersRef.current.get(loc.id);
         if (marker) {
-          // Waypoints never shown; destinations shown when visited
-          const visible = !loc.isWaypoint && index <= currentSegmentIndex;
-          marker.getElement().style.display = visible ? "flex" : "none";
+          marker.getElement().style.display = "none";
         }
       });
     } else {
@@ -227,7 +225,7 @@ export default memo(function MapCanvas() {
         }
       });
     }
-  }, [playbackState, currentSegmentIndex, locations]);
+  }, [playbackState, locations]);
 
   // Sync segment route layers
   useEffect(() => {
