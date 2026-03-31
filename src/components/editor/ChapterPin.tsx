@@ -59,8 +59,9 @@ export default function ChapterPin({
             )}
           </div>
           {/* Title */}
-          <span className="max-w-[80px] truncate text-center text-[10px] font-medium text-gray-700 drop-shadow-sm">
-            {title}
+          <span className="flex items-center gap-0.5 max-w-[80px] text-center text-[10px] font-medium text-gray-700 drop-shadow-sm">
+            {emoji && <span className="shrink-0 text-xs leading-none">{emoji}</span>}
+            <span className="truncate">{title}</span>
           </span>
         </div>
       </motion.div>
@@ -95,18 +96,14 @@ export default function ChapterPin({
               {emoji || "📍"}
             </div>
           )}
-          {/* Emoji stamp */}
-          {emoji && coverPhoto && (
-            <span className="absolute -bottom-0.5 -right-0.5 text-sm leading-none">
-              {emoji}
-            </span>
-          )}
+
         </div>
 
         {/* Text content */}
         <div className="min-w-0 flex-1 py-0.5">
-          <p className="truncate text-sm font-bold leading-tight text-gray-900">
-            {title}
+          <p className="flex items-center gap-1 truncate text-sm font-bold leading-tight text-gray-900">
+            {emoji && <span className="shrink-0 text-base leading-none">{emoji}</span>}
+            <span className="truncate">{title}</span>
           </p>
           {location.chapterDate && (
             <p className="truncate text-xs leading-tight text-gray-500">
