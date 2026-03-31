@@ -257,6 +257,9 @@ function EditorContent() {
     cityLabelLang === "zh"
       ? currentCityLabelZh || currentCityLabelEn
       : currentCityLabelEn;
+  const currentCityEmoji = currentCityLabelEn
+    ? locations.find((l) => l.name === currentCityLabelEn)?.chapterEmoji ?? null
+    : null;
   const visiblePhotos = useAnimationStore((s) => s.visiblePhotos);
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
   const photoOverlayOpacity = useAnimationStore((s) => s.photoOverlayOpacity);
@@ -870,6 +873,7 @@ function EditorContent() {
                 <MapStage
                   cityLabelSize={cityLabelSize}
                   currentCityLabel={currentCityLabel}
+                  currentCityEmoji={currentCityEmoji}
                   editingLocation={editingLocation}
                   hasSegments={hasSegments}
                   photos={visiblePhotos}
@@ -909,6 +913,7 @@ function EditorContent() {
                   <MapStage
                     cityLabelSize={cityLabelSize}
                     currentCityLabel={currentCityLabel}
+                    currentCityEmoji={currentCityEmoji}
                     editingLocation={editingLocation}
                     hasSegments={hasSegments}
                     photos={visiblePhotos}

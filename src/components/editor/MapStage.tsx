@@ -18,6 +18,7 @@ import { resolveSceneTransition } from "@/lib/sceneTransition";
 interface MapStageProps {
   cityLabelSize: number;
   currentCityLabel?: string | null;
+  currentCityEmoji?: string | null;
   editingLocation: Location | null;
   hasSegments: boolean;
   bloomOrigin: { x: number; y: number } | null;
@@ -43,10 +44,12 @@ function CityLabelOverlay({
   cityLabel,
   cityLabelSize,
   cityLabelTopPercent,
+  emoji,
 }: {
   cityLabel: string;
   cityLabelSize: number;
   cityLabelTopPercent: number;
+  emoji?: string | null;
 }) {
   return (
     <motion.div
@@ -85,17 +88,21 @@ function CityLabelOverlay({
         className="flex items-center gap-2 font-semibold"
         style={{ fontSize: `${cityLabelSize}px` }}
       >
-        <svg
-          className="h-4 w-4 shrink-0 text-indigo-500"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-            clipRule="evenodd"
-          />
-        </svg>
+        {emoji ? (
+          <span className="shrink-0 leading-none">{emoji}</span>
+        ) : (
+          <svg
+            className="h-4 w-4 shrink-0 text-indigo-500"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+              clipRule="evenodd"
+            />
+          </svg>
+        )}
         {cityLabel}
       </p>
     </motion.div>
@@ -107,6 +114,7 @@ export default function MapStage({
   bloomElapsedTime,
   cityLabelSize,
   currentCityLabel,
+  currentCityEmoji,
   editingLocation,
   hasSegments,
   photos,
@@ -182,6 +190,7 @@ export default function MapStage({
             cityLabel={currentCityLabel}
             cityLabelSize={cityLabelSize}
             cityLabelTopPercent={cityLabelTopPercent}
+            emoji={currentCityEmoji}
           />
         )}
       </AnimatePresence>
