@@ -596,13 +596,22 @@ export class VideoExporter {
     fps: number,
   ): void {
     const progress = captured.progress;
-    if (!progress || !progress.showPhotos) return;
-    // Only draw photos during ARRIVE phase — exit animation is handled within ARRIVE's last 30%
-    // Don't draw during HOVER/ZOOM_OUT to prevent double exit animation
-    if (progress.phase !== "ARRIVE") return;
+    if (!progress) return;
+
+    // During scene transitions, draw the outgoing photo set with transition opacity
+    const isInSceneTransition = progress.sceneTransitionProgress !== undefined
+      && progress.outgoingGroupIndex !== undefined;
+
+    if (!isInSceneTransition) {
+      // Normal (non-transition) path: only draw during ARRIVE with showPhotos
+      if (!progress.showPhotos) return;
+      if (progress.phase !== "ARRIVE") return;
+    }
 
     const groups = this.engine.getGroups();
-    const group = groups[progress.groupIndex];
+    // During scene transition, draw the outgoing group's photos
+    const groupIndex = isInSceneTransition ? progress.outgoingGroupIndex! : progress.groupIndex;
+    const group = groups[groupIndex];
     if (!group) return;
 
     const photoLoc = group.toLoc;
@@ -676,12 +685,76 @@ export class VideoExporter {
     } = resolvePhotoAnimations(layout, this.settings.photoAnimation ?? "scale");
     const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
 
+    // --- Scene transition outgoing opacity/blur/clip ---
+    let transitionOutgoingAlpha = 1;
+    let transitionOutgoingBlur = 0;
+    let outgoingClip: { direction: string; position: number } | null = null;
+
+    if (isInSceneTransition) {
+      const uiState = useUIStore.getState();
+      const globalTransition = uiState.sceneTransition ?? "dissolve";
+      const outgoingLayout = group.toLoc.photoLayout;
+      const effectiveTransition: SceneTransition = resolveSceneTransition(outgoingLayout, globalTransition);
+
+      if (effectiveTransition === "cut") return;
+
+      const tp = progress.sceneTransitionProgress!;
+      switch (effectiveTransition) {
+        case "dissolve": {
+          const { outgoing } = computeDissolveOpacity(tp);
+          transitionOutgoingAlpha = outgoing;
+          break;
+        }
+        case "blur-dissolve": {
+          const { outgoing, blur } = computeBlurDissolve(tp);
+          transitionOutgoingAlpha = outgoing;
+          transitionOutgoingBlur = blur;
+          break;
+        }
+        case "wipe": {
+          const bearing = progress.transitionBearing ?? 0;
+          const { wipePosition } = computeWipeProgress(tp, bearing);
+          const normBearing = ((bearing % 360) + 360) % 360;
+          let direction: string;
+          if (normBearing >= 315 || normBearing < 45) direction = "north";
+          else if (normBearing >= 45 && normBearing < 135) direction = "east";
+          else if (normBearing >= 135 && normBearing < 225) direction = "south";
+          else direction = "west";
+          outgoingClip = { direction, position: 1 - wipePosition };
+          break;
+        }
+      }
+      if (transitionOutgoingAlpha <= 0) return;
+    }
+
+    // Apply canvas clip for outgoing wipe transition
+    if (outgoingClip) {
+      ctx.save();
+      ctx.beginPath();
+      const pos = outgoingClip.position;
+      switch (outgoingClip.direction) {
+        case "north":
+          ctx.rect(0, 0, canvasWidth, pos * canvasHeight);
+          break;
+        case "south":
+          ctx.rect(0, (1 - pos) * canvasHeight, canvasWidth, pos * canvasHeight);
+          break;
+        case "east":
+          ctx.rect(0, 0, pos * canvasWidth, canvasHeight);
+          break;
+        case "west":
+          ctx.rect((1 - pos) * canvasWidth, 0, pos * canvasWidth, canvasHeight);
+          break;
+      }
+      ctx.clip();
+    }
+
     // Ken Burns: compute elapsed time since ARRIVE start (seconds).
     // Per-photo progress is derived inside the loop to account for enter stagger.
     let kenBurnsElapsed = 0;
     if (photoStyle === "kenburns") {
       const timeline = this.engine.getTimeline();
-      const entry = timeline[progress.groupIndex];
+      const entry = timeline[groupIndex];
       if (entry) {
         const arrivePhase = entry.phases.find((p: { phase: string }) => p.phase === "ARRIVE");
         if (arrivePhase) {
@@ -691,9 +764,11 @@ export class VideoExporter {
     }
 
     // Use the photo source group index for tracking (prev group during fade-out)
-    const photoGroupIdx = progress.phase === "ARRIVE"
-      ? progress.groupIndex
-      : progress.groupIndex - 1; // HOVER/ZOOM_OUT = fading out prev group's photos
+    const photoGroupIdx = isInSceneTransition
+      ? groupIndex
+      : progress.phase === "ARRIVE"
+        ? progress.groupIndex
+        : progress.groupIndex - 1; // HOVER/ZOOM_OUT = fading out prev group's photos
 
     // Track when photos first appeared for this group
     if (!this.photoShowStartFrame.has(photoGroupIdx)) {
@@ -706,10 +781,12 @@ export class VideoExporter {
     const enterDurationFrames = enterDurationSec * fps;
 
     // Exit: derive from photoOpacity (1 = fully visible, 0 = fully gone)
-    // Export exit: during ARRIVE last 30%, fade out photos
-    // (Preview uses framer-motion on unmount instead, so photoOpacity stays 1)
+    // During scene transitions, transition opacity is the sole driver — no per-photo exit animation.
     let exitProgress = 0;
-    if (progress.phase === "ARRIVE" && progress.progress > 0) {
+    if (isInSceneTransition) {
+      // Scene transition handles fading via transitionOutgoingAlpha — no exit animation
+      exitProgress = 0;
+    } else if (progress.phase === "ARRIVE" && progress.progress > 0) {
       // Compute phase progress within ARRIVE
       // Use photoOpacity if it's already fading, otherwise compute from timeline
       const opacity = progress.photoOpacity ?? 1;
@@ -718,7 +795,6 @@ export class VideoExporter {
       } else {
         // Check if we're in the last 30% of ARRIVE by checking time position
         // Use a simple heuristic: if groupIndex has photos and we're past 70% of arrive
-        const groups = this.engine.getGroups();
         const timeline = this.engine.getTimeline();
         const entry = timeline[progress.groupIndex];
         if (entry) {
@@ -792,9 +868,10 @@ export class VideoExporter {
       }
 
       ctx.save();
-      ctx.globalAlpha = animTransform.opacity;
-      if (animTransform.blur > 0) {
-        ctx.filter = `blur(${animTransform.blur * scaleX}px)`;
+      ctx.globalAlpha = animTransform.opacity * transitionOutgoingAlpha;
+      const totalBlur = animTransform.blur + transitionOutgoingBlur;
+      if (totalBlur > 0) {
+        ctx.filter = `blur(${totalBlur * scaleX}px)`;
       }
       ctx.translate(centerX + animTransform.translateX * scaleX, centerY + animTransform.translateY * scaleX);
       ctx.rotate((rotation + animTransform.rotate) * Math.PI / 180);
@@ -972,6 +1049,11 @@ export class VideoExporter {
         }
       }
 
+      ctx.restore();
+    }
+
+    // Restore clip if outgoing wipe was applied
+    if (outgoingClip) {
       ctx.restore();
     }
   }

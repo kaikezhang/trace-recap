@@ -454,7 +454,8 @@ export default function PhotoOverlay({
 
             // Per-photo exit: staggered fade based on opacity prop
             // Last photo fades first (reverse stagger)
-            const exitProgress = 1 - opacity; // 0 = fully visible, 1 = fully gone
+            // During scene transitions, transition opacity is the sole driver — no per-photo exit
+            const exitProgress = isActiveTransition ? 0 : 1 - opacity; // 0 = fully visible, 1 = fully gone
             const staggerOffset = n > 1 ? (n - 1 - i) / (n - 1) * 0.4 : 0;
             const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
 

@@ -347,8 +347,12 @@ function EditorContent() {
         }
         // During HOVER/ZOOM_OUT fade-out: keep previous photos (don't update)
       } else {
-        setVisiblePhotos([]);
-        setVisiblePhotoLocationId(null);
+        // Don't clear outgoing photos/location when a scene transition is active —
+        // the outgoing location's photoLayout must persist for correct transition resolution
+        if (e.sceneTransitionProgress === undefined) {
+          setVisiblePhotos([]);
+          setVisiblePhotoLocationId(null);
+        }
       }
 
       // Scene transition metadata
