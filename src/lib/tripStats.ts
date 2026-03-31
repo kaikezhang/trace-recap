@@ -24,8 +24,8 @@ export const TRANSPORT_MODE_EMOJI: Record<string, string> = {
   motorcycle: "🏍️",
 };
 
-/** Order for displaying transport mode icons */
-const MODE_ORDER = ["flight", "train", "car", "bus", "ferry", "motorcycle", "bicycle", "walk"];
+/** @deprecated — kept for reference; use Map insertion order instead */
+// const MODE_ORDER = ["flight", "train", "car", "bus", "ferry", "motorcycle", "bicycle", "walk"];
 
 function getSegmentDistanceKm(segment: Segment): number {
   if (!segment.geometry) return 0;
@@ -89,11 +89,12 @@ export function computeTripStats(
         // Past the fly phase — full segment distance
         totalDistanceKm += segmentDist;
         addTransportMode(transportModes, segment.transportMode, segmentDist);
-        visitedLocationIds.add(segment.toId);
-      } else {
-        // HOVER or ZOOM_OUT — haven't started flying yet
-        addTransportMode(transportModes, segment.transportMode, 0);
+        // City only counted as visited upon ARRIVE
+        if (currentPhase === "ARRIVE") {
+          visitedLocationIds.add(segment.toId);
+        }
       }
+      // HOVER or ZOOM_OUT — haven't started flying yet; don't add transport mode
     }
     // Future segments are not counted
   }
@@ -151,7 +152,7 @@ function addTransportMode(modes: Map<string, number>, mode: string, distance: nu
   modes.set(mode, (modes.get(mode) ?? 0) + distance);
 }
 
-/** Get transport mode icons sorted by first-use order */
+/** Get transport mode icons in first-use (insertion) order */
 export function getSortedTransportModes(modes: Map<string, number>): string[] {
-  return MODE_ORDER.filter((mode) => modes.has(mode));
+  return Array.from(modes.keys());
 }
