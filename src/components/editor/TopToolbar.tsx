@@ -16,6 +16,9 @@ import {
   ChevronDown,
   Palette,
   X,
+  Loader2,
+  Check,
+  AlertCircle,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -55,6 +58,7 @@ export default function TopToolbar() {
   const setExportDialogOpen = useUIStore((s) => s.setExportDialogOpen);
   const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
   const setLeftPanelOpen = useUIStore((s) => s.setLeftPanelOpen);
+  const saveStatus = useUIStore((s) => s.saveStatus);
   const exportRoute = useProjectStore((s) => s.exportRoute);
   const loadRouteData = useProjectStore((s) => s.loadRouteData);
   const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
@@ -292,6 +296,25 @@ export default function TopToolbar() {
             <span className="truncate max-w-[100px]">{currentProjectName}</span>
             <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
           </button>
+          {/* Save status indicator */}
+          {saveStatus === "saving" && (
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground animate-pulse" title="Saving...">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span className="hidden md:inline">Saving…</span>
+            </span>
+          )}
+          {saveStatus === "saved" && (
+            <span className="flex items-center gap-1 text-[10px] text-green-600" title="Saved">
+              <Check className="h-3 w-3" />
+              <span className="hidden md:inline">Saved</span>
+            </span>
+          )}
+          {saveStatus === "error" && (
+            <span className="flex items-center gap-1 text-[10px] text-red-500" title="Save failed">
+              <AlertCircle className="h-3 w-3" />
+              <span className="hidden md:inline">Save failed</span>
+            </span>
+          )}
         </div>
 
         {/* Center: viewport ratio selector (desktop) */}

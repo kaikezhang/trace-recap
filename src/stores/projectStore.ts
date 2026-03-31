@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useUIStore } from "@/stores/uiStore";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import type {
   Location,
@@ -764,6 +765,7 @@ async function queueProjectSave(
   data: ImportRouteData,
   nextProjectJson: string,
 ): Promise<boolean> {
+  const { setSaveStatus } = useUIStore.getState();
   let didSave = false;
   const saveTask = saveCommitChain
     .catch(() => undefined)
@@ -772,15 +774,28 @@ async function queueProjectSave(
         return;
       }
 
-      await saveProject(meta, data);
-      didSave = true;
+      setSaveStatus("saving");
+      try {
+        await saveProject(meta, data);
+        didSave = true;
 
-      if (useProjectStore.getState().currentProjectId === projectId) {
-        lastSavedProjectJson = nextProjectJson;
+        if (useProjectStore.getState().currentProjectId === projectId) {
+          lastSavedProjectJson = nextProjectJson;
+        }
+
+        const projects = await listProjectsFromDB();
+        useProjectStore.setState({ projects });
+        setSaveStatus("saved");
+        // Reset to idle after 2 seconds
+        setTimeout(() => {
+          if (useUIStore.getState().saveStatus === "saved") {
+            setSaveStatus("idle");
+          }
+        }, 2000);
+      } catch (error) {
+        console.error("[save] Failed to save project to IndexedDB:", error);
+        setSaveStatus("error");
       }
-
-      const projects = await listProjectsFromDB();
-      useProjectStore.setState({ projects });
     });
 
   saveCommitChain = saveTask.then(

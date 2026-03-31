@@ -43,6 +43,8 @@ function persistSettings(state: PersistedUISettings): void {
 
 const saved = loadPersistedSettings();
 
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
+
 interface UIState {
   leftPanelOpen: boolean;
   exportDialogOpen: boolean;
@@ -50,6 +52,7 @@ interface UIState {
   projectListOpen: boolean;
   searchQuery: string;
   bottomSheetState: BottomSheetState;
+  saveStatus: SaveStatus;
   cityLabelSize: number; // CSS font size in px (default 18)
   cityLabelLang: "en" | "zh"; // City label language
   cityLabelTopPercent: number; // City label top position as % of container (default 5)
@@ -64,6 +67,7 @@ interface UIState {
   breadcrumbsEnabled: boolean; // Show breadcrumb thumbnails at visited locations
   tripStatsEnabled: boolean; // Show trip stats bar during playback
 
+  setSaveStatus: (status: SaveStatus) => void;
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
   setAIPanelOpen: (open: boolean) => void;
@@ -105,7 +109,9 @@ export const useUIStore = create<UIState>((set) => ({
   chapterPinsEnabled: saved.chapterPinsEnabled ?? true,
   breadcrumbsEnabled: saved.breadcrumbsEnabled ?? true,
   tripStatsEnabled: saved.tripStatsEnabled ?? true,
+  saveStatus: "idle" as SaveStatus,
 
+  setSaveStatus: (saveStatus) => set({ saveStatus }),
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
   setAIPanelOpen: (aiPanelOpen) => set({ aiPanelOpen }),
