@@ -36,14 +36,16 @@ import {
   Rows3,
   Newspaper,
   RefreshCw,
+  Camera,
+  ScanEye,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS } from "@/lib/photoAnimation";
+import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS, resolvePhotoStyle } from "@/lib/photoAnimation";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
-import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation } from "@/types";
+import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoStyle } from "@/types";
 
 interface PhotoLayoutEditorProps {
   location: Location;
@@ -293,6 +295,7 @@ function AnimationSelectorSection({
 export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEditorProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const defaultPhotoAnimation = useUIStore((s) => s.photoAnimation);
+  const defaultPhotoStyle = useUIStore((s) => s.photoStyle);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
   const removePhoto = useProjectStore((s) => s.removePhoto);
   const { map } = useMap();
@@ -465,6 +468,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const isRandomLayoutActive = activeTemplate !== "auto" && RANDOM_LAYOUT_TEMPLATES.includes(activeTemplate) && location.photos.length > 1;
   const selectedEnterAnimation: PhotoAnimationOption = layout.enterAnimation ?? "default";
   const selectedExitAnimation: PhotoAnimationOption = layout.exitAnimation ?? "default";
+  const activePhotoStyle: PhotoStyle = resolvePhotoStyle(layout, defaultPhotoStyle);
   const enterAnimationOptions = useMemo(
     () => [
       { value: "default" as const, label: "Default" },
@@ -558,6 +562,14 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const handleEnterAnimationSelect = useCallback(
     (animation: PhotoAnimationOption) => {
       updateLayout({ enterAnimation: animation === "default" ? undefined : animation });
+      replayEnterPreview();
+    },
+    [replayEnterPreview, updateLayout]
+  );
+
+  const handlePhotoStyleSelect = useCallback(
+    (style: PhotoStyle) => {
+      updateLayout({ photoStyle: style });
       replayEnterPreview();
     },
     [replayEnterPreview, updateLayout]
@@ -690,6 +702,35 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
               <div className="border-t border-gray-100 px-4 py-3">
                 <div className="space-y-4">
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+                      Photo Style
+                    </p>
+                    <div className="flex gap-2">
+                      {([
+                        { value: "classic" as const, label: "Classic", icon: Camera },
+                        { value: "kenburns" as const, label: "Ken Burns", icon: ScanEye },
+                      ]).map(({ value, label, icon: Icon }) => {
+                        const isActive = activePhotoStyle === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => handlePhotoStyleSelect(value)}
+                            aria-pressed={isActive}
+                            className={`flex items-center gap-1.5 h-10 rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                              isActive
+                                ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                            }`}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <AnimationSelectorSection
                     title="In Animation"
                     selectedAnimation={selectedEnterAnimation}
@@ -817,6 +858,35 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
               ))}
 
               <div className="space-y-5 pt-4">
+                <div className="space-y-3">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+                    Photo Style
+                  </p>
+                  <div className="flex gap-2">
+                    {([
+                      { value: "classic" as const, label: "Classic", icon: Camera },
+                      { value: "kenburns" as const, label: "Ken Burns", icon: ScanEye },
+                    ]).map(({ value, label, icon: Icon }) => {
+                      const isActive = activePhotoStyle === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => handlePhotoStyleSelect(value)}
+                          aria-pressed={isActive}
+                          className={`flex items-center gap-1.5 h-10 rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                            isActive
+                              ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                              : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <AnimationSelectorSection
                   title="In Animation"
                   selectedAnimation={selectedEnterAnimation}
