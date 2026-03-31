@@ -38,6 +38,7 @@ import {
   RefreshCw,
   Camera,
   ScanEye,
+  Flower2,
   Film,
   Aperture,
 } from "lucide-react";
@@ -99,6 +100,7 @@ const PHOTO_ANIMATION_OPTIONS: PhotoAnimation[] = [
 const PHOTO_STYLE_OPTIONS: { value: PhotoStyle; label: string; icon: typeof Camera }[] = [
   { value: "classic", label: "Classic", icon: Camera },
   { value: "kenburns", label: "Ken Burns", icon: ScanEye },
+  { value: "bloom", label: "Bloom", icon: Flower2 },
   { value: "portal", label: "Portal", icon: Aperture },
 ];
 

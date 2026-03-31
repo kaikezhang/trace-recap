@@ -9,7 +9,17 @@ import {
   SEGMENT_GLOW_LAYER_PREFIX,
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
-import { resolvePhotoAnimations, resolvePhotoStyle, getKenBurnsTransform, KEN_BURNS_DURATION_SEC } from "@/lib/photoAnimation";
+import {
+  resolvePhotoAnimations,
+  resolvePhotoStyle,
+  getKenBurnsTransform,
+  KEN_BURNS_DURATION_SEC,
+  getBloomTransform,
+  getBloomExitTransform,
+  BLOOM_ENTER_DURATION_SEC,
+  computeBloomFanLayout,
+  BLOOM_EXIT_DURATION_SEC,
+} from "@/lib/photoAnimation";
 import { isSolidStyle, resolveIconVariant } from "@/lib/transportIcons";
 import type { IconDirection } from "@/lib/transportIcons";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
@@ -873,6 +883,7 @@ export class VideoExporter {
           layout.layoutSeed
         )
       : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
+
     const count = loaded.length;
     const isPolaroid = layout?.template === "polaroid";
 
@@ -1035,6 +1046,44 @@ export class VideoExporter {
       }
     }
 
+    // Bloom: compute origin and elapsed time
+    let bloomOriginCanvas: { x: number; y: number } | null = null;
+    let bloomElapsed = 0;
+    if (photoStyle === "bloom") {
+      const projected = this.map.project(photoLoc.coordinates as [number, number]);
+      // Map viewport coords → canvas coords
+      const mapContainer = this.map.getContainer();
+      const mapW = mapContainer.clientWidth || 1;
+      const mapH = mapContainer.clientHeight || 1;
+      bloomOriginCanvas = {
+        x: (projected.x / mapW) * canvasWidth,
+        y: (projected.y / mapH) * canvasHeight,
+      };
+
+      const timeline = this.engine.getTimeline();
+      const entry = timeline[groupIndex];
+      if (entry) {
+        const arrivePhase = entry.phases.find((p: { phase: string }) => p.phase === "ARRIVE");
+        if (arrivePhase) {
+          bloomElapsed = Math.max(0, progress.time - arrivePhase.startTime);
+        }
+      }
+    }
+
+    // Fix #3: Override with radial fan layout for bloom style
+    const effectiveRects = (() => {
+      if (photoStyle !== "bloom" || !bloomOriginCanvas) return rects;
+      const originFracX = (bloomOriginCanvas.x - insetX) / insetW;
+      const originFracY = (bloomOriginCanvas.y - insetY) / insetH;
+      return computeBloomFanLayout(
+        originFracX,
+        originFracY,
+        layoutMetas.map((m) => ({ aspect: m.aspect })),
+        insetW / scaleX,
+        insetH / scaleX,
+      );
+    })();
+
     // Use the photo source group index for tracking (prev group during fade-out)
     const photoGroupIdx = isInSceneTransition
       ? groupIndex
@@ -1083,8 +1132,34 @@ export class VideoExporter {
       exitProgress = 1 - (progress.photoOpacity ?? 1);
     }
 
-    for (let i = 0; i < rects.length; i++) {
-      const rect = rects[i];
+    // Bloom tether lines: drawn before photos so they appear behind
+    if (photoStyle === "bloom" && bloomOriginCanvas && exitProgress <= 0) {
+      const bloomEnterProgress = Math.min(1, bloomElapsed / BLOOM_ENTER_DURATION_SEC);
+      // Tether lines visible only when photos are settled (progress >= 1)
+      const tetherAlpha = bloomEnterProgress >= 1 ? 0.3 * transitionOutgoingAlpha : 0;
+      if (tetherAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = tetherAlpha;
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 1.5 * scaleX;
+        ctx.lineCap = "round";
+        for (let i = 0; i < effectiveRects.length; i++) {
+          const rect = effectiveRects[i];
+          const targetCX = insetX + (rect.x + rect.width / 2) * insetW;
+          const targetCY = insetY + (rect.y + rect.height / 2) * insetH;
+          const cpX = (bloomOriginCanvas.x + targetCX) / 2;
+          const cpY = (bloomOriginCanvas.y + targetCY) / 2 - 20 * scaleX;
+          ctx.beginPath();
+          ctx.moveTo(bloomOriginCanvas.x, bloomOriginCanvas.y);
+          ctx.quadraticCurveTo(cpX, cpY, targetCX, targetCY);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    for (let i = 0; i < effectiveRects.length; i++) {
+      const rect = effectiveRects[i];
       const { photo, preloaded } = loaded[i];
       const hasCaption = !!photo.caption;
       const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
@@ -1117,7 +1192,18 @@ export class VideoExporter {
       // --- Compute animation transform for this photo ---
       let animTransform: { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number };
 
-      if (exitProgress > 0) {
+      if (photoStyle === "bloom" && bloomOriginCanvas) {
+        // Bloom: use geo-anchored transform
+        const targetPx = { x: rx, y: ry, w: frameW, h: frameH };
+        if (exitProgress > 0) {
+          const bt = getBloomExitTransform(exitProgress, i, count, bloomOriginCanvas.x, bloomOriginCanvas.y, targetPx);
+          animTransform = { opacity: bt.opacity, scaleX: bt.scale, scaleY: bt.scale, translateX: bt.translateX, translateY: bt.translateY, rotate: 0, blur: 0 };
+        } else {
+          const enterProgress = Math.min(1, bloomElapsed / BLOOM_ENTER_DURATION_SEC);
+          const bt = getBloomTransform(enterProgress, i, count, bloomOriginCanvas.x, bloomOriginCanvas.y, targetPx);
+          animTransform = { opacity: bt.opacity, scaleX: bt.scale, scaleY: bt.scale, translateX: bt.translateX, translateY: bt.translateY, rotate: 0, blur: 0 };
+        }
+      } else if (exitProgress > 0) {
         // Exit animations always run during fade-out; "none" maps to opacity-only parity with PhotoOverlay.
         const staggerOffset = count > 1 ? (count - 1 - i) / (count - 1) * 0.4 : 0;
         const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));

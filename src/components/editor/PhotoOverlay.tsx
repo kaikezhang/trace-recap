@@ -3,7 +3,16 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, type Transition, type TargetAndTransition } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
-import { resolvePhotoAnimations, resolvePhotoStyle, getKenBurnsTransform, KEN_BURNS_DURATION_SEC } from "@/lib/photoAnimation";
+import {
+  resolvePhotoAnimations,
+  resolvePhotoStyle,
+  getKenBurnsTransform,
+  KEN_BURNS_DURATION_SEC,
+  getBloomTransform,
+  getBloomExitTransform,
+  BLOOM_ENTER_DURATION_SEC,
+  computeBloomFanLayout,
+} from "@/lib/photoAnimation";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout, PhotoAnimation, SceneTransition } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -162,6 +171,10 @@ interface PhotoOverlayProps {
   portalAccentColor?: string;
   incomingPortalAccentColor?: string;
   portalProgressOverride?: number;
+  /** Bloom origin in raw pixels from map.project() (relative to map container top-left) */
+  bloomOrigin?: { x: number; y: number } | null;
+  /** Timeline-driven elapsed time (seconds) since bloom enter started */
+  bloomElapsedTime?: number;
   /** Active scene transition type */
   sceneTransition?: SceneTransition;
   /** Scene transition progress (0-1): 0 = fully outgoing, 1 = fully incoming */
@@ -232,6 +245,8 @@ export default function PhotoOverlay({
   originCoordinates,
   portalAccentColor = "#ffffff",
   portalProgressOverride,
+  bloomOrigin,
+  bloomElapsedTime = 0,
   sceneTransition,
   sceneTransitionProgress,
   incomingPhotos,
@@ -289,6 +304,11 @@ export default function PhotoOverlay({
     return () => observer.disconnect();
   }, []);
 
+  // ── Bloom animation progress (timeline-driven, not wall-clock) ──
+  const isBloom = photoStyle === "bloom";
+  const bloomProgress = isBloom ? Math.min(1, bloomElapsedTime / BLOOM_ENTER_DURATION_SEC) : 0;
+
+  // Use actual container dimensions for layout calculation
   const containerAspect = containerSize.h > 0 ? containerSize.w / containerSize.h : 16 / 9;
   const gapPx = displayLayout?.gap ?? 8;
   const borderRadiusPx = displayLayout?.borderRadius ?? 8;
@@ -329,7 +349,28 @@ export default function PhotoOverlay({
     return computeAutoLayout(layoutMetas, containerAspect, gapPx, width);
   })();
 
-  const captionH = 28;
+  // Fix #3: Override with radial fan layout for bloom style
+  const bloomFanRects = (() => {
+    if (!isBloom || !bloomOrigin || !hasDisplayPhotos || containerSize.w <= 0) return null;
+    const overlayOffX = containerRef.current?.offsetLeft ?? 0;
+    const overlayOffY = containerRef.current?.offsetTop ?? 0;
+    const originFracX = (bloomOrigin.x - overlayOffX) / containerSize.w;
+    const originFracY = (bloomOrigin.y - overlayOffY) / containerSize.h;
+    return computeBloomFanLayout(
+      originFracX,
+      originFracY,
+      orderedMetas.map((m) => ({ aspect: m.aspect })),
+      containerSize.w,
+      containerSize.h,
+    );
+  })();
+  // Use fan layout for bloom, standard layout for everything else
+  const effectiveRects = bloomFanRects ?? rects;
+
+  // Caption sizing: match export constants (captionFontSize ~14px at 1000px width, plus gap)
+  const captionH = 28; // space for caption text + gap below image
+
+  // Scene transition: compute outgoing wrapper styles
   const isActiveTransition = sceneTransition && sceneTransition !== "cut" && sceneTransitionProgress !== undefined;
   const transitionOutgoingStyle = useMemo<React.CSSProperties>(() => {
     if (!isActiveTransition || sceneTransitionProgress === undefined) return {};
@@ -469,8 +510,42 @@ export default function PhotoOverlay({
             portalProgress={portalProgress}
             accentColor={portalAccentColor}
           />
-        ) : hasDisplayPhotos ? (
-          rects.map((rect, index) => {
+        ) : (<>
+        {/* Bloom tether lines */}
+        {isBloom && bloomOrigin && hasDisplayPhotos && containerSize.w > 0 && (
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{
+              opacity: bloomProgress >= 1 && opacity >= 1 ? 0.3 : 0,
+              transition: "opacity 0.4s ease",
+            }}
+          >
+            {effectiveRects.map((rect, i) => {
+              const photo = orderedMetas[i];
+              if (!photo) return null;
+              const overlayOffX = containerRef.current?.offsetLeft ?? 0;
+              const overlayOffY = containerRef.current?.offsetTop ?? 0;
+              const originPx = { x: bloomOrigin.x - overlayOffX, y: bloomOrigin.y - overlayOffY };
+              const targetCX = (rect.x + rect.width / 2) * containerSize.w;
+              const targetCY = (rect.y + rect.height / 2) * containerSize.h;
+              // Quadratic bezier control point: midpoint shifted toward origin
+              const cpX = (originPx.x + targetCX) / 2;
+              const cpY = (originPx.y + targetCY) / 2 - 20;
+              return (
+                <path
+                  key={`tether-${photo.id}`}
+                  d={`M ${originPx.x} ${originPx.y} Q ${cpX} ${cpY} ${targetCX} ${targetCY}`}
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              );
+            })}
+          </svg>
+        )}
+
+        {hasDisplayPhotos && effectiveRects.map((rect, index) => {
             const photo = orderedMetas[index];
             if (!photo) return null;
             const total = orderedMetas.length;
@@ -488,6 +563,74 @@ export default function PhotoOverlay({
             const staggerOffset = total > 1 ? (total - 1 - index) / (total - 1) * 0.4 : 0;
             const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
 
+            // ── Bloom style: geo-anchored animation ──
+            if (isBloom && bloomOrigin && containerSize.w > 0) {
+              // Convert raw map.project() pixels to overlay-local pixels
+              const overlayOffsetX = containerRef.current?.offsetLeft ?? 0;
+              const overlayOffsetY = containerRef.current?.offsetTop ?? 0;
+              const originPx = { x: bloomOrigin.x - overlayOffsetX, y: bloomOrigin.y - overlayOffsetY };
+              const targetPx = {
+                x: rect.x * containerSize.w,
+                y: rect.y * containerSize.h,
+                w: rect.width * containerSize.w,
+                h: rect.height * containerSize.h,
+              };
+
+              let bt: { scale: number; translateX: number; translateY: number; opacity: number };
+              if (exitProgress > 0) {
+                bt = getBloomExitTransform(exitProgress, index, total, originPx.x, originPx.y, targetPx);
+              } else {
+                bt = getBloomTransform(bloomProgress, index, total, originPx.x, originPx.y, targetPx);
+              }
+
+              return (
+                <div
+                  key={photo.id}
+                  className="absolute overflow-hidden drop-shadow-xl"
+                  style={{
+                    left: `${rect.x * 100}%`,
+                    top: `${rect.y * 100}%`,
+                    width: `${rect.width * 100}%`,
+                    height: `${rect.height * 100}%`,
+                    borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
+                    display: "flex",
+                    flexDirection: "column" as const,
+                    opacity: bt.opacity,
+                    transform: `translate(${bt.translateX}px, ${bt.translateY}px) scale(${bt.scale}) rotate(${rotation}deg)`,
+                    transition: exitProgress > 0 ? "transform 0.05s linear, opacity 0.05s linear" : undefined,
+                    willChange: "transform, opacity",
+                    ...(isPolaroid ? {
+                      background: "white",
+                      padding: "4% 4% 10% 4%",
+                      boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+                    } : {}),
+                  }}
+                >
+                  <div
+                    className="w-full overflow-hidden"
+                    style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
+                  >
+                    <img
+                      src={photo.url}
+                      alt={photo.caption || ""}
+                      className="w-full h-full object-contain"
+                      style={{ objectPosition: `${fp.x * 100}% ${fp.y * 100}%` }}
+                    />
+                  </div>
+                  {hasCaption && (
+                    <p
+                      className="text-sm text-gray-700 text-center truncate px-1"
+                      style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, flexShrink: 0 }}
+                    >
+                      {photo.caption}
+                    </p>
+                  )}
+                </div>
+              );
+            }
+
+            // ── Normal (non-bloom) rendering ──
+            // Ken Burns: compute start/end transforms for this photo
             const isKenBurns = photoStyle === "kenburns";
             const kbStart = isKenBurns ? getKenBurnsTransform(0, index, fp) : null;
             const kbEnd = isKenBurns ? getKenBurnsTransform(1, index, fp) : null;
@@ -589,8 +732,8 @@ export default function PhotoOverlay({
                 )}
               </motion.div>
             );
-          })
-        ) : null}
+          })}
+        </>)}
       </div>
 
       {hasIncomingPhotos && incomingPhotoStyleResolved === "portal" && incomingPortalProgress > 0 && (
