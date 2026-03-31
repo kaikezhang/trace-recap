@@ -22,6 +22,10 @@ interface AnimationState {
   incomingPhotoLocationId: string | null;
   /** Bearing for wipe direction */
   transitionBearing: number | undefined;
+  /** Screen-space bloom origin for geo-anchored photo bloom */
+  bloomOrigin: { x: number; y: number } | null;
+  /** Elapsed time (seconds) since bloom enter started, driven by engine timeline */
+  bloomElapsedTime: number;
 
   setPlaybackState: (state: PlaybackState) => void;
   setCurrentTime: (time: number) => void;
@@ -39,6 +43,8 @@ interface AnimationState {
   setIncomingPhotos: (photos: Photo[]) => void;
   setIncomingPhotoLocationId: (id: string | null) => void;
   setTransitionBearing: (bearing: number | undefined) => void;
+  setBloomOrigin: (origin: { x: number; y: number } | null) => void;
+  setBloomElapsedTime: (time: number) => void;
   reset: () => void;
 }
 
@@ -59,6 +65,8 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   incomingPhotos: [],
   incomingPhotoLocationId: null,
   transitionBearing: undefined,
+  bloomOrigin: null,
+  bloomElapsedTime: 0,
 
   setPlaybackState: (playbackState) => set({ playbackState }),
   setCurrentTime: (currentTime) => set({ currentTime }),
@@ -76,6 +84,8 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setIncomingPhotos: (incomingPhotos) => set({ incomingPhotos }),
   setIncomingPhotoLocationId: (incomingPhotoLocationId) => set({ incomingPhotoLocationId }),
   setTransitionBearing: (transitionBearing) => set({ transitionBearing }),
+  setBloomOrigin: (bloomOrigin) => set({ bloomOrigin }),
+  setBloomElapsedTime: (bloomElapsedTime) => set({ bloomElapsedTime }),
   reset: () =>
     set({
       playbackState: "idle",
@@ -92,5 +102,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       incomingPhotos: [],
       incomingPhotoLocationId: null,
       transitionBearing: undefined,
+      bloomOrigin: null,
+      bloomElapsedTime: 0,
     }),
 }));

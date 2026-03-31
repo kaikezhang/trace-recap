@@ -122,7 +122,7 @@ export interface PhotoLayout {
 
 export type PhotoAnimation = "scale" | "fade" | "slide" | "flip" | "scatter" | "typewriter" | "none";
 
-export type PhotoStyle = "classic" | "kenburns";
+export type PhotoStyle = "classic" | "kenburns" | "bloom";
 
 export type SceneTransition = "cut" | "dissolve" | "blur-dissolve" | "wipe";
 
