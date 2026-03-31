@@ -108,8 +108,27 @@ export type LayoutTemplate =
   | "rows"
   | "magazine";
 
+export interface FreePhotoTransform {
+  photoId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  zIndex: number;
+  caption?: {
+    text?: string;
+    offsetX: number;
+    offsetY: number;
+    fontFamily?: string;
+    fontSize?: number;
+    color?: string;
+    rotation?: number;
+  };
+}
+
 export interface PhotoLayout {
-  mode: "auto" | "manual";
+  mode: "auto" | "manual" | "free";
   template?: LayoutTemplate;
   order?: string[];        // photo IDs in custom order
   layoutSeed?: number;     // random seed for layouts with randomness
@@ -123,6 +142,7 @@ export interface PhotoLayout {
     rows?: number[];       // relative row heights (e.g. [2, 1] = first row 2x the second)
     cols?: number[];       // relative column widths
   };
+  freeTransforms?: FreePhotoTransform[];
   captionFontFamily?: string;  // Font family for captions
   captionFontSize?: number;    // Font size in px (default 14)
 }

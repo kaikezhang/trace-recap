@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { Fragment, useState, useEffect, useRef, useMemo } from "react";
 import { motion, type Transition, type TargetAndTransition } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import {
@@ -13,8 +13,8 @@ import {
   BLOOM_ENTER_DURATION_SEC,
   computeBloomFanLayout,
 } from "@/lib/photoAnimation";
-import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
-import type { Photo, PhotoLayout, PhotoAnimation, SceneTransition } from "@/types";
+import type { PhotoMeta as LayoutPhotoMeta, PhotoRect } from "@/lib/photoLayout";
+import type { FreePhotoTransform, Photo, PhotoLayout, PhotoAnimation, SceneTransition } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from "@/lib/sceneTransition";
 import { computePortalPhaseProgress } from "@/lib/portalLayout";
@@ -32,6 +32,29 @@ function getArrivePhaseProgress(
   const arrivePhase = layoutEntry?.phases.find((phase) => phase.phase === "ARRIVE");
   if (!arrivePhase || arrivePhase.duration <= 0) return 0;
   return clamp01((time - arrivePhase.startTime) / arrivePhase.duration);
+}
+
+function getFreeTransformMap(layout?: PhotoLayout): Map<string, FreePhotoTransform> {
+  return new Map((layout?.mode === "free" ? layout.freeTransforms : undefined)?.map((transform) => [transform.photoId, transform]) ?? []);
+}
+
+function getCaptionDisplay(
+  photo: Photo,
+  transform: FreePhotoTransform | undefined,
+  defaultFontFamily: string,
+  defaultFontSizePx: number,
+  scale: number,
+) {
+  const text = transform?.caption?.text ?? photo.caption ?? "";
+  return {
+    text,
+    fontFamily: transform?.caption?.fontFamily ?? defaultFontFamily,
+    fontSizePx: (transform?.caption?.fontSize ?? defaultFontSizePx / Math.max(scale, 0.0001)) * scale,
+    color: transform?.caption?.color ?? "#ffffff",
+    offsetX: transform?.caption?.offsetX ?? 0,
+    offsetY: transform?.caption?.offsetY ?? ((transform?.height ?? 0) / 2 + 0.04),
+    rotation: transform?.caption?.rotation ?? 0,
+  };
 }
 
 /** Compute framer-motion initial/animate values for a given animation style */
@@ -313,8 +336,20 @@ export default function PhotoOverlay({
   const gapPx = displayLayout?.gap ?? 8;
   const borderRadiusPx = displayLayout?.borderRadius ?? 8;
 
+  const displayFreeTransformMap = useMemo(
+    () => getFreeTransformMap(displayLayout),
+    [displayLayout],
+  );
+
   const orderedMetas: PhotoMeta[] = (() => {
     if (!hasDisplayPhotos) return [];
+    if (displayLayout?.mode === "free" && displayLayout.freeTransforms && displayLayout.freeTransforms.length > 0) {
+      const metaMap = new Map(displayMetas.map((meta) => [meta.id, meta]));
+      return [...displayLayout.freeTransforms]
+        .sort((a, b) => a.zIndex - b.zIndex)
+        .map((transform) => metaMap.get(transform.photoId))
+        .filter((meta): meta is PhotoMeta => !!meta);
+    }
     if (displayLayout?.order && displayLayout.order.length > 0) {
       const metaMap = new Map(displayMetas.map((meta) => [meta.id, meta]));
       const ordered = displayLayout.order
@@ -335,6 +370,21 @@ export default function PhotoOverlay({
   const rects = (() => {
     if (!hasDisplayPhotos) return [];
     const width = containerSize.w || 1000;
+    if (displayLayout?.mode === "free" && displayLayout.freeTransforms?.length) {
+      return orderedMetas.reduce<PhotoRect[]>((acc, meta) => {
+          const transform = displayFreeTransformMap.get(meta.id);
+          if (transform) {
+            acc.push({
+              x: transform.x,
+              y: transform.y,
+              width: transform.width,
+              height: transform.height,
+              rotation: transform.rotation,
+            });
+          }
+          return acc;
+        }, []);
+    }
     if (displayLayout?.mode === "manual" && displayLayout.template) {
       return computeTemplateLayout(
         layoutMetas,
@@ -372,9 +422,11 @@ export default function PhotoOverlay({
   const captionFontSizePx = (displayLayout?.captionFontSize ?? 14) * captionScale;
   const captionH = captionFontSizePx * 2;
   const captionFontFamily = displayLayout?.captionFontFamily ?? "system-ui";
+  const displayIsFreeMode = displayLayout?.mode === "free";
   const incomingCaptionFontSizePx = (incomingPhotoLayout?.captionFontSize ?? 14) * captionScale;
   const incomingCaptionH = incomingCaptionFontSizePx * 2;
   const incomingCaptionFontFamily = incomingPhotoLayout?.captionFontFamily ?? "system-ui";
+  const incomingIsFreeMode = incomingPhotoLayout?.mode === "free";
 
   // Scene transition: compute outgoing wrapper styles
   const isActiveTransition = sceneTransition && sceneTransition !== "cut" && sceneTransitionProgress !== undefined;
@@ -416,8 +468,20 @@ export default function PhotoOverlay({
   const incomingBorderRadiusPx = incomingPhotoLayout?.borderRadius ?? 8;
   const { enterAnimation: incomingEnterAnim } = resolvePhotoAnimations(incomingPhotoLayout, photoAnimation);
 
+  const incomingFreeTransformMap = useMemo(
+    () => getFreeTransformMap(incomingPhotoLayout),
+    [incomingPhotoLayout],
+  );
+
   const incomingOrderedMetas: PhotoMeta[] = useMemo(() => {
     if (!hasIncomingPhotos) return [];
+    if (incomingPhotoLayout?.mode === "free" && incomingPhotoLayout.freeTransforms && incomingPhotoLayout.freeTransforms.length > 0) {
+      const metaMap = new Map(incomingMetas.map((meta) => [meta.id, meta]));
+      return [...incomingPhotoLayout.freeTransforms]
+        .sort((a, b) => a.zIndex - b.zIndex)
+        .map((transform) => metaMap.get(transform.photoId))
+        .filter((meta): meta is PhotoMeta => !!meta);
+    }
     if (incomingPhotoLayout?.order && incomingPhotoLayout.order.length > 0) {
       const metaMap = new Map(incomingMetas.map((meta) => [meta.id, meta]));
       const ordered = incomingPhotoLayout.order
@@ -438,6 +502,21 @@ export default function PhotoOverlay({
   const incomingRects = useMemo(() => {
     if (!hasIncomingPhotos) return [];
     const width = containerSize.w || 1000;
+    if (incomingPhotoLayout?.mode === "free" && incomingPhotoLayout.freeTransforms?.length) {
+      return incomingOrderedMetas.reduce<PhotoRect[]>((acc, meta) => {
+          const transform = incomingFreeTransformMap.get(meta.id);
+          if (transform) {
+            acc.push({
+              x: transform.x,
+              y: transform.y,
+              width: transform.width,
+              height: transform.height,
+              rotation: transform.rotation,
+            });
+          }
+          return acc;
+        }, []);
+    }
     if (incomingPhotoLayout?.mode === "manual" && incomingPhotoLayout.template) {
       return computeTemplateLayout(
         incomingLayoutMetas,
@@ -450,7 +529,7 @@ export default function PhotoOverlay({
       );
     }
     return computeAutoLayout(incomingLayoutMetas, containerAspect, incomingGapPx, width);
-  }, [hasIncomingPhotos, incomingLayoutMetas, containerAspect, incomingGapPx, containerSize.w, incomingPhotoLayout]);
+  }, [hasIncomingPhotos, incomingLayoutMetas, containerAspect, incomingGapPx, containerSize.w, incomingOrderedMetas, incomingPhotoLayout, incomingFreeTransformMap]);
 
   const transitionIncomingStyle = useMemo<React.CSSProperties>(() => {
     if (!isActiveTransition || sceneTransitionProgress === undefined) return {};
@@ -555,9 +634,11 @@ export default function PhotoOverlay({
             const photo = orderedMetas[index];
             if (!photo) return null;
             const total = orderedMetas.length;
-            const hasCaption = !!photo.caption;
+            const freeTransform = displayFreeTransformMap.get(photo.id);
+            const captionDisplay = getCaptionDisplay(photo, freeTransform, captionFontFamily, captionFontSizePx, captionScale);
+            const hasCaption = Boolean(captionDisplay.text);
             const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
-            const isPolaroid = displayLayout?.template === "polaroid";
+            const isPolaroid = !displayIsFreeMode && displayLayout?.template === "polaroid";
 
             const rotation = rect.rotation != null
               ? rect.rotation
@@ -590,48 +671,67 @@ export default function PhotoOverlay({
               }
 
               return (
-                <div
-                  key={photo.id}
-                  className="absolute overflow-hidden drop-shadow-xl"
-                  style={{
-                    left: `${rect.x * 100}%`,
-                    top: `${rect.y * 100}%`,
-                    width: `${rect.width * 100}%`,
-                    height: `${rect.height * 100}%`,
-                    borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
-                    display: "flex",
-                    flexDirection: "column" as const,
-                    opacity: bt.opacity,
-                    transform: `translate(${bt.translateX}px, ${bt.translateY}px) scale(${bt.scale}) rotate(${rotation}deg)`,
-                    transition: exitProgress > 0 ? "transform 0.05s linear, opacity 0.05s linear" : undefined,
-                    willChange: "transform, opacity",
-                    ...(isPolaroid ? {
-                      background: "white",
-                      padding: "4% 4% 10% 4%",
-                      boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-                    } : {}),
-                  }}
-                >
+                <Fragment key={photo.id}>
                   <div
-                    className="w-full overflow-hidden"
-                    style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
+                    key={photo.id}
+                    className="absolute overflow-hidden drop-shadow-xl"
+                    style={{
+                      left: `${rect.x * 100}%`,
+                      top: `${rect.y * 100}%`,
+                      width: `${rect.width * 100}%`,
+                      height: `${rect.height * 100}%`,
+                      borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
+                      display: "flex",
+                      flexDirection: "column" as const,
+                      opacity: bt.opacity,
+                      transform: `translate(${bt.translateX}px, ${bt.translateY}px) scale(${bt.scale}) rotate(${rotation}deg)`,
+                      transition: exitProgress > 0 ? "transform 0.05s linear, opacity 0.05s linear" : undefined,
+                      willChange: "transform, opacity",
+                      ...(isPolaroid ? {
+                        background: "white",
+                        padding: "4% 4% 10% 4%",
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+                      } : {}),
+                    }}
                   >
-                    <img
-                      src={photo.url}
-                      alt={photo.caption || ""}
-                      className="w-full h-full object-contain"
-                      style={{ objectPosition: `${fp.x * 100}% ${fp.y * 100}%` }}
-                    />
-                  </div>
-                  {hasCaption && (
-                    <p
-                      className="text-gray-700 text-center truncate px-1"
-                      style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, fontSize: `${captionFontSizePx}px`, fontFamily: captionFontFamily, flexShrink: 0 }}
+                    <div
+                      className="w-full overflow-hidden"
+                      style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
                     >
-                      {photo.caption}
-                    </p>
+                      <img
+                        src={photo.url}
+                        alt={photo.caption || ""}
+                        className="w-full h-full object-contain"
+                        style={{ objectPosition: `${fp.x * 100}% ${fp.y * 100}%` }}
+                      />
+                    </div>
+                    {!displayIsFreeMode && hasCaption && (
+                      <p
+                        className="text-gray-700 text-center truncate px-1"
+                        style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, fontSize: `${captionFontSizePx}px`, fontFamily: captionFontFamily, flexShrink: 0 }}
+                      >
+                        {photo.caption}
+                      </p>
+                    )}
+                  </div>
+                  {displayIsFreeMode && hasCaption && (
+                    <div
+                      key={`${photo.id}-caption`}
+                      className="absolute whitespace-nowrap px-2 py-1 text-center drop-shadow-lg"
+                      style={{
+                        left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
+                        top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
+                        transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
+                        color: captionDisplay.color,
+                        fontFamily: captionDisplay.fontFamily,
+                        fontSize: `${captionDisplay.fontSizePx}px`,
+                        zIndex: freeTransform?.zIndex ?? index,
+                      }}
+                    >
+                      {captionDisplay.text}
+                    </div>
                   )}
-                </div>
+                </Fragment>
               );
             }
 
@@ -663,138 +763,26 @@ export default function PhotoOverlay({
               : { ...enter.animate, rotate: enterRotate };
 
             return (
-              <motion.div
-                key={photo.id}
-                initial={enter.initial}
-                animate={animateValues}
-                transition={exitProgress > 0
-                  ? { duration: 0.5, ease: "easeOut" }
-                  : enter.transition
-                }
-                className="absolute overflow-hidden drop-shadow-xl"
-                style={{
-                  left: `${rect.x * 100}%`,
-                  top: `${rect.y * 100}%`,
-                  width: `${rect.width * 100}%`,
-                  height: `${rect.height * 100}%`,
-                  borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
-                  rotate: rotation,
-                  display: "flex",
-                  flexDirection: "column" as const,
-                  ...(isPolaroid ? {
-                    background: "white",
-                    padding: "4% 4% 10% 4%",
-                    boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-                  } : {}),
-                }}
-              >
-                <div
-                  className="w-full overflow-hidden"
-                  style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
-                >
-                  {isKenBurns && kbStart && kbEnd ? (
-                    <motion.img
-                      src={photo.url}
-                      alt={photo.caption || ""}
-                      className="w-full h-full object-cover"
-                      initial={{
-                        scale: kbStart.scale,
-                        x: `${kbStart.translateX}%`,
-                        y: `${kbStart.translateY}%`,
-                      }}
-                      animate={{
-                        scale: kbEnd.scale,
-                        x: `${kbEnd.translateX}%`,
-                        y: `${kbEnd.translateY}%`,
-                      }}
-                      transition={{
-                        duration: KEN_BURNS_DURATION_SEC,
-                        delay: enterDelay,
-                        ease: "linear",
-                        repeat: 0,
-                      }}
-                      style={{
-                        objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
-                      }}
-                    />
-                  ) : (
-                    <img
-                      src={photo.url}
-                      alt={photo.caption || ""}
-                      className="w-full h-full object-contain"
-                      style={{
-                        objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
-                      }}
-                    />
-                  )}
-                </div>
-                {hasCaption && (
-                  <p
-                    className="text-gray-700 text-center truncate px-1"
-                    style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, fontSize: `${captionFontSizePx}px`, fontFamily: captionFontFamily, flexShrink: 0 }}
-                  >
-                    {photo.caption}
-                  </p>
-                )}
-              </motion.div>
-            );
-          })}
-        </>)}
-      </div>
-
-      {hasIncomingPhotos && incomingPhotoStyleResolved === "portal" && incomingPortalProgress > 0 && (
-        <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionIncomingStyle }}>
-          <PortalPhotoLayer
-            photos={incomingOrderedMetas as PortalPhoto[]}
-            containerSize={containerSize}
-            origin={incomingPortalOrigin}
-            portalProgress={incomingPortalProgress}
-            accentColor={incomingPortalAccentColor}
-          />
-        </div>
-      )}
-
-      {hasIncomingPhotos && incomingPhotoStyleResolved !== "portal" && (
-        <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionIncomingStyle }}>
-          {incomingRects.map((rect, index) => {
-              const photo = incomingOrderedMetas[index];
-              if (!photo) return null;
-              const total = incomingOrderedMetas.length;
-              const hasCaption = !!photo.caption;
-              const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
-              const isPolaroid = incomingPhotoLayout?.template === "polaroid";
-
-              const rotation = rect.rotation != null
-                ? rect.rotation
-                : total <= 3
-                  ? (index === 0 ? -2 : index === total - 1 ? 2 : 0)
-                  : (index % 2 === 0 ? -1.5 : 1.5);
-
-              const isKenBurns = incomingPhotoStyleResolved === "kenburns";
-              const kbStart = isKenBurns ? getKenBurnsTransform(0, index, fp) : null;
-              const kbEnd = isKenBurns ? getKenBurnsTransform(1, index, fp) : null;
-
-              const enter = getEnterAnimation(incomingEnterAnim, index, total);
-              const enterDelay = typeof (enter.transition as { delay?: number }).delay === "number"
-                ? (enter.transition as { delay?: number }).delay!
-                : 0;
-
-              return (
+              <Fragment key={photo.id}>
                 <motion.div
-                  key={`incoming-${photo.id}`}
+                  key={photo.id}
                   initial={enter.initial}
-                  animate={{ ...enter.animate, rotate: rotation }}
-                  transition={enter.transition}
+                  animate={animateValues}
+                  transition={exitProgress > 0
+                    ? { duration: 0.5, ease: "easeOut" }
+                    : enter.transition
+                  }
                   className="absolute overflow-hidden drop-shadow-xl"
                   style={{
                     left: `${rect.x * 100}%`,
                     top: `${rect.y * 100}%`,
                     width: `${rect.width * 100}%`,
                     height: `${rect.height * 100}%`,
-                    borderRadius: isPolaroid ? "4px" : `${incomingBorderRadiusPx}px`,
+                    borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
                     rotate: rotation,
                     display: "flex",
                     flexDirection: "column" as const,
+                    zIndex: freeTransform?.zIndex ?? index,
                     ...(isPolaroid ? {
                       background: "white",
                       padding: "4% 4% 10% 4%",
@@ -804,7 +792,7 @@ export default function PhotoOverlay({
                 >
                   <div
                     className="w-full overflow-hidden"
-                    style={{ flex: 1, minHeight: 0, borderRadius: `${incomingBorderRadiusPx}px` }}
+                    style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
                   >
                     {isKenBurns && kbStart && kbEnd ? (
                       <motion.img
@@ -842,15 +830,170 @@ export default function PhotoOverlay({
                       />
                     )}
                   </div>
-                  {hasCaption && (
+                  {!displayIsFreeMode && hasCaption && (
                     <p
                       className="text-gray-700 text-center truncate px-1"
-                      style={{ height: `${incomingCaptionH}px`, lineHeight: `${incomingCaptionH}px`, fontSize: `${incomingCaptionFontSizePx}px`, fontFamily: incomingCaptionFontFamily, flexShrink: 0 }}
+                      style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, fontSize: `${captionFontSizePx}px`, fontFamily: captionFontFamily, flexShrink: 0 }}
                     >
                       {photo.caption}
                     </p>
                   )}
                 </motion.div>
+                {displayIsFreeMode && hasCaption && (
+                  <div
+                    key={`${photo.id}-caption`}
+                    className="absolute whitespace-nowrap px-2 py-1 text-center drop-shadow-lg"
+                    style={{
+                      left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
+                      top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
+                      transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
+                      color: captionDisplay.color,
+                      fontFamily: captionDisplay.fontFamily,
+                      fontSize: `${captionDisplay.fontSizePx}px`,
+                      opacity: exitProgress > 0 ? exit.exitOpacity : 1,
+                      zIndex: (freeTransform?.zIndex ?? index) + 1,
+                    }}
+                  >
+                    {captionDisplay.text}
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
+        </>)}
+      </div>
+
+      {hasIncomingPhotos && incomingPhotoStyleResolved === "portal" && incomingPortalProgress > 0 && (
+        <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionIncomingStyle }}>
+          <PortalPhotoLayer
+            photos={incomingOrderedMetas as PortalPhoto[]}
+            containerSize={containerSize}
+            origin={incomingPortalOrigin}
+            portalProgress={incomingPortalProgress}
+            accentColor={incomingPortalAccentColor}
+          />
+        </div>
+      )}
+
+      {hasIncomingPhotos && incomingPhotoStyleResolved !== "portal" && (
+        <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionIncomingStyle }}>
+          {incomingRects.map((rect, index) => {
+              const photo = incomingOrderedMetas[index];
+              if (!photo) return null;
+              const total = incomingOrderedMetas.length;
+              const freeTransform = incomingFreeTransformMap.get(photo.id);
+              const captionDisplay = getCaptionDisplay(photo, freeTransform, incomingCaptionFontFamily, incomingCaptionFontSizePx, captionScale);
+              const hasCaption = Boolean(captionDisplay.text);
+              const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
+              const isPolaroid = !incomingIsFreeMode && incomingPhotoLayout?.template === "polaroid";
+
+              const rotation = rect.rotation != null
+                ? rect.rotation
+                : total <= 3
+                  ? (index === 0 ? -2 : index === total - 1 ? 2 : 0)
+                  : (index % 2 === 0 ? -1.5 : 1.5);
+
+              const isKenBurns = incomingPhotoStyleResolved === "kenburns";
+              const kbStart = isKenBurns ? getKenBurnsTransform(0, index, fp) : null;
+              const kbEnd = isKenBurns ? getKenBurnsTransform(1, index, fp) : null;
+
+              const enter = getEnterAnimation(incomingEnterAnim, index, total);
+              const enterDelay = typeof (enter.transition as { delay?: number }).delay === "number"
+                ? (enter.transition as { delay?: number }).delay!
+                : 0;
+
+              return (
+                <Fragment key={`incoming-${photo.id}`}>
+                  <motion.div
+                    key={`incoming-${photo.id}`}
+                    initial={enter.initial}
+                    animate={{ ...enter.animate, rotate: rotation }}
+                    transition={enter.transition}
+                    className="absolute overflow-hidden drop-shadow-xl"
+                    style={{
+                      left: `${rect.x * 100}%`,
+                      top: `${rect.y * 100}%`,
+                      width: `${rect.width * 100}%`,
+                      height: `${rect.height * 100}%`,
+                      borderRadius: isPolaroid ? "4px" : `${incomingBorderRadiusPx}px`,
+                      rotate: rotation,
+                      display: "flex",
+                      flexDirection: "column" as const,
+                      zIndex: freeTransform?.zIndex ?? index,
+                      ...(isPolaroid ? {
+                        background: "white",
+                        padding: "4% 4% 10% 4%",
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+                      } : {}),
+                    }}
+                  >
+                    <div
+                      className="w-full overflow-hidden"
+                      style={{ flex: 1, minHeight: 0, borderRadius: `${incomingBorderRadiusPx}px` }}
+                    >
+                      {isKenBurns && kbStart && kbEnd ? (
+                        <motion.img
+                          src={photo.url}
+                          alt={photo.caption || ""}
+                          className="w-full h-full object-cover"
+                          initial={{
+                            scale: kbStart.scale,
+                            x: `${kbStart.translateX}%`,
+                            y: `${kbStart.translateY}%`,
+                          }}
+                          animate={{
+                            scale: kbEnd.scale,
+                            x: `${kbEnd.translateX}%`,
+                            y: `${kbEnd.translateY}%`,
+                          }}
+                          transition={{
+                            duration: KEN_BURNS_DURATION_SEC,
+                            delay: enterDelay,
+                            ease: "linear",
+                            repeat: 0,
+                          }}
+                          style={{
+                            objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src={photo.url}
+                          alt={photo.caption || ""}
+                          className="w-full h-full object-contain"
+                          style={{
+                            objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
+                          }}
+                        />
+                      )}
+                    </div>
+                    {!incomingIsFreeMode && hasCaption && (
+                      <p
+                        className="text-gray-700 text-center truncate px-1"
+                        style={{ height: `${incomingCaptionH}px`, lineHeight: `${incomingCaptionH}px`, fontSize: `${incomingCaptionFontSizePx}px`, fontFamily: incomingCaptionFontFamily, flexShrink: 0 }}
+                      >
+                        {photo.caption}
+                      </p>
+                    )}
+                  </motion.div>
+                  {incomingIsFreeMode && hasCaption && (
+                    <div
+                      key={`incoming-${photo.id}-caption`}
+                      className="absolute whitespace-nowrap px-2 py-1 text-center drop-shadow-lg"
+                      style={{
+                        left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
+                        top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
+                        transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
+                        color: captionDisplay.color,
+                        fontFamily: captionDisplay.fontFamily,
+                        fontSize: `${captionDisplay.fontSizePx}px`,
+                        zIndex: (freeTransform?.zIndex ?? index) + 1,
+                      }}
+                    >
+                      {captionDisplay.text}
+                    </div>
+                  )}
+                </Fragment>
               );
             })}
         </div>
