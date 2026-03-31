@@ -33,30 +33,38 @@ export default function ChapterPinsOverlay() {
   const arrivalRef = useRef(currentArrivalLocationId);
   arrivalRef.current = currentArrivalLocationId;
 
+  const computePositions = useRef(() => {
+    /* placeholder — replaced below */
+  });
+
+  computePositions.current = () => {
+    if (!map) return;
+    const locs = locationsRef.current;
+    const visited = visitedRef.current;
+    const arrival = arrivalRef.current;
+
+    const newPositions: PinPosition[] = [];
+    for (const loc of locs) {
+      if (loc.isWaypoint) continue;
+      const isVisited = visited.includes(loc.id);
+      const isActive = loc.id === arrival;
+      if (!isVisited && !isActive) continue;
+
+      const point = map.project(loc.coordinates);
+      newPositions.push({
+        locationId: loc.id,
+        x: point.x,
+        y: point.y,
+      });
+    }
+    setPositions(newPositions);
+  };
+
+  // Update on map movement
   useEffect(() => {
     if (!map) return;
 
-    const update = () => {
-      const locs = locationsRef.current;
-      const visited = visitedRef.current;
-      const arrival = arrivalRef.current;
-
-      const newPositions: PinPosition[] = [];
-      for (const loc of locs) {
-        if (loc.isWaypoint) continue;
-        const isVisited = visited.includes(loc.id);
-        const isActive = loc.id === arrival;
-        if (!isVisited && !isActive) continue;
-
-        const point = map.project(loc.coordinates);
-        newPositions.push({
-          locationId: loc.id,
-          x: point.x,
-          y: point.y,
-        });
-      }
-      setPositions(newPositions);
-    };
+    const update = () => computePositions.current();
 
     update();
     map.on("move", update);
@@ -65,19 +73,19 @@ export default function ChapterPinsOverlay() {
     };
   }, [map]);
 
-  // Re-project when animation state changes (visited locations / arrival)
+  // Update when animation state changes (subscribe to avoid re-render loops)
   useEffect(() => {
     if (!map) return;
-    const locs = locationsRef.current;
-    const newPositions: PinPosition[] = [];
-    for (const loc of locs) {
-      if (loc.isWaypoint) continue;
-      if (!visitedLocationIds.includes(loc.id) && loc.id !== currentArrivalLocationId) continue;
-      const point = map.project(loc.coordinates);
-      newPositions.push({ locationId: loc.id, x: point.x, y: point.y });
-    }
-    setPositions(newPositions);
-  }, [map, visitedLocationIds, currentArrivalLocationId]);
+    let prevVisited = useAnimationStore.getState().visitedLocationIds;
+    let prevArrival = useAnimationStore.getState().currentArrivalLocationId;
+    return useAnimationStore.subscribe((state) => {
+      if (state.visitedLocationIds !== prevVisited || state.currentArrivalLocationId !== prevArrival) {
+        prevVisited = state.visitedLocationIds;
+        prevArrival = state.currentArrivalLocationId;
+        computePositions.current();
+      }
+    });
+  }, [map]);
 
   const isAnimating = playbackState === "playing" || playbackState === "paused";
   if (!chapterPinsEnabled || !isAnimating) return null;
