@@ -331,15 +331,19 @@ function PreviewWithMapBackground({
 }) {
   return (
     <div
-      className="rounded-xl overflow-hidden relative"
-      style={{
-        ...previewContainerStyle,
-        backgroundImage: mapSnapshot ? `url(${mapSnapshot})` : undefined,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundColor: mapSnapshot ? undefined : "rgba(0,0,0,0.3)",
-      }}
+      className="relative"
+      style={previewContainerStyle}
     >
+      {/* Background layer with rounded corners and clipping */}
+      <div
+        className="absolute inset-0 rounded-xl overflow-hidden"
+        style={{
+          backgroundImage: mapSnapshot ? `url(${mapSnapshot})` : undefined,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundColor: mapSnapshot ? undefined : "rgba(0,0,0,0.3)",
+        }}
+      />
       {children}
     </div>
   );

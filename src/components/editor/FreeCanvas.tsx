@@ -647,7 +647,7 @@ export default function FreeCanvas({
 
   return (
     <div
-      className="absolute inset-0 z-20 overflow-hidden"
+      className="absolute inset-0 z-20"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) {
           setSelection(null);
