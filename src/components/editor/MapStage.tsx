@@ -10,6 +10,7 @@ import { useAnimationStore } from "@/stores/animationStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import type { Location, Photo, PhotoLayout } from "@/types";
+import { resolveSceneTransition } from "@/lib/sceneTransition";
 
 interface MapStageProps {
   cityLabelSize: number;
@@ -126,6 +127,16 @@ export default function MapStage({
   const cityLabelTopPercent = useUIStore((s) => s.cityLabelTopPercent);
   const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
   const routeLabelSize = useUIStore((s) => s.routeLabelSize);
+  const globalSceneTransition = useUIStore((s) => s.sceneTransition);
+
+  // Scene transition state
+  const sceneTransitionProgress = useAnimationStore((s) => s.sceneTransitionProgress);
+  const incomingPhotos = useAnimationStore((s) => s.incomingPhotos);
+  const incomingPhotoLocationId = useAnimationStore((s) => s.incomingPhotoLocationId);
+  const transitionBearing = useAnimationStore((s) => s.transitionBearing);
+  const incomingLocation = locations.find((l) => l.id === incomingPhotoLocationId);
+  const effectiveTransition = resolveSceneTransition(photoLayout, globalSceneTransition);
+  const isTransitioning = effectiveTransition !== "cut" && sceneTransitionProgress !== undefined;
 
   const isPlaying = playbackState === "playing";
   const currentSegment = segments[currentSegmentIndex];
@@ -173,6 +184,11 @@ export default function MapStage({
         visible={showPhotoOverlay}
         photoLayout={photoLayout}
         opacity={photoOverlayOpacity}
+        sceneTransition={effectiveTransition}
+        sceneTransitionProgress={isTransitioning ? sceneTransitionProgress : undefined}
+        incomingPhotos={isTransitioning ? incomingPhotos : undefined}
+        incomingPhotoLayout={isTransitioning ? incomingLocation?.photoLayout : undefined}
+        transitionBearing={isTransitioning ? transitionBearing : undefined}
       />
       {showPhotoLayoutEditor && editingLocation && (
         <PhotoLayoutEditor

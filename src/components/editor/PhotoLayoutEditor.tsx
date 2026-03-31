@@ -38,14 +38,16 @@ import {
   RefreshCw,
   Camera,
   ScanEye,
+  Film,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS, resolvePhotoStyle } from "@/lib/photoAnimation";
+import { resolveSceneTransition, SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
-import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoStyle } from "@/types";
+import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
 
 interface PhotoLayoutEditorProps {
   location: Location;
@@ -296,6 +298,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const defaultPhotoAnimation = useUIStore((s) => s.photoAnimation);
   const defaultPhotoStyle = useUIStore((s) => s.photoStyle);
+  const globalSceneTransition = useUIStore((s) => s.sceneTransition);
+  const setGlobalSceneTransition = useUIStore((s) => s.setSceneTransition);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
   const removePhoto = useProjectStore((s) => s.removePhoto);
   const { map } = useMap();
@@ -469,6 +473,26 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const selectedEnterAnimation: PhotoAnimationOption = layout.enterAnimation ?? "default";
   const selectedExitAnimation: PhotoAnimationOption = layout.exitAnimation ?? "default";
   const activePhotoStyle: PhotoStyle = resolvePhotoStyle(layout, defaultPhotoStyle);
+  const activeSceneTransition: SceneTransition = resolveSceneTransition(layout, globalSceneTransition);
+  type SceneTransitionOption = SceneTransition | "default";
+  const selectedSceneTransition: SceneTransitionOption = layout.sceneTransition ?? "default";
+
+  const sceneTransitionOptions = useMemo(
+    () => [
+      { value: "default" as SceneTransitionOption, label: `Default (${SCENE_TRANSITION_LABELS[globalSceneTransition]})` },
+      ...([
+        "cut",
+        "dissolve",
+        "blur-dissolve",
+        "wipe",
+      ] as const).map((value) => ({
+        value: value as SceneTransitionOption,
+        label: SCENE_TRANSITION_LABELS[value],
+      })),
+    ],
+    [globalSceneTransition]
+  );
+
   const enterAnimationOptions = useMemo(
     () => [
       { value: "default" as const, label: "Default" },
@@ -581,6 +605,20 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       replayExitPreview();
     },
     [replayExitPreview, updateLayout]
+  );
+
+  const handleSceneTransitionSelect = useCallback(
+    (transition: SceneTransitionOption) => {
+      updateLayout({ sceneTransition: transition === "default" ? undefined : transition });
+    },
+    [updateLayout]
+  );
+
+  const handleGlobalSceneTransitionSelect = useCallback(
+    (transition: SceneTransition) => {
+      setGlobalSceneTransition(transition);
+    },
+    [setGlobalSceneTransition]
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -745,6 +783,34 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                     defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
                     onSelect={handleExitAnimationSelect}
                   />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Film className="h-3.5 w-3.5 text-gray-400" />
+                      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+                        Scene Transition
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {sceneTransitionOptions.map(({ value, label }) => {
+                        const isActive = selectedSceneTransition === value;
+                        return (
+                          <button
+                            key={`scene-transition-mobile-${value}`}
+                            type="button"
+                            onClick={() => handleSceneTransitionSelect(value)}
+                            aria-pressed={isActive}
+                            className={`h-10 min-w-[64px] rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                              isActive
+                                ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -901,6 +967,34 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
                   onSelect={handleExitAnimationSelect}
                 />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Film className="h-3.5 w-3.5 text-gray-400" />
+                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+                      Scene Transition
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {sceneTransitionOptions.map(({ value, label }) => {
+                      const isActive = selectedSceneTransition === value;
+                      return (
+                        <button
+                          key={`scene-transition-desktop-${value}`}
+                          type="button"
+                          onClick={() => handleSceneTransitionSelect(value)}
+                          aria-pressed={isActive}
+                          className={`h-10 min-w-[64px] rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                            isActive
+                              ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                              : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
 

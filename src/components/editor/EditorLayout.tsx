@@ -127,6 +127,16 @@ function EditorContent() {
     (s) => s.setCurrentGroupSegmentIndices,
   );
   const setTimeline = useAnimationStore((s) => s.setTimeline);
+  const setSceneTransitionProgress = useAnimationStore(
+    (s) => s.setSceneTransitionProgress,
+  );
+  const setIncomingPhotos = useAnimationStore((s) => s.setIncomingPhotos);
+  const setIncomingPhotoLocationId = useAnimationStore(
+    (s) => s.setIncomingPhotoLocationId,
+  );
+  const setTransitionBearing = useAnimationStore(
+    (s) => s.setTransitionBearing,
+  );
   const reset = useAnimationStore((s) => s.reset);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
@@ -337,8 +347,27 @@ function EditorContent() {
         }
         // During HOVER/ZOOM_OUT fade-out: keep previous photos (don't update)
       } else {
-        setVisiblePhotos([]);
-        setVisiblePhotoLocationId(null);
+        // Don't clear outgoing photos/location when a scene transition is active —
+        // the outgoing location's photoLayout must persist for correct transition resolution
+        if (e.sceneTransitionProgress === undefined) {
+          setVisiblePhotos([]);
+          setVisiblePhotoLocationId(null);
+        }
+      }
+
+      // Scene transition metadata
+      setSceneTransitionProgress(e.sceneTransitionProgress);
+      setTransitionBearing(e.transitionBearing);
+      if (e.sceneTransitionProgress !== undefined && e.incomingGroupIndex !== undefined) {
+        const groups = engine.getGroups();
+        const incomingGroup = groups[e.incomingGroupIndex];
+        if (incomingGroup) {
+          setIncomingPhotos(incomingGroup.toLoc.photos);
+          setIncomingPhotoLocationId(incomingGroup.toLoc.id);
+        }
+      } else {
+        setIncomingPhotos([]);
+        setIncomingPhotoLocationId(null);
       }
     });
 

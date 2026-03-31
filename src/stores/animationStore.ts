@@ -14,6 +14,14 @@ interface AnimationState {
   showPhotoOverlay: boolean;
   photoOverlayOpacity: number;
   timeline: SegmentTiming[];
+  /** Scene transition progress (0-1), undefined when no transition active */
+  sceneTransitionProgress: number | undefined;
+  /** Photos from the incoming location during a scene transition */
+  incomingPhotos: Photo[];
+  /** PhotoLayout of the incoming location during a scene transition */
+  incomingPhotoLocationId: string | null;
+  /** Bearing for wipe direction */
+  transitionBearing: number | undefined;
 
   setPlaybackState: (state: PlaybackState) => void;
   setCurrentTime: (time: number) => void;
@@ -27,6 +35,10 @@ interface AnimationState {
   setShowPhotoOverlay: (show: boolean) => void;
   setPhotoOverlayOpacity: (opacity: number) => void;
   setTimeline: (timeline: SegmentTiming[]) => void;
+  setSceneTransitionProgress: (progress: number | undefined) => void;
+  setIncomingPhotos: (photos: Photo[]) => void;
+  setIncomingPhotoLocationId: (id: string | null) => void;
+  setTransitionBearing: (bearing: number | undefined) => void;
   reset: () => void;
 }
 
@@ -43,6 +55,10 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   showPhotoOverlay: false,
   photoOverlayOpacity: 1,
   timeline: [],
+  sceneTransitionProgress: undefined,
+  incomingPhotos: [],
+  incomingPhotoLocationId: null,
+  transitionBearing: undefined,
 
   setPlaybackState: (playbackState) => set({ playbackState }),
   setCurrentTime: (currentTime) => set({ currentTime }),
@@ -56,6 +72,10 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setShowPhotoOverlay: (showPhotoOverlay) => set({ showPhotoOverlay }),
   setPhotoOverlayOpacity: (photoOverlayOpacity) => set({ photoOverlayOpacity }),
   setTimeline: (timeline) => set({ timeline }),
+  setSceneTransitionProgress: (sceneTransitionProgress) => set({ sceneTransitionProgress }),
+  setIncomingPhotos: (incomingPhotos) => set({ incomingPhotos }),
+  setIncomingPhotoLocationId: (incomingPhotoLocationId) => set({ incomingPhotoLocationId }),
+  setTransitionBearing: (transitionBearing) => set({ transitionBearing }),
   reset: () =>
     set({
       playbackState: "idle",
@@ -68,5 +88,9 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       visiblePhotos: [],
       showPhotoOverlay: false,
       photoOverlayOpacity: 0,
+      sceneTransitionProgress: undefined,
+      incomingPhotos: [],
+      incomingPhotoLocationId: null,
+      transitionBearing: undefined,
     }),
 }));
