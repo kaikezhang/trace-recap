@@ -123,6 +123,8 @@ export interface PhotoLayout {
     rows?: number[];       // relative row heights (e.g. [2, 1] = first row 2x the second)
     cols?: number[];       // relative column widths
   };
+  captionFontFamily?: string;  // Font family for captions
+  captionFontSize?: number;    // Font size in px (default 14)
 }
 
 export type PhotoAnimation = "scale" | "fade" | "slide" | "flip" | "scatter" | "typewriter" | "none";

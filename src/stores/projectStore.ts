@@ -123,6 +123,11 @@ interface ProjectState {
     photoId: string,
     point: { x: number; y: number },
   ) => void;
+  setPhotoCaption: (
+    locationId: string,
+    photoId: string,
+    caption: string,
+  ) => void;
 
   // Project operations
   setMapStyle: (style: MapStyle) => void;
@@ -494,11 +499,13 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
       };
     });
 
-    const photoLayout = isObject(loc.photoLayout)
+    const ALLOWED_CAPTION_FONTS = ["system-ui", "serif", "monospace", "cursive"];
+    const rawLayout = isObject(loc.photoLayout) ? loc.photoLayout : undefined;
+    const photoLayout = rawLayout
       ? {
-          ...loc.photoLayout,
-          order: Array.isArray(loc.photoLayout.order)
-            ? loc.photoLayout.order
+          ...rawLayout,
+          order: Array.isArray(rawLayout.order)
+            ? rawLayout.order
                 .map((indexValue) => {
                   const photoIndex = Number.parseInt(String(indexValue), 10);
                   return Number.isInteger(photoIndex) &&
@@ -508,6 +515,13 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
                     : null;
                 })
                 .filter((photoId): photoId is string => Boolean(photoId))
+            : undefined,
+          captionFontSize: typeof rawLayout.captionFontSize === "number"
+            ? Math.max(8, Math.min(72, rawLayout.captionFontSize))
+            : undefined,
+          captionFontFamily: typeof rawLayout.captionFontFamily === "string" &&
+            ALLOWED_CAPTION_FONTS.includes(rawLayout.captionFontFamily)
+            ? rawLayout.captionFontFamily
             : undefined,
         }
       : undefined;
@@ -930,6 +944,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
               ...l,
               photos: l.photos.map((p) =>
                 p.id === photoId ? { ...p, focalPoint: point } : p,
+              ),
+            }
+          : l,
+      ),
+    }));
+  },
+
+  setPhotoCaption: (locationId, photoId, caption) => {
+    markLocationDirty(locationId);
+    return set((state) => ({
+      locations: state.locations.map((l) =>
+        l.id === locationId
+          ? {
+              ...l,
+              photos: l.photos.map((p) =>
+                p.id === photoId ? { ...p, caption: caption || undefined } : p,
               ),
             }
           : l,

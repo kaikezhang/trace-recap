@@ -79,6 +79,7 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
   );
   const addPhoto = useProjectStore((s) => s.addPhoto);
   const removePhoto = useProjectStore((s) => s.removePhoto);
+  const setPhotoCaption = useProjectStore((s) => s.setPhotoCaption);
 
   if (!location) return null;
 
@@ -108,18 +109,32 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
           {/* Photo grid with add button */}
           <div className="grid grid-cols-4 gap-1.5">
             {location.photos.map((photo) => (
-              <div key={photo.id} className="relative group aspect-square">
-                <img
-                  src={photo.url}
-                  alt=""
-                  className="w-full h-full rounded-lg object-cover bg-muted"
+              <div key={photo.id} className="relative group">
+                <div className="relative aspect-square">
+                  <img
+                    src={photo.url}
+                    alt=""
+                    className="w-full h-full rounded-lg object-cover bg-muted"
+                  />
+                  <button
+                    className="absolute -top-1 -right-1 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+                    onClick={() => removePhoto(locationId, photo.id)}
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={photo.caption ?? ""}
+                  placeholder="Add caption..."
+                  className="w-full mt-1 px-1 py-0.5 text-[10px] text-gray-600 bg-transparent border border-transparent rounded hover:border-gray-300 focus:border-indigo-400 focus:outline-none truncate"
+                  onChange={(e) => {
+                    setPhotoCaption(locationId, photo.id, e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
                 />
-                <button
-                  className="absolute -top-1 -right-1 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
-                  onClick={() => removePhoto(locationId, photo.id)}
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
               </div>
             ))}
             {canAddMore && (

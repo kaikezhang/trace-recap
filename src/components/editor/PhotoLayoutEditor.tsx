@@ -41,6 +41,7 @@ import {
   Flower2,
   Film,
   Aperture,
+  Type,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
@@ -981,6 +982,42 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
                   onSelect={handleExitAnimationSelect}
                 />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Type className="h-3.5 w-3.5 text-gray-400" />
+                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+                      Caption Style
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-500 w-14 shrink-0">Font</label>
+                      <select
+                        className="flex-1 h-7 text-xs rounded-md border border-gray-200 bg-white px-2 focus:border-indigo-400 focus:outline-none"
+                        value={layout.captionFontFamily ?? "system-ui"}
+                        onChange={(e) => updateLayout({ captionFontFamily: e.target.value })}
+                      >
+                        <option value="system-ui">System UI</option>
+                        <option value="serif">Serif</option>
+                        <option value="monospace">Monospace</option>
+                        <option value="cursive">Cursive</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-500 w-14 shrink-0">Size</label>
+                      <input
+                        type="range"
+                        min={10}
+                        max={24}
+                        step={1}
+                        value={layout.captionFontSize ?? 14}
+                        onChange={(e) => updateLayout({ captionFontSize: Number(e.target.value) })}
+                        className="flex-1 h-1 accent-indigo-500"
+                      />
+                      <span className="text-[10px] text-gray-400 w-8 text-right">{layout.captionFontSize ?? 14}px</span>
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Film className="h-3.5 w-3.5 text-gray-400" />

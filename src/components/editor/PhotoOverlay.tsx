@@ -367,8 +367,14 @@ export default function PhotoOverlay({
   // Use fan layout for bloom, standard layout for everything else
   const effectiveRects = bloomFanRects ?? rects;
 
-  // Caption sizing: match export constants (captionFontSize ~14px at 1000px width, plus gap)
-  const captionH = 28; // space for caption text + gap below image
+  // Caption sizing: scale proportionally based on container width (reference: 1000px)
+  const captionScale = containerSize.w > 0 ? containerSize.w / 1000 : 1;
+  const captionFontSizePx = (displayLayout?.captionFontSize ?? 14) * captionScale;
+  const captionH = captionFontSizePx * 2;
+  const captionFontFamily = displayLayout?.captionFontFamily ?? "system-ui";
+  const incomingCaptionFontSizePx = (incomingPhotoLayout?.captionFontSize ?? 14) * captionScale;
+  const incomingCaptionH = incomingCaptionFontSizePx * 2;
+  const incomingCaptionFontFamily = incomingPhotoLayout?.captionFontFamily ?? "system-ui";
 
   // Scene transition: compute outgoing wrapper styles
   const isActiveTransition = sceneTransition && sceneTransition !== "cut" && sceneTransitionProgress !== undefined;
@@ -619,8 +625,8 @@ export default function PhotoOverlay({
                   </div>
                   {hasCaption && (
                     <p
-                      className="text-sm text-gray-700 text-center truncate px-1"
-                      style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, flexShrink: 0 }}
+                      className="text-gray-700 text-center truncate px-1"
+                      style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, fontSize: `${captionFontSizePx}px`, fontFamily: captionFontFamily, flexShrink: 0 }}
                     >
                       {photo.caption}
                     </p>
@@ -724,8 +730,8 @@ export default function PhotoOverlay({
                 </div>
                 {hasCaption && (
                   <p
-                    className="text-sm text-gray-700 text-center truncate px-1"
-                    style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, flexShrink: 0 }}
+                    className="text-gray-700 text-center truncate px-1"
+                    style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, fontSize: `${captionFontSizePx}px`, fontFamily: captionFontFamily, flexShrink: 0 }}
                   >
                     {photo.caption}
                   </p>
@@ -838,8 +844,8 @@ export default function PhotoOverlay({
                   </div>
                   {hasCaption && (
                     <p
-                      className="text-sm text-gray-700 text-center truncate px-1"
-                      style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, flexShrink: 0 }}
+                      className="text-gray-700 text-center truncate px-1"
+                      style={{ height: `${incomingCaptionH}px`, lineHeight: `${incomingCaptionH}px`, fontSize: `${incomingCaptionFontSizePx}px`, fontFamily: incomingCaptionFontFamily, flexShrink: 0 }}
                     >
                       {photo.caption}
                     </p>
