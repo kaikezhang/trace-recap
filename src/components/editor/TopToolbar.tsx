@@ -46,8 +46,41 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import type { AspectRatio, MapStyle, MapStyleCategory } from "@/types";
+import type { AspectRatio, MapStyle, MapStyleCategory, PhotoLayout } from "@/types";
 import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
+
+function serializePortablePhotoLayout(
+  photoLayout: PhotoLayout | undefined,
+  photos: Array<{ id: string }>,
+): PhotoLayout | undefined {
+  if (!photoLayout) {
+    return undefined;
+  }
+
+  return {
+    ...photoLayout,
+    freeTransforms: photoLayout.freeTransforms
+      ?.map((transform, index) => {
+        const photoIndex = photos.findIndex((photo) => photo.id === transform.photoId);
+        if (photoIndex < 0) {
+          return null;
+        }
+
+        return {
+          ...transform,
+          photoId: String(photoIndex),
+          zIndex: Number.isFinite(transform.zIndex) ? transform.zIndex : index,
+        };
+      })
+      .filter((transform): transform is NonNullable<PhotoLayout["freeTransforms"]>[number] => Boolean(transform)),
+    order: photoLayout.order
+      ? photoLayout.order
+          .map((photoId) => photos.findIndex((photo) => photo.id === photoId))
+          .filter((index) => index >= 0)
+          .map(String)
+      : undefined,
+  };
+}
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -215,7 +248,7 @@ export default function TopToolbar() {
           coordinates: loc.coordinates as [number, number],
           isWaypoint: loc.isWaypoint ?? false,
           ...(photos.length > 0 ? { photos } : {}),
-          ...(loc.photoLayout ? { photoLayout: loc.photoLayout } : {}),
+          ...(loc.photoLayout ? { photoLayout: serializePortablePhotoLayout(loc.photoLayout, loc.photos) } : {}),
         };
       }),
     );

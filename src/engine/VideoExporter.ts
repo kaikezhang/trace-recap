@@ -1,7 +1,7 @@
 import { lineString } from "@turf/helpers";
 import { length } from "@turf/length";
 import type mapboxgl from "mapbox-gl";
-import type { ExportSettings, Photo, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
+import type { ExportSettings, FreePhotoTransform, Photo, PhotoAnimation, PhotoLayout, PhotoStyle, SceneTransition } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 import type { AnimationEvent } from "./AnimationEngine";
 import {
@@ -23,7 +23,7 @@ import {
 } from "@/lib/photoAnimation";
 import { isSolidStyle, resolveIconVariant } from "@/lib/transportIcons";
 import type { IconDirection } from "@/lib/transportIcons";
-import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
+import { computeAutoLayout, computeTemplateLayout, type PhotoRect } from "@/lib/photoLayout";
 import { getExportViewportSize } from "@/lib/viewportRatio";
 import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
 import { isMediaRecorderSupported, MediaRecorderExporter } from "./MediaRecorderExporter";
@@ -53,6 +53,33 @@ interface PreloadedPhoto {
   img: HTMLImageElement;
   aspect: number; // naturalWidth / naturalHeight
   failed?: boolean; // true if the original image failed to load (placeholder)
+}
+
+function getFreeTransformMap(layout?: PhotoLayout): Map<string, FreePhotoTransform> {
+  return new Map((layout?.mode === "free" ? layout.freeTransforms : undefined)?.map((transform) => [transform.photoId, transform]) ?? []);
+}
+
+function getOrderedPhotosForLayout(photos: Photo[], layout?: PhotoLayout): Photo[] {
+  if (layout?.mode === "free" && layout.freeTransforms && layout.freeTransforms.length > 0) {
+    const photoMap = new Map(photos.map((photo) => [photo.id, photo]));
+    return [...layout.freeTransforms]
+      .sort((a, b) => a.zIndex - b.zIndex)
+      .map((transform) => photoMap.get(transform.photoId))
+      .filter((photo): photo is Photo => !!photo);
+  }
+
+  if (layout?.order && layout.order.length > 0) {
+    const photoMap = new Map(photos.map((photo) => [photo.id, photo]));
+    const ordered = layout.order
+      .map((id) => photoMap.get(id))
+      .filter((photo): photo is Photo => !!photo);
+    for (const photo of photos) {
+      if (!ordered.find((orderedPhoto) => orderedPhoto.id === photo.id)) ordered.push(photo);
+    }
+    return ordered;
+  }
+
+  return photos;
 }
 
 export class VideoExporter {
@@ -1388,19 +1415,7 @@ export class VideoExporter {
     const gapPx = layout?.gap ?? 8;
     const borderRadiusPx = layout?.borderRadius ?? 8;
 
-    const orderedPhotos = (() => {
-      if (layout?.order && layout.order.length > 0) {
-        const photoMap = new Map(photos.map((p) => [p.id, p]));
-        const ordered = layout.order
-          .map((id) => photoMap.get(id))
-          .filter((p): p is Photo => !!p);
-        for (const p of photos) {
-          if (!ordered.find((o) => o.id === p.id)) ordered.push(p);
-        }
-        return ordered;
-      }
-      return photos;
-    })();
+    const orderedPhotos = getOrderedPhotosForLayout(photos, layout);
 
     const loaded: { photo: Photo; preloaded: PreloadedPhoto }[] = [];
     for (const photo of orderedPhotos) {
@@ -1431,20 +1446,36 @@ export class VideoExporter {
       aspect: preloaded.aspect,
     }));
     const widthPx = insetW / scaleX;
-    const rects = layout?.mode === "manual" && layout.template
-      ? computeTemplateLayout(
-          layoutMetas,
-          containerAspect,
-          layout.template,
-          gapPx,
-          widthPx,
-          layout.customProportions,
-          layout.layoutSeed
-        )
-      : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
+    const freeTransformMap = getFreeTransformMap(layout);
+    const rects = layout?.mode === "free" && layout.freeTransforms?.length
+      ? loaded.reduce<PhotoRect[]>((acc, { photo }) => {
+            const transform = freeTransformMap.get(photo.id);
+            if (transform) {
+              acc.push({
+                x: transform.x,
+                y: transform.y,
+                width: transform.width,
+                height: transform.height,
+                rotation: transform.rotation,
+              });
+            }
+            return acc;
+          }, [])
+      : layout?.mode === "manual" && layout.template
+        ? computeTemplateLayout(
+            layoutMetas,
+            containerAspect,
+            layout.template,
+            gapPx,
+            widthPx,
+            layout.customProportions,
+            layout.layoutSeed
+          )
+        : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
 
     const count = loaded.length;
-    const isPolaroid = layout?.template === "polaroid";
+    const isFreeMode = layout?.mode === "free";
+    const isPolaroid = !isFreeMode && layout?.template === "polaroid";
 
     // --- Photo animation timing ---
     const {
@@ -1720,7 +1751,15 @@ export class VideoExporter {
     for (let i = 0; i < effectiveRects.length; i++) {
       const rect = effectiveRects[i];
       const { photo, preloaded } = loaded[i];
-      const hasCaption = !!photo.caption;
+      const freeTransform = freeTransformMap.get(photo.id);
+      const captionText = freeTransform?.caption?.text ?? photo.caption ?? "";
+      const hasCaption = Boolean(captionText);
+      const captionFontFamily = freeTransform?.caption?.fontFamily ?? captionFontFamilyVal;
+      const captionFontSize = (freeTransform?.caption?.fontSize ?? (layout?.captionFontSize ?? 14)) * captionScale;
+      const captionColor = freeTransform?.caption?.color ?? "#ffffff";
+      const captionOffsetX = freeTransform?.caption?.offsetX ?? 0;
+      const captionOffsetY = freeTransform?.caption?.offsetY ?? (rect.height / 2 + 0.04);
+      const captionRotation = freeTransform?.caption?.rotation ?? 0;
       const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
 
       const rx = insetX + rect.x * insetW;
@@ -1874,13 +1913,13 @@ export class VideoExporter {
         ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
         ctx.restore();
 
-        if (hasCaption) {
-          ctx.font = `${captionFontSizeVal}px ${captionFontFamilyVal}, -apple-system, sans-serif`;
+        if (!isFreeMode && hasCaption) {
+          ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(
-            photo.caption!,
+            captionText,
             0,
             imgAreaY + imgAreaH + (polPadBottom - polPadTop) / 2,
             imgAreaW
@@ -1953,13 +1992,13 @@ export class VideoExporter {
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
 
-        if (hasCaption) {
-          ctx.font = `${captionFontSizeVal}px ${captionFontFamilyVal}, -apple-system, sans-serif`;
+        if (!isFreeMode && hasCaption) {
+          ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(
-            photo.caption!,
+            captionText,
             0,
             -frameH / 2 + availH + captionH / 2,
             drawW
@@ -1968,6 +2007,27 @@ export class VideoExporter {
       }
 
       ctx.restore();
+
+      if (isFreeMode && hasCaption) {
+        ctx.save();
+        ctx.globalAlpha = animTransform.opacity * transitionOutgoingAlpha;
+        if (transitionOutgoingBlur > 0) {
+          ctx.filter = `blur(${transitionOutgoingBlur * scaleX}px)`;
+        }
+        ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
+        ctx.fillStyle = captionColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = 6 * scaleX;
+        ctx.translate(
+          insetX + (rect.x + rect.width / 2 + captionOffsetX) * insetW + animTransform.translateX * scaleX,
+          insetY + (rect.y + rect.height / 2 + captionOffsetY) * insetH + animTransform.translateY * scaleX,
+        );
+        ctx.rotate(captionRotation * Math.PI / 180);
+        ctx.fillText(captionText, 0, 0, Math.max(frameW, 160 * scaleX));
+        ctx.restore();
+      }
     }
 
     // Restore clip if outgoing wipe was applied
@@ -2060,19 +2120,7 @@ export class VideoExporter {
     const gapPx = layout?.gap ?? 8;
     const borderRadiusPx = layout?.borderRadius ?? 8;
 
-    const orderedPhotos = (() => {
-      if (layout?.order && layout.order.length > 0) {
-        const photoMap = new Map(incomingPhotos.map((p) => [p.id, p]));
-        const ordered = layout.order
-          .map((id) => photoMap.get(id))
-          .filter((p): p is Photo => !!p);
-        for (const p of incomingPhotos) {
-          if (!ordered.find((o) => o.id === p.id)) ordered.push(p);
-        }
-        return ordered;
-      }
-      return incomingPhotos;
-    })();
+    const orderedPhotos = getOrderedPhotosForLayout(incomingPhotos, layout);
 
     const loaded: { photo: Photo; preloaded: PreloadedPhoto }[] = [];
     for (const photo of orderedPhotos) {
@@ -2101,11 +2149,27 @@ export class VideoExporter {
       aspect: preloaded.aspect,
     }));
     const widthPx = insetW / scaleX;
-    const rects = layout?.mode === "manual" && layout.template
-      ? computeTemplateLayout(layoutMetas, containerAspect, layout.template, gapPx, widthPx, layout.customProportions, layout.layoutSeed)
-      : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
+    const freeTransformMap = getFreeTransformMap(layout);
+    const rects = layout?.mode === "free" && layout.freeTransforms?.length
+      ? loaded.reduce<PhotoRect[]>((acc, { photo }) => {
+            const transform = freeTransformMap.get(photo.id);
+            if (transform) {
+              acc.push({
+                x: transform.x,
+                y: transform.y,
+                width: transform.width,
+                height: transform.height,
+                rotation: transform.rotation,
+              });
+            }
+            return acc;
+          }, [])
+      : layout?.mode === "manual" && layout.template
+        ? computeTemplateLayout(layoutMetas, containerAspect, layout.template, gapPx, widthPx, layout.customProportions, layout.layoutSeed)
+        : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
     const count = loaded.length;
-    const isPolaroid = layout?.template === "polaroid";
+    const isFreeMode = layout?.mode === "free";
+    const isPolaroid = !isFreeMode && layout?.template === "polaroid";
     const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
     if (photoStyle === "portal") {
       const portalProgress = computePortalPhaseProgress(transitionProgress);
@@ -2156,7 +2220,15 @@ export class VideoExporter {
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
       const { photo, preloaded } = loaded[i];
-      const hasCaption = !!photo.caption;
+      const freeTransform = freeTransformMap.get(photo.id);
+      const captionText = freeTransform?.caption?.text ?? photo.caption ?? "";
+      const hasCaption = Boolean(captionText);
+      const captionFontFamily = freeTransform?.caption?.fontFamily ?? captionFontFamilyVal;
+      const captionFontSize = (freeTransform?.caption?.fontSize ?? (layout?.captionFontSize ?? 14)) * captionScale;
+      const captionColor = freeTransform?.caption?.color ?? "#ffffff";
+      const captionOffsetX = freeTransform?.caption?.offsetX ?? 0;
+      const captionOffsetY = freeTransform?.caption?.offsetY ?? (rect.height / 2 + 0.04);
+      const captionRotation = freeTransform?.caption?.rotation ?? 0;
       const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
 
       const rx = insetX + rect.x * insetW;
@@ -2231,12 +2303,12 @@ export class VideoExporter {
         ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
         ctx.restore();
 
-        if (hasCaption) {
-          ctx.font = `${captionFontSizeVal}px ${captionFontFamilyVal}, -apple-system, sans-serif`;
+        if (!isFreeMode && hasCaption) {
+          ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(photo.caption!, 0, imgAreaY + imgAreaH + (polPadBottom - polPadTop) / 2, imgAreaW);
+          ctx.fillText(captionText, 0, imgAreaY + imgAreaH + (polPadBottom - polPadTop) / 2, imgAreaW);
         }
       } else {
         const availH = hasCaption ? frameH - captionH : frameH;
@@ -2275,16 +2347,37 @@ export class VideoExporter {
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
 
-        if (hasCaption) {
-          ctx.font = `${captionFontSizeVal}px ${captionFontFamilyVal}, -apple-system, sans-serif`;
+        if (!isFreeMode && hasCaption) {
+          ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(photo.caption!, 0, -frameH / 2 + availH + captionH / 2, drawW);
+          ctx.fillText(captionText, 0, -frameH / 2 + availH + captionH / 2, drawW);
         }
       }
 
       ctx.restore();
+
+      if (isFreeMode && hasCaption) {
+        ctx.save();
+        ctx.globalAlpha = incomingOpacity;
+        if (incomingBlur > 0) {
+          ctx.filter = `blur(${incomingBlur * scaleX}px)`;
+        }
+        ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
+        ctx.fillStyle = captionColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = 6 * scaleX;
+        ctx.translate(
+          insetX + (rect.x + rect.width / 2 + captionOffsetX) * insetW,
+          insetY + (rect.y + rect.height / 2 + captionOffsetY) * insetH,
+        );
+        ctx.rotate(captionRotation * Math.PI / 180);
+        ctx.fillText(captionText, 0, 0, Math.max(frameW, 160 * scaleX));
+        ctx.restore();
+      }
     }
 
     // Restore clip if wipe was applied

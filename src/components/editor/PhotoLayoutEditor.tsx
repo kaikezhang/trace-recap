@@ -25,6 +25,7 @@ import {
   X,
   LayoutGrid,
   LayoutTemplate,
+  Hand,
   Image as ImageIcon,
   Images,
   Layers,
@@ -48,9 +49,11 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS, resolvePhotoStyle } from "@/lib/photoAnimation";
 import { resolveSceneTransition, SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
+import { computeAutoLayout, computeTemplateLayout, computedRectsToFreeTransforms, type PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
-import type { Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
+import FreeCanvas, { type FreeCanvasInitialGesture } from "./FreeCanvas";
+import type { FreePhotoTransform, Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
 
 interface PhotoLayoutEditorProps {
   location: Location;
@@ -68,7 +71,8 @@ type LayoutStyle =
   | "diagonal"
   | "rows"
   | "magazine"
-  | "full";
+  | "full"
+  | "free";
 type SortablePhotoListOrientation = "horizontal" | "vertical";
 type PhotoAnimationOption = PhotoAnimation | "default";
 
@@ -84,6 +88,7 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "rows", label: "Rows", icon: Rows3, template: "rows" },
   { id: "magazine", label: "Magazine", icon: Newspaper, template: "magazine" },
   { id: "full", label: "Full", icon: Maximize, template: "full" },
+  { id: "free", label: "Free", icon: Hand, template: "auto" },
 ];
 
 const RANDOM_LAYOUT_TEMPLATES: LayoutTemplateType[] = ["scatter", "polaroid", "overlap"];
@@ -118,6 +123,85 @@ function getOrderedPhotos(photos: Photo[], order: string[]): Photo[] {
   }
 
   return ordered;
+}
+
+function usePhotoDimensions(photos: Photo[]): Array<Photo & { aspect: number }> {
+  const aspectCacheRef = useRef(new Map<string, number>());
+  const photoKey = photos
+    .map((photo) => `${photo.id}:${photo.url}:${photo.caption ?? ""}:${photo.focalPoint?.x ?? ""}:${photo.focalPoint?.y ?? ""}`)
+    .join("|");
+  const buildMetas = () =>
+    photos.map((photo) => ({
+      ...photo,
+      aspect: aspectCacheRef.current.get(photo.url) ?? 4 / 3,
+    }));
+  const [dims, setDims] = useState<Array<Photo & { aspect: number }>>(() => buildMetas());
+
+  useEffect(() => {
+    setDims(buildMetas());
+    if (photos.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    photos.forEach((photo) => {
+      if (aspectCacheRef.current.has(photo.url)) {
+        return;
+      }
+
+      const image = new Image();
+      image.onload = () => {
+        if (cancelled) return;
+        aspectCacheRef.current.set(photo.url, image.naturalWidth / image.naturalHeight);
+        setDims(buildMetas());
+      };
+      image.onerror = () => {
+        if (cancelled) return;
+        aspectCacheRef.current.set(photo.url, 4 / 3);
+        setDims(buildMetas());
+      };
+      image.src = photo.url;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [photoKey, photos]);
+
+  return dims;
+}
+
+function reconcileFreeTransforms(
+  photos: Photo[],
+  fallbackTransforms: FreePhotoTransform[],
+  currentTransforms?: FreePhotoTransform[],
+): FreePhotoTransform[] {
+  const fallbackMap = new Map(fallbackTransforms.map((transform) => [transform.photoId, transform]));
+  const currentMap = new Map((currentTransforms ?? []).map((transform) => [transform.photoId, transform]));
+
+  return photos.reduce<FreePhotoTransform[]>((acc, photo, index) => {
+      const fallback = fallbackMap.get(photo.id);
+      const current = currentMap.get(photo.id);
+
+      if (!fallback && !current) {
+        return acc;
+      }
+
+      acc.push({
+        ...(fallback ?? current)!,
+        ...(current ?? {}),
+        photoId: photo.id,
+        zIndex: current?.zIndex ?? fallback?.zIndex ?? index,
+        caption: {
+          ...(fallback?.caption ?? {}),
+          ...(current?.caption ?? {}),
+          offsetX: current?.caption?.offsetX ?? fallback?.caption?.offsetX ?? 0,
+          offsetY: current?.caption?.offsetY ?? fallback?.caption?.offsetY ?? ((fallback?.height ?? current?.height ?? 0) / 2 + 0.04),
+          rotation: current?.caption?.rotation ?? fallback?.caption?.rotation ?? 0,
+        },
+      });
+      return acc;
+    }, []);
 }
 
 function PhotoThumbnail({
@@ -321,9 +405,14 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const handleDeletePhoto = useCallback(
     (photoId: string) => {
       removePhoto(location.id, photoId);
-      if (layout.order) {
-        const newOrder = layout.order.filter((id) => id !== photoId);
-        setPhotoLayout(location.id, { ...layout, order: newOrder });
+      if (layout.order || layout.freeTransforms) {
+        const newOrder = layout.order?.filter((id) => id !== photoId);
+        const nextFreeTransforms = layout.freeTransforms?.filter((transform) => transform.photoId !== photoId);
+        setPhotoLayout(location.id, {
+          ...layout,
+          ...(newOrder ? { order: newOrder } : {}),
+          ...(nextFreeTransforms ? { freeTransforms: nextFreeTransforms } : {}),
+        });
       }
     },
     [location.id, layout, removePhoto, setPhotoLayout]
@@ -413,11 +502,15 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     return w / h;
   }, [viewportRatio, panelSize, map]);
 
-  // Compute fitted preview container style
-  const previewContainerStyle = useMemo<React.CSSProperties>(() => {
-    if (viewportRatio === "free" || !panelSize) {
-      return { width: "100%", height: "100%" };
+  const previewPixelSize = useMemo(() => {
+    if (!panelSize) {
+      return { width: 0, height: 0 };
     }
+
+    if (viewportRatio === "free" || !panelSize) {
+      return { width: panelSize.width, height: panelSize.height };
+    }
+
     const { width: pw, height: ph } = panelSize;
     const targetRatio = previewAspect;
     const panelRatio = pw / ph;
@@ -430,12 +523,70 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       h = ph;
       w = ph * targetRatio;
     }
-    return { width: `${w}px`, height: `${h}px` };
-  }, [viewportRatio, panelSize, previewAspect]);
+    return { width: w, height: h };
+  }, [panelSize, previewAspect, viewportRatio]);
+
+  // Compute fitted preview container style
+  const previewContainerStyle = useMemo<React.CSSProperties>(() => {
+    if (viewportRatio === "free") {
+      return { width: "100%", height: "100%" };
+    }
+
+    if (!previewPixelSize.width || !previewPixelSize.height) {
+      return { width: "100%", height: "100%" };
+    }
+
+    return { width: `${previewPixelSize.width}px`, height: `${previewPixelSize.height}px` };
+  }, [previewPixelSize.height, previewPixelSize.width, viewportRatio]);
 
   const orderedPhotos = useMemo(
     () => getOrderedPhotos(location.photos, photoOrder),
     [location.photos, photoOrder]
+  );
+  const orderedPhotoMetas = usePhotoDimensions(orderedPhotos);
+  const layoutMetas = useMemo<LayoutPhotoMeta[]>(
+    () => orderedPhotoMetas.map((photo) => ({ id: photo.id, aspect: photo.aspect })),
+    [orderedPhotoMetas],
+  );
+  const computedRects = useMemo(() => {
+    if (!previewPixelSize.width || !previewPixelSize.height || layoutMetas.length === 0) {
+      return [];
+    }
+
+    const containerAspect = previewPixelSize.width / previewPixelSize.height;
+    const width = previewPixelSize.width;
+    const gapPx = layout.gap ?? 8;
+
+    if (layout.mode === "manual" && layout.template) {
+      return computeTemplateLayout(
+        layoutMetas,
+        containerAspect,
+        layout.template,
+        gapPx,
+        width,
+        layout.customProportions,
+        layout.layoutSeed,
+      );
+    }
+
+    return computeAutoLayout(layoutMetas, containerAspect, gapPx, width);
+  }, [
+    layout.customProportions,
+    layout.gap,
+    layout.layoutSeed,
+    layout.mode,
+    layout.template,
+    layoutMetas,
+    previewPixelSize.height,
+    previewPixelSize.width,
+  ]);
+  const fallbackFreeTransforms = useMemo(
+    () => computedRectsToFreeTransforms(orderedPhotos, computedRects),
+    [computedRects, orderedPhotos],
+  );
+  const effectiveFreeTransforms = useMemo(
+    () => reconcileFreeTransforms(orderedPhotos, fallbackFreeTransforms, layout.freeTransforms),
+    [fallbackFreeTransforms, layout.freeTransforms, orderedPhotos],
   );
   const orderedPhotoIds = useMemo(
     () => orderedPhotos.map((photo) => photo.id),
@@ -445,6 +596,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const [activeDragPhotoId, setActiveDragPhotoId] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [previewOpacity, setPreviewOpacity] = useState(1);
+  const [initialFreeGesture, setInitialFreeGesture] = useState<FreeCanvasInitialGesture | null>(null);
   const exitPreviewTimeoutRef = useRef<number | null>(null);
   const exitPreviewFrameRef = useRef<number | null>(null);
 
@@ -470,6 +622,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   );
 
   const activeStyle: LayoutStyle = (() => {
+    if (layout.mode === "free") return "free";
     if (activeTemplate === "grid") return "grid";
     if (activeTemplate === "hero") return "collage";
     if (activeTemplate === "filmstrip") return "carousel";
@@ -558,20 +711,25 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     (style: LayoutStyle) => {
       const config = LAYOUT_STYLES.find((s) => s.id === style);
       if (!config) return;
+      if (style === "free") {
+        updateLayout({ mode: "free", freeTransforms: effectiveFreeTransforms });
+        return;
+      }
       if (config.template === "auto") {
-        updateLayout({ mode: "auto", template: undefined, customProportions: undefined });
+        updateLayout({ mode: "auto", template: undefined, customProportions: undefined, freeTransforms: undefined });
       } else {
         updateLayout({
           mode: "manual",
           template: config.template,
           customProportions: undefined,
+          freeTransforms: undefined,
           layoutSeed: RANDOM_LAYOUT_TEMPLATES.includes(config.template)
             ? (layout.layoutSeed ?? Math.random())
             : layout.layoutSeed,
         });
       }
     },
-    [layout.layoutSeed, updateLayout]
+    [effectiveFreeTransforms, layout.layoutSeed, updateLayout]
   );
 
   const refreshRandomLayout = useCallback(() => {
@@ -632,6 +790,29 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     [updateLayout]
   );
 
+  const handleFreeTransformsChange = useCallback(
+    (nextTransforms: FreePhotoTransform[]) => {
+      updateLayout({
+        mode: "free",
+        freeTransforms: reconcileFreeTransforms(orderedPhotos, fallbackFreeTransforms, nextTransforms),
+      });
+    },
+    [fallbackFreeTransforms, orderedPhotos, updateLayout],
+  );
+
+  const handleFreeGestureStart = useCallback(
+    (gesture: FreeCanvasInitialGesture) => {
+      setInitialFreeGesture(gesture);
+      if (layout.mode !== "free") {
+        updateLayout({
+          mode: "free",
+          freeTransforms: effectiveFreeTransforms,
+        });
+      }
+    },
+    [effectiveFreeTransforms, layout.mode, updateLayout],
+  );
+
   const handleGlobalSceneTransitionSelect = useCallback(
     (transition: SceneTransition) => {
       setGlobalSceneTransition(transition);
@@ -676,19 +857,95 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const activeDragPhotoIndex = activeDragPhoto
     ? orderedPhotos.findIndex((photo) => photo.id === activeDragPhoto.id)
     : 0;
+  const borderRadius = layout.borderRadius ?? 8;
 
   const layoutPreviewNode = (
-    <PhotoOverlay
-      key={previewKey}
-      photos={orderedPhotos}
-      visible={true}
-      photoLayout={layout}
-      opacity={previewOpacity}
-      containerMode="parent"
-      originCoordinates={location.coordinates}
-      portalAccentColor={portalAccentColor}
-      portalProgressOverride={1}
-    />
+    layout.mode === "free" ? (
+      <FreeCanvas
+        photos={orderedPhotos}
+        transforms={effectiveFreeTransforms}
+        containerSize={{ w: previewPixelSize.width, h: previewPixelSize.height }}
+        mapSnapshot={mapSnapshot}
+        borderRadius={borderRadius}
+        defaultCaptionFontFamily={layout.captionFontFamily ?? "system-ui"}
+        defaultCaptionFontSize={layout.captionFontSize ?? 14}
+        onTransformsChange={handleFreeTransformsChange}
+        initialGesture={initialFreeGesture}
+        onInitialGestureHandled={() => setInitialFreeGesture(null)}
+      />
+    ) : (
+      <>
+        <PhotoOverlay
+          key={previewKey}
+          photos={orderedPhotos}
+          visible={true}
+          photoLayout={layout}
+          opacity={previewOpacity}
+          containerMode="parent"
+          originCoordinates={location.coordinates}
+          portalAccentColor={portalAccentColor}
+          portalProgressOverride={1}
+        />
+        <div className="absolute inset-0 z-30">
+          {effectiveFreeTransforms.map((transform) => {
+            const photo = orderedPhotos.find((item) => item.id === transform.photoId);
+            if (!photo) {
+              return null;
+            }
+
+            const captionText = transform.caption?.text ?? photo.caption ?? "";
+            const captionCenterX = transform.x + transform.width / 2 + (transform.caption?.offsetX ?? 0);
+            const captionCenterY = transform.y + transform.height / 2 + (transform.caption?.offsetY ?? transform.height / 2 + 0.04);
+
+            return (
+              <div key={`free-hit-${photo.id}`} className="absolute inset-0">
+                <button
+                  type="button"
+                  className="absolute touch-none cursor-grab rounded-[inherit] bg-transparent active:cursor-grabbing"
+                  style={{
+                    left: `${transform.x * 100}%`,
+                    top: `${transform.y * 100}%`,
+                    width: `${transform.width * 100}%`,
+                    height: `${transform.height * 100}%`,
+                    transform: `rotate(${transform.rotation}deg)`,
+                  }}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    handleFreeGestureStart({
+                      target: "photo",
+                      photoId: photo.id,
+                      clientX: event.clientX,
+                      clientY: event.clientY,
+                    });
+                  }}
+                  aria-label={`Drag ${photo.caption || "photo"} into free mode`}
+                />
+                {captionText ? (
+                  <button
+                    type="button"
+                    className="absolute h-10 min-w-24 -translate-x-1/2 -translate-y-1/2 bg-transparent"
+                    style={{
+                      left: `${captionCenterX * 100}%`,
+                      top: `${captionCenterY * 100}%`,
+                    }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      handleFreeGestureStart({
+                        target: "caption",
+                        photoId: photo.id,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
+                    }}
+                    aria-label={`Move caption for ${photo.caption || "photo"} into free mode`}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </>
+    )
   );
 
   // Portal to body to escape overflow-hidden ancestors (MapStage container)

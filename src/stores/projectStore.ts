@@ -70,6 +70,101 @@ type SerializedLocation = PersistedProjectData["locations"][number];
 const DEFAULT_ROUTE_NAME = "My Trip";
 const DEFAULT_MAP_STYLE: MapStyle = "light";
 const PROJECT_SAVE_DEBOUNCE_MS = 2000; // 2 seconds — prevents heavy serialization during rapid slider drags
+const ALLOWED_CAPTION_FONTS = ["system-ui", "serif", "monospace", "cursive"] as const;
+
+function serializeFreeTransforms(
+  photoLayout: PhotoLayout | undefined,
+  photos: Location["photos"],
+): PhotoLayout["freeTransforms"] | undefined {
+  if (!photoLayout?.freeTransforms) {
+    return undefined;
+  }
+
+  return photoLayout.freeTransforms.reduce<NonNullable<PhotoLayout["freeTransforms"]>>((acc, transform, index) => {
+      const photoIndex = photos.findIndex((photo) => photo.id === transform.photoId);
+      if (photoIndex < 0) {
+        return acc;
+      }
+
+      acc.push({
+        ...transform,
+        photoId: String(photoIndex),
+        zIndex: Number.isFinite(transform.zIndex) ? transform.zIndex : index,
+      });
+      return acc;
+    }, []);
+}
+
+function deserializeFreeTransforms(
+  rawLayout: Record<string, unknown>,
+  photos: Location["photos"],
+): PhotoLayout["freeTransforms"] | undefined {
+  if (!Array.isArray(rawLayout.freeTransforms)) {
+    return undefined;
+  }
+
+  return rawLayout.freeTransforms.reduce<NonNullable<PhotoLayout["freeTransforms"]>>((acc, value, index) => {
+      if (!value || typeof value !== "object") {
+        return acc;
+      }
+
+      const transform = value as Record<string, unknown>;
+      const photoIndex = Number.parseInt(String(transform.photoId), 10);
+      const photoId = Number.isInteger(photoIndex) && photoIndex >= 0 && photoIndex < photos.length
+        ? photos[photoIndex]?.id
+        : null;
+
+      if (
+        !photoId ||
+        typeof transform.x !== "number" ||
+        typeof transform.y !== "number" ||
+        typeof transform.width !== "number" ||
+        typeof transform.height !== "number"
+      ) {
+        return acc;
+      }
+
+      const rawCaption = transform.caption;
+      const caption = rawCaption && typeof rawCaption === "object"
+        ? {
+            offsetX: typeof (rawCaption as Record<string, unknown>).offsetX === "number"
+              ? (rawCaption as Record<string, unknown>).offsetX as number
+              : 0,
+            offsetY: typeof (rawCaption as Record<string, unknown>).offsetY === "number"
+              ? (rawCaption as Record<string, unknown>).offsetY as number
+              : 0,
+            text: typeof (rawCaption as Record<string, unknown>).text === "string"
+              ? (rawCaption as Record<string, unknown>).text as string
+              : undefined,
+            fontFamily: typeof (rawCaption as Record<string, unknown>).fontFamily === "string" &&
+              ALLOWED_CAPTION_FONTS.includes((rawCaption as Record<string, unknown>).fontFamily as typeof ALLOWED_CAPTION_FONTS[number])
+              ? (rawCaption as Record<string, unknown>).fontFamily as typeof ALLOWED_CAPTION_FONTS[number]
+              : undefined,
+            fontSize: typeof (rawCaption as Record<string, unknown>).fontSize === "number"
+              ? Math.max(8, Math.min(72, (rawCaption as Record<string, unknown>).fontSize as number))
+              : undefined,
+            color: typeof (rawCaption as Record<string, unknown>).color === "string"
+              ? (rawCaption as Record<string, unknown>).color as string
+              : undefined,
+            rotation: typeof (rawCaption as Record<string, unknown>).rotation === "number"
+              ? (rawCaption as Record<string, unknown>).rotation as number
+              : undefined,
+          }
+        : undefined;
+
+      acc.push({
+        photoId,
+        x: transform.x,
+        y: transform.y,
+        width: transform.width,
+        height: transform.height,
+        rotation: typeof transform.rotation === "number" ? transform.rotation : 0,
+        zIndex: typeof transform.zIndex === "number" ? transform.zIndex : index,
+        ...(caption ? { caption } : {}),
+      });
+      return acc;
+    }, []);
+}
 
 interface ProjectState {
   // Multi-project state
@@ -424,6 +519,7 @@ async function serializeLocation(loc: Location): Promise<SerializedLocation> {
       ? {
           photoLayout: {
             ...loc.photoLayout,
+            freeTransforms: serializeFreeTransforms(loc.photoLayout, loc.photos),
             order: loc.photoLayout.order
               ? loc.photoLayout.order
                   .map((photoId) =>
@@ -630,11 +726,11 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
       };
     });
 
-    const ALLOWED_CAPTION_FONTS = ["system-ui", "serif", "monospace", "cursive"];
     const rawLayout = isObject(loc.photoLayout) ? loc.photoLayout : undefined;
     const photoLayout = rawLayout
       ? {
           ...rawLayout,
+          freeTransforms: deserializeFreeTransforms(rawLayout, photos),
           order: Array.isArray(rawLayout.order)
             ? rawLayout.order
                 .map((indexValue) => {
@@ -651,8 +747,8 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
             ? Math.max(8, Math.min(72, rawLayout.captionFontSize))
             : undefined,
           captionFontFamily: typeof rawLayout.captionFontFamily === "string" &&
-            ALLOWED_CAPTION_FONTS.includes(rawLayout.captionFontFamily)
-            ? rawLayout.captionFontFamily
+            ALLOWED_CAPTION_FONTS.includes(rawLayout.captionFontFamily as typeof ALLOWED_CAPTION_FONTS[number])
+            ? rawLayout.captionFontFamily as typeof ALLOWED_CAPTION_FONTS[number]
             : undefined,
         }
       : undefined;
@@ -1187,6 +1283,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             ? {
                 photoLayout: {
                   ...loc.photoLayout,
+                  freeTransforms: serializeFreeTransforms(loc.photoLayout, loc.photos),
                   // Convert order from photo IDs to indices for portable serialization
                   order: loc.photoLayout.order
                     ? loc.photoLayout.order

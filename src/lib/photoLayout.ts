@@ -1,4 +1,4 @@
-import type { LayoutTemplate } from "@/types";
+import type { FreePhotoTransform, LayoutTemplate } from "@/types";
 
 export interface PhotoRect {
   /** All values as fractions of container (0-1) */
@@ -779,6 +779,34 @@ export function computeTemplateLayout(
     default:
       return computeAutoLayout(photos, containerAspect, gapPx, widthPx);
   }
+}
+
+export function computedRectsToFreeTransforms(
+  photos: Array<{ id: string }>,
+  rects: PhotoRect[],
+): FreePhotoTransform[] {
+  return photos.reduce<FreePhotoTransform[]>((acc, photo, index) => {
+      const rect = rects[index];
+      if (!rect) {
+        return acc;
+      }
+
+      acc.push({
+        photoId: photo.id,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        rotation: rect.rotation ?? 0,
+        zIndex: index,
+        caption: {
+          offsetX: 0,
+          offsetY: rect.height / 2 + 0.04,
+          rotation: 0,
+        },
+      });
+      return acc;
+    }, []);
 }
 
 /** Grid: equal-sized cells filling rows/columns, with optional custom proportions */
