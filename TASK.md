@@ -1,62 +1,46 @@
-# ⚠️ DO NOT MERGE ANY PR. Create PR and STOP.
+# TASK — Free Mode Multi-Select & Caption Toolbar Improvements
 
-# TASK: Free Mode UX Round 2 — Layout Sizing, Toolbar Overflow, Font Library
+⚠️ DO NOT MERGE. Create a PR targeting `main` and stop.
 
-## Issues to Fix
+## Context
+Free Mode (FreeCanvas) lets users drag photos and captions freely. Currently only single-select is supported. We need multi-select + batch operations + caption toolbar overflow fix.
 
-### 1. Expanded mode photos are tiny — preview doesn't fill available space
-**Files:** `src/components/editor/PhotoLayoutEditor.tsx`
-**Problem:** In expanded mode (95vw×95vh), the photo preview area is very small relative to the available space. The `previewContainerStyle` uses the viewport ratio to constrain the preview, but when expanded the constraint is too aggressive.
-**Fix:** When `expanded` is true, the preview container should grow to fill the available space. The FreeCanvas or PhotoOverlay inside should scale to use the full area. The preview container style calculation needs to account for the expanded state — use the full panel dimensions, not just the viewport-ratio-constrained size.
-- In expanded mode, set `previewContainerStyle` to `{ width: "100%", height: "100%" }` so the canvas fills the entire available area
-- The FreeCanvas should fill its parent container entirely
+## Requirements
 
-### 2. Caption style toolbar gets cut off / clips outside container
-**Files:** `src/components/editor/FreeCanvas.tsx`
-**Problem:** The caption editing toolbar (font dropdown, size slider, color presets, fill presets) pops up above the selected caption. When the caption is near the top of the container, the toolbar gets clipped by `overflow: hidden` on the parent.
-**Fix:**
-- Change the FreeCanvas container from `overflow-hidden` to `overflow-visible`
-- OR reposition the toolbar: if the caption is in the top half of the container, show the toolbar BELOW the caption instead of above
-- The toolbar should never be clipped. Test with captions at all four edges.
+### 1. Multi-Select in FreeCanvas
+- **Shift+Click** or **Ctrl/Cmd+Click** on photos/captions to add/remove from selection
+- **Drag-select (marquee/lasso)**: click empty area + drag → draw selection rectangle → all photos/captions inside get selected
+- Visual indicator: all selected items get selection ring (not just one)
+- **Multi-drag**: dragging any selected item moves ALL selected items together (preserving relative positions)
+- Pressing Escape or clicking empty area clears multi-selection
 
-### 3. More fonts needed — especially Chinese fonts — with preview in dropdown
-**Files:** `src/components/editor/FreeCanvas.tsx`, `src/components/editor/PhotoLayoutEditor.tsx`
-**Problem:** Only 4 generic fonts (System UI, Serif, Monospace, Cursive). Need more fonts, especially Chinese-friendly ones. Font dropdown should show each option rendered in its own font for preview.
-**Fix:**
-- Expand the font list to include Google Fonts that support Chinese. Use `@import` or `<link>` to load them. Add to the app's global CSS or load dynamically.
-- New font list (keep existing + add):
-  - `system-ui` — System UI
-  - `"Noto Sans SC", sans-serif` — Noto Sans SC (思源黑体)
-  - `"Noto Serif SC", serif` — Noto Serif SC (思源宋体)
-  - `"ZCOOL KuaiLe", sans-serif` — ZCOOL KuaiLe (站酷快乐体)
-  - `"ZCOOL XiaoWei", serif` — ZCOOL XiaoWei (站酷小薇体)
-  - `"Ma Shan Zheng", cursive` — Ma Shan Zheng (马善政楷体)
-  - `"Liu Jian Mao Cao", cursive` — Liu Jian Mao Cao (流坚毛草)
-  - `serif` — Serif
-  - `monospace` — Monospace
-  - `cursive` — Cursive
-- Load these Google Fonts by adding a `<link>` tag in `src/app/layout.tsx`:
-  ```html
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=ZCOOL+KuaiLe&family=ZCOOL+XiaoWei&family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&display=swap" rel="stylesheet">
-  ```
-- In the font `<select>` dropdown in FreeCanvas, render each `<option>` with `style={{ fontFamily: value }}` so users can preview the font
-- Also update the font list in `PhotoLayoutEditor.tsx` (the global Caption Style section in the left panel) to use the same expanded font list
-- Extract the font list into a shared constant in `src/lib/constants.ts`
+### 2. Caption Batch Style Apply
+- When multiple captions are selected, the caption toolbar should appear and apply styles to ALL selected captions simultaneously
+- Font family, font size, text color, background color — all should batch-apply
+- Toolbar should show current values from the first selected caption (or "mixed" indicator if values differ)
 
-### 4. Font size slider in toolbar needs a numeric display
-**Files:** `src/components/editor/FreeCanvas.tsx`
-**Problem:** The font size slider has no numeric indicator showing the current value.
-**Fix:** Add a small `<span>` after the slider showing the current font size value (e.g. "24px"), similar to the existing caption font size control in PhotoLayoutEditor's left panel.
+### 3. Caption Toolbar Overflow Fix
+The caption style toolbar (`FreeCanvas.tsx`, the floating div with font/color/fill controls) can overflow the container when caption is near edges. Fix:
+- Detect when toolbar would overflow the container bounds (top/bottom/left/right)
+- Reposition toolbar to stay within bounds (flip above↔below caption, or shift horizontally)
+- The toolbar positioning logic is in `getCaptionToolbarPosition()` — update it to clamp within container
+- Currently toolbar uses `transform: translateX(-50%)` which doesn't account for left/right edges
 
-## File Checklist
-- [ ] `src/components/editor/FreeCanvas.tsx` — Fix #2, #3, #4
-- [ ] `src/components/editor/PhotoLayoutEditor.tsx` — Fix #1, #3
-- [ ] `src/app/layout.tsx` — Add Google Fonts `<link>` tag
-- [ ] `src/lib/constants.ts` — Shared font list constant
+## Key Files
+- `src/components/editor/FreeCanvas.tsx` — main file, all changes go here
+- Selection state: `selection` state (currently `{ kind: "photo" | "caption", photoId: string } | null`)
+  - Change to support array: `{ kind: "photo" | "caption", photoIds: string[] } | null` or similar
+- Drag logic: `beginPhotoDrag`, `beginCaptionDrag`, pointer move handler
+- Toolbar: `getCaptionToolbarPosition()` function + the toolbar JSX near bottom of file
 
-## Validation
+## Constraints
+- Keep all coordinates as 0-1 ratio values (relative to container)
+- Don't break single-select behavior — it should still work naturally
+- Don't change PhotoOverlay.tsx or any other file unless absolutely necessary
+- Keep existing keyboard shortcuts working (Enter to commit caption edit, Escape to deselect)
+- TypeScript strict mode, no `any` types
+- Run `npx tsc --noEmit` to verify no type errors before committing
+
+## Testing
 - `npx tsc --noEmit` must pass
 - `npm run build` must pass
-
-## Branch
-`fix/free-mode-ux-r2`
