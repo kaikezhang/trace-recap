@@ -1163,7 +1163,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           exit={{ scale: 0.9, opacity: 0 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
           className={`hidden md:flex flex-col bg-white rounded-2xl shadow-2xl w-full mx-4 overflow-hidden transition-all duration-300 ${
-            expanded ? "max-w-[95vw] max-h-[95vh]" : "max-w-4xl max-h-[85vh]"
+            expanded ? "max-w-[95vw] h-[95vh]" : "max-w-4xl max-h-[85vh]"
           }`}
           onClick={(e) => e.stopPropagation()}
         >
