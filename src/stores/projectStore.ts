@@ -27,6 +27,11 @@ import {
   migrateFromLocalStorage,
   putProjectData,
 } from "@/lib/storage";
+import {
+  compressDataUrl,
+  getImageDimensions,
+  isImageOversized,
+} from "@/lib/imageUtils";
 
 export interface ImportRouteData {
   name: string;
@@ -153,6 +158,7 @@ let persistSuspended = false;
 let lastSavedProjectJson = "";
 let saveCommitChain: Promise<void> = Promise.resolve();
 const projectSaveVersions = new Map<string, number>();
+let activeLoadCompressionJob = 0;
 
 const VALID_TRANSPORT_MODES: TransportMode[] = [
   "flight",
@@ -1075,12 +1081,99 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   loadRouteData: async (data) => {
+    const loadCompressionJob = ++activeLoadCompressionJob;
+
+    const compressLoadedPhotos = async () => {
+      if (!isBrowser()) return;
+
+      const projectId = get().currentProjectId;
+      if (!projectId) return;
+
+      const importedLocations = get().locations;
+
+      for (const location of importedLocations) {
+        for (const photo of location.photos) {
+          try {
+            if (!photo.url.startsWith("data:")) continue;
+            if (loadCompressionJob !== activeLoadCompressionJob) return;
+
+            const dimensions = await getImageDimensions(photo.url);
+            if (!dimensions || !isImageOversized(dimensions)) continue;
+
+            const compressedBlob = await compressDataUrl(photo.url);
+            const compressedUrl = URL.createObjectURL(compressedBlob);
+
+            if (loadCompressionJob !== activeLoadCompressionJob) {
+              URL.revokeObjectURL(compressedUrl);
+              return;
+            }
+
+            const currentState = get();
+            const currentLocation = currentState.locations.find(
+              (entry) => entry.id === location.id,
+            );
+            const currentPhoto = currentLocation?.photos.find(
+              (entry) => entry.id === photo.id,
+            );
+
+            if (
+              currentState.currentProjectId !== projectId ||
+              !currentPhoto ||
+              currentPhoto.url !== photo.url
+            ) {
+              URL.revokeObjectURL(compressedUrl);
+              continue;
+            }
+
+            markLocationDirty(location.id);
+
+            let didUpdate = false;
+            set((state) => {
+              const locations = state.locations.map((entry) => {
+                if (entry.id !== location.id) {
+                  return entry;
+                }
+
+                const photos = entry.photos.map((item) => {
+                  if (item.id === photo.id && item.url === photo.url) {
+                    didUpdate = true;
+                    return { ...item, url: compressedUrl };
+                  }
+                  return item;
+                });
+
+                return didUpdate ? { ...entry, photos } : entry;
+              });
+
+              return didUpdate ? { locations } : state;
+            });
+
+            if (!didUpdate) {
+              URL.revokeObjectURL(compressedUrl);
+            }
+
+            await new Promise<void>((resolve) => {
+              window.setTimeout(resolve, 0);
+            });
+          } catch (error) {
+            console.error(
+              `Failed to compress imported photo ${photo.id}.`,
+              error,
+            );
+          }
+        }
+      }
+    };
+
     try {
       // Ensure there's a project to save into
       if (!get().currentProjectId) {
         await get().createNewProject(data.name);
       }
       get().importRoute(data);
+      void compressLoadedPhotos().catch((error) => {
+        console.error("Failed to compress loaded project photos.", error);
+      });
       await get().regenerateSegmentGeometries();
     } catch (error) {
       console.error("Failed to load route data.", error);
