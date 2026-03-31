@@ -43,6 +43,8 @@ import {
   Film,
   Aperture,
   Type,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
@@ -596,6 +598,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const [activeDragPhotoId, setActiveDragPhotoId] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [previewOpacity, setPreviewOpacity] = useState(1);
+  const [expanded, setExpanded] = useState(false);
   const [initialFreeGesture, setInitialFreeGesture] = useState<FreeCanvasInitialGesture | null>(null);
   const exitPreviewTimeoutRef = useRef<number | null>(null);
   const exitPreviewFrameRef = useRef<number | null>(null);
@@ -1150,7 +1153,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="hidden md:flex flex-col bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 overflow-hidden max-h-[85vh]"
+          className={`hidden md:flex flex-col bg-white rounded-2xl shadow-2xl w-full mx-4 overflow-hidden transition-all duration-300 ${
+            expanded ? "max-w-[95vw] max-h-[95vh]" : "max-w-4xl max-h-[85vh]"
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -1161,15 +1166,24 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                 {location.photos.length} photo{location.photos.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <button onClick={onClose} aria-label="Close photo layout editor" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <X className="h-5 w-5 text-gray-500" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                aria-label={expanded ? "Collapse editor" : "Expand editor"}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                {expanded ? <Minimize2 className="h-5 w-5 text-gray-500" /> : <Maximize2 className="h-5 w-5 text-gray-500" />}
+              </button>
+              <button onClick={onClose} aria-label="Close photo layout editor" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
           </div>
 
           {/* 3-column body */}
           <div className="flex flex-1 min-h-0">
             {/* LEFT — Layout style selector */}
-            <div className="w-72 min-h-0 overflow-y-auto border-r border-gray-100 p-4 space-y-2">
+            <div className={`w-72 min-h-0 overflow-y-auto border-r border-gray-100 p-4 space-y-2 transition-all duration-300 ${expanded ? "hidden" : ""}`}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Layout</p>
                 {isRandomLayoutActive ? (
@@ -1314,7 +1328,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             </div>
 
             {/* RIGHT — Photo thumbnail list */}
-            <div className="w-48 border-l border-gray-100 flex flex-col">
+            <div className={`w-48 border-l border-gray-100 flex flex-col transition-all duration-300 ${expanded ? "hidden" : ""}`}>
               <div className="p-4 pb-2">
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Photos</p>
               </div>
