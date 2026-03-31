@@ -385,8 +385,9 @@ export default function FreeCanvas({
     () => new Map(transforms.map((transform) => [transform.photoId, transform])),
     [transforms],
   );
-  const selectedPhotoIds = selection?.photoIds ?? [];
-  const selectedCaptionIds = selection?.captionIds ?? [];
+  const emptyIds = useMemo<string[]>(() => [], []);
+  const selectedPhotoIds = selection?.photoIds ?? emptyIds;
+  const selectedCaptionIds = selection?.captionIds ?? emptyIds;
   const selectedPhotoIdSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds]);
   const selectedCaptionIdSet = useMemo(() => new Set(selectedCaptionIds), [selectedCaptionIds]);
   const singleSelectedPhotoId =
