@@ -666,7 +666,34 @@ export class VideoExporter {
     const enterDurationFrames = enterDurationSec * fps;
 
     // Exit: derive from photoOpacity (1 = fully visible, 0 = fully gone)
-    const exitProgress = 1 - (progress.photoOpacity ?? 1); // 0 = no exit, 1 = fully exited
+    // Export exit: during ARRIVE last 30%, fade out photos
+    // (Preview uses framer-motion on unmount instead, so photoOpacity stays 1)
+    let exitProgress = 0;
+    if (progress.phase === "ARRIVE" && progress.progress > 0) {
+      // Compute phase progress within ARRIVE
+      // Use photoOpacity if it's already fading, otherwise compute from timeline
+      const opacity = progress.photoOpacity ?? 1;
+      if (opacity < 1) {
+        exitProgress = 1 - opacity;
+      } else {
+        // Check if we're in the last 30% of ARRIVE by checking time position
+        // Use a simple heuristic: if groupIndex has photos and we're past 70% of arrive
+        const groups = this.engine.getGroups();
+        const timeline = this.engine.getTimeline();
+        const entry = timeline[progress.groupIndex];
+        if (entry) {
+          const arrivePhase = entry.phases.find((p: { phase: string }) => p.phase === "ARRIVE");
+          if (arrivePhase && arrivePhase.duration > 0) {
+            const arriveProgress = (progress.time - arrivePhase.startTime) / arrivePhase.duration;
+            if (arriveProgress > 0.7) {
+              exitProgress = (arriveProgress - 0.7) / 0.3;
+            }
+          }
+        }
+      }
+    } else if (progress.phase !== "ARRIVE") {
+      exitProgress = 1 - (progress.photoOpacity ?? 1);
+    }
 
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];

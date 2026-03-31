@@ -452,12 +452,9 @@ export class AnimationEngine {
 
     if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
       showPhotos = true;
-      // Last 30% of ARRIVE: start fading out
-      if (phaseProgress > 0.7) {
-        photoOpacity = 1 - ((phaseProgress - 0.7) / 0.3);
-      } else {
-        photoOpacity = 1;
-      }
+      // Keep full opacity during ARRIVE — exit animation handled by PhotoOverlay on unmount
+      // For export: last 30% fades out via photoOpacity (export reads this directly)
+      photoOpacity = 1;
     } else if (groupIndex > 0) {
       const prevGroup = this.groups[groupIndex - 1];
       if (prevGroup && prevGroup.toLoc.photos.length > 0) {
