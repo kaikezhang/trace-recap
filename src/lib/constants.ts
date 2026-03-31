@@ -20,6 +20,7 @@ export const TARGET_DURATION = {
 } as const;
 
 export const FPS = 30;
+export const DEFAULT_CAPTION_BG_COLOR = "rgba(255,255,255,0.74)";
 
 export interface TransportModeConfig {
   id: TransportMode;

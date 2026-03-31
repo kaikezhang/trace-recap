@@ -13,6 +13,7 @@ import {
   BLOOM_ENTER_DURATION_SEC,
   computeBloomFanLayout,
 } from "@/lib/photoAnimation";
+import { DEFAULT_CAPTION_BG_COLOR } from "@/lib/constants";
 import type { PhotoMeta as LayoutPhotoMeta, PhotoRect } from "@/lib/photoLayout";
 import type { FreePhotoTransform, Photo, PhotoLayout, PhotoAnimation, SceneTransition } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -51,6 +52,7 @@ function getCaptionDisplay(
     fontFamily: transform?.caption?.fontFamily ?? defaultFontFamily,
     fontSizePx: (transform?.caption?.fontSize ?? defaultFontSizePx / Math.max(scale, 0.0001)) * scale,
     color: transform?.caption?.color ?? "#ffffff",
+    bgColor: transform?.caption?.bgColor ?? DEFAULT_CAPTION_BG_COLOR,
     offsetX: transform?.caption?.offsetX ?? 0,
     offsetY: transform?.caption?.offsetY ?? ((transform?.height ?? 0) / 2 + 0.04),
     rotation: transform?.caption?.rotation ?? 0,
@@ -707,8 +709,16 @@ export default function PhotoOverlay({
                     </div>
                     {!displayIsFreeMode && hasCaption && (
                       <p
-                        className="text-gray-700 text-center truncate px-1"
-                        style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, fontSize: `${captionFontSizePx}px`, fontFamily: captionFontFamily, flexShrink: 0 }}
+                        className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
+                        style={{
+                          minHeight: `${captionH}px`,
+                          fontSize: `${captionFontSizePx}px`,
+                          fontFamily: captionFontFamily,
+                          flexShrink: 0,
+                          backgroundColor: DEFAULT_CAPTION_BG_COLOR,
+                          color: "#ffffff",
+                          textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                        }}
                       >
                         {photo.caption}
                       </p>
@@ -722,7 +732,7 @@ export default function PhotoOverlay({
                         left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
                         top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
                         transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
-                        backgroundColor: "rgba(255,255,255,0.74)",
+                        backgroundColor: captionDisplay.bgColor,
                         color: captionDisplay.color,
                         fontFamily: captionDisplay.fontFamily,
                         fontSize: `${captionDisplay.fontSizePx}px`,
@@ -834,8 +844,16 @@ export default function PhotoOverlay({
                   </div>
                   {!displayIsFreeMode && hasCaption && (
                     <p
-                      className="text-gray-700 text-center truncate px-1"
-                      style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, fontSize: `${captionFontSizePx}px`, fontFamily: captionFontFamily, flexShrink: 0 }}
+                      className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
+                      style={{
+                        minHeight: `${captionH}px`,
+                        fontSize: `${captionFontSizePx}px`,
+                        fontFamily: captionFontFamily,
+                        flexShrink: 0,
+                        backgroundColor: DEFAULT_CAPTION_BG_COLOR,
+                        color: "#ffffff",
+                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                      }}
                     >
                       {photo.caption}
                     </p>
@@ -849,7 +867,7 @@ export default function PhotoOverlay({
                       left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
                       top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
                       transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
-                      backgroundColor: "rgba(255,255,255,0.74)",
+                      backgroundColor: captionDisplay.bgColor,
                       color: captionDisplay.color,
                       fontFamily: captionDisplay.fontFamily,
                       fontSize: `${captionDisplay.fontSizePx}px`,
@@ -973,8 +991,16 @@ export default function PhotoOverlay({
                     </div>
                     {!incomingIsFreeMode && hasCaption && (
                       <p
-                        className="text-gray-700 text-center truncate px-1"
-                        style={{ height: `${incomingCaptionH}px`, lineHeight: `${incomingCaptionH}px`, fontSize: `${incomingCaptionFontSizePx}px`, fontFamily: incomingCaptionFontFamily, flexShrink: 0 }}
+                        className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
+                        style={{
+                          minHeight: `${incomingCaptionH}px`,
+                          fontSize: `${incomingCaptionFontSizePx}px`,
+                          fontFamily: incomingCaptionFontFamily,
+                          flexShrink: 0,
+                          backgroundColor: DEFAULT_CAPTION_BG_COLOR,
+                          color: "#ffffff",
+                          textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                        }}
                       >
                         {photo.caption}
                       </p>
@@ -988,7 +1014,7 @@ export default function PhotoOverlay({
                         left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
                         top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
                         transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
-                        backgroundColor: "rgba(255,255,255,0.74)",
+                        backgroundColor: captionDisplay.bgColor,
                         color: captionDisplay.color,
                         fontFamily: captionDisplay.fontFamily,
                         fontSize: `${captionDisplay.fontSizePx}px`,

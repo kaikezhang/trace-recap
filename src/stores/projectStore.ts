@@ -146,6 +146,9 @@ function deserializeFreeTransforms(
             color: typeof (rawCaption as Record<string, unknown>).color === "string"
               ? (rawCaption as Record<string, unknown>).color as string
               : undefined,
+            bgColor: typeof (rawCaption as Record<string, unknown>).bgColor === "string"
+              ? (rawCaption as Record<string, unknown>).bgColor as string
+              : undefined,
             rotation: typeof (rawCaption as Record<string, unknown>).rotation === "number"
               ? (rawCaption as Record<string, unknown>).rotation as number
               : undefined,

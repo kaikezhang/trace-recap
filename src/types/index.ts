@@ -123,6 +123,7 @@ export interface FreePhotoTransform {
     fontFamily?: string;
     fontSize?: number;
     color?: string;
+    bgColor?: string;
     rotation?: number;
   };
 }
