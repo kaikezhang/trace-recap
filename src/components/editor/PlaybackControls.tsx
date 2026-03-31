@@ -78,7 +78,7 @@ export default memo(function PlaybackControls({
   ].join(" ");
   const playButtonClassName = [
     "flex items-center justify-center rounded-full bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all duration-300 ease-in-out hover:scale-105 hover:bg-indigo-600 active:scale-95",
-    isPlaying ? "h-8 w-8 md:h-7 md:w-7" : "h-14 w-14 md:h-12 md:w-12",
+    isPlaying ? "h-10 w-10 md:h-7 md:w-7" : "h-14 w-14 md:h-12 md:w-12",
   ].join(" ");
   const sliderContainerClassName = [
     "min-w-0 transition-all duration-300 ease-in-out",
@@ -111,9 +111,9 @@ export default memo(function PlaybackControls({
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? (
-              <Pause className={isPlaying ? "h-3.5 w-3.5" : "h-5 w-5"} />
+              <Pause className="h-3.5 w-3.5" />
             ) : (
-              <Play className={isPlaying ? "ml-px h-3.5 w-3.5" : "ml-0.5 h-5 w-5"} />
+              <Play className="ml-0.5 h-5 w-5" />
             )}
           </button>
           {hintMessage && onHintDismiss && (
