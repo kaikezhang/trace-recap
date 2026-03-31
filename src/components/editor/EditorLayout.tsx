@@ -658,11 +658,6 @@ function EditorContent() {
 
   const handleLocationClick = useCallback(
     (index: number) => {
-      const targetLoc = locations[index];
-      if (targetLoc) {
-        setEditingLocationId(targetLoc.id);
-      }
-
       const engine = engineRef.current;
       if (!engine) return;
       const totalDuration = engine.getTotalDuration();
