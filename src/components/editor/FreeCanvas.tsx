@@ -577,6 +577,9 @@ export default function FreeCanvas({
     [updateTransforms],
   );
 
+  // Scale caption font proportionally to container width (reference: 1000px) to match PhotoOverlay
+  const captionScale = containerSize.w > 0 ? containerSize.w / 1000 : 1;
+
   return (
     <div
       className="absolute inset-0 z-20 overflow-hidden"
@@ -590,6 +593,7 @@ export default function FreeCanvas({
     >
       {orderedItems.map(({ transform, photo }) => {
         const caption = getCaptionTransform(transform);
+        const scaledCaptionFontSize = (caption.fontSize ?? defaultCaptionFontSize) * captionScale;
         const captionText = caption.text ?? photo.caption ?? "";
         const captionShouldRender =
           Boolean(captionText) ||
@@ -715,7 +719,7 @@ export default function FreeCanvas({
                     className="w-[180px] rounded-md border border-indigo-300 bg-white/95 px-2 py-1 text-center text-sm text-gray-900 shadow-lg outline-none focus:border-indigo-500"
                     style={{
                       fontFamily: caption.fontFamily ?? defaultCaptionFontFamily,
-                      fontSize: `${caption.fontSize ?? defaultCaptionFontSize}px`,
+                      fontSize: `${scaledCaptionFontSize}px`,
                     }}
                   />
                 ) : (
@@ -738,7 +742,7 @@ export default function FreeCanvas({
                       backgroundColor: captionSelected ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.74)",
                       color: caption.color ?? "#ffffff",
                       fontFamily: caption.fontFamily ?? defaultCaptionFontFamily,
-                      fontSize: `${caption.fontSize ?? defaultCaptionFontSize}px`,
+                      fontSize: `${scaledCaptionFontSize}px`,
                       textShadow: "0 1px 3px rgba(0,0,0,0.35)",
                     }}
                   >
