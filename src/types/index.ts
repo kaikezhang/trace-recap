@@ -87,6 +87,7 @@ export interface ExportSettings {
   fps: number;
   cityLabelSize?: number; // CSS font size in px (default 18)
   cityLabelLang?: "en" | "zh";
+  cityLabelTopPercent?: number; // City label top position % (default 5)
   viewportRatio?: AspectRatio;
   routeLabelSize?: number; // Route label font size in px (default 14)
   routeLabelBottomPercent?: number; // Route label bottom position % (default 15)

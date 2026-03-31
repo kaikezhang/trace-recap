@@ -38,6 +38,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { resolveSceneTransition, computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from "@/lib/sceneTransition";
 import { computePortalLayout, computePortalPhaseProgress } from "@/lib/portalLayout";
 import { computeTripStats, getSortedTransportModes, TRANSPORT_MODE_EMOJI } from "@/lib/tripStats";
+import { computeCityLabelTopPercent } from "@/lib/cityLabelPosition";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -427,8 +428,10 @@ export class VideoExporter {
   private drawCityLabel(
     ctx: CanvasRenderingContext2D,
     canvasWidth: number,
+    canvasHeight: number,
     scaleX: number,
     label: string,
+    topPercent: number,
     baseFontSize: number = 18,
     accentColor: string = "#6366f1"
   ): void {
@@ -445,7 +448,7 @@ export class VideoExporter {
     const boxWidth = padH + dotRadius * 2 + dotGap + textWidth + padH;
     const boxHeight = padV + 22 * scaleX + padV;
     const x = (canvasWidth - boxWidth) / 2;
-    const y = 24 * scaleX;
+    const y = (canvasHeight * topPercent) / 100;
     const radius = 8 * scaleX;
 
     ctx.save();
@@ -948,6 +951,7 @@ export class VideoExporter {
   private drawCityLabelFromCapture(
     ctx: CanvasRenderingContext2D,
     canvasWidth: number,
+    canvasHeight: number,
     scaleX: number,
     captured: { progress: AnimationEvent | null },
     baseFontSize: number = 18,
@@ -958,9 +962,25 @@ export class VideoExporter {
     const label = lang === "zh" ? (labelZh || labelEn) : labelEn;
     if (label) {
       // Use mood color for the accent dot if available
-      const segIdx = captured.progress?.segmentIndex ?? -1;
+      const progress = captured.progress;
+      const segIdx = progress?.segmentIndex ?? -1;
       const accentColor = this.getSegmentAccentColor(segIdx);
-      this.drawCityLabel(ctx, canvasWidth, scaleX, label, baseFontSize, accentColor);
+      const baseTopPercent = this.settings.cityLabelTopPercent ?? 5;
+      const topPercent = computeCityLabelTopPercent(
+        baseTopPercent,
+        progress?.showPhotos ?? false,
+        progress?.photoOpacity ?? 0,
+      );
+      this.drawCityLabel(
+        ctx,
+        canvasWidth,
+        canvasHeight,
+        scaleX,
+        label,
+        topPercent,
+        baseFontSize,
+        accentColor,
+      );
     }
   }
 
@@ -2434,7 +2454,15 @@ export class VideoExporter {
     offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
     offCtx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height);
     this.drawVehicleIcon(offCtx, scaleX, scaleY);
-    this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
+    this.drawCityLabelFromCapture(
+      offCtx,
+      offscreen.width,
+      offscreen.height,
+      scaleX,
+      captured,
+      this.settings.cityLabelSize ?? 18,
+      this.settings.cityLabelLang ?? "en",
+    );
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
     // Chapter pins: update tracking and draw BEFORE photos (pins behind photos, matching preview z-order)
     this.updateChapterPinState(captured.progress);
