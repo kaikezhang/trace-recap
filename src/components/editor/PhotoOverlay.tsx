@@ -303,11 +303,12 @@ export default function PhotoOverlay({
   const usesPortalLayout = photoStyle === "portal" || incomingPhotoStyleResolved === "portal";
 
   const containerStyle = useMemo(() => {
-    if (containerMode === "parent") {
-      return { width: "100%", height: "100%" };
-    }
     if (usesPortalLayout) {
       return { width: "100%", height: "100%" };
+    }
+    if (containerMode === "parent") {
+      // Match the same inset as viewport mode for WYSIWYG fidelity
+      return { width: "95%", height: "88%" };
     }
     if (viewportRatio === "free") {
       return { width: "95vw", height: "88vh" };

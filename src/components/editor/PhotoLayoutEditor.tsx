@@ -887,20 +887,28 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     : 0;
   const borderRadius = layout.borderRadius ?? 8;
 
+  // FreeCanvas needs the same 95%×88% inset that PhotoOverlay uses
+  const freeCanvasInsetW = Math.round(previewPixelSize.width * 0.95);
+  const freeCanvasInsetH = Math.round(previewPixelSize.height * 0.88);
+
   const layoutPreviewNode = (
     layout.mode === "free" ? (
-      <FreeCanvas
-        photos={orderedPhotos}
-        transforms={effectiveFreeTransforms}
-        containerSize={{ w: previewPixelSize.width, h: previewPixelSize.height }}
-        mapSnapshot={mapSnapshot}
-        borderRadius={borderRadius}
-        defaultCaptionFontFamily={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
-        defaultCaptionFontSize={layout.captionFontSize ?? 14}
-        onTransformsChange={handleFreeTransformsChange}
-        initialGesture={initialFreeGesture}
-        onInitialGestureHandled={() => setInitialFreeGesture(null)}
-      />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="relative" style={{ width: "95%", height: "88%" }}>
+          <FreeCanvas
+            photos={orderedPhotos}
+            transforms={effectiveFreeTransforms}
+            containerSize={{ w: freeCanvasInsetW, h: freeCanvasInsetH }}
+            mapSnapshot={null}
+            borderRadius={borderRadius}
+            defaultCaptionFontFamily={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
+            defaultCaptionFontSize={layout.captionFontSize ?? 14}
+            onTransformsChange={handleFreeTransformsChange}
+            initialGesture={initialFreeGesture}
+            onInitialGestureHandled={() => setInitialFreeGesture(null)}
+          />
+        </div>
+      </div>
     ) : (
       <>
         <PhotoOverlay
