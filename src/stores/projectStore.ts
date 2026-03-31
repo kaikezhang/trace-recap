@@ -28,6 +28,7 @@ import {
   putProjectData,
 } from "@/lib/storage";
 import {
+  compressBlobUrl,
   compressDataUrl,
   getImageDimensions,
   isImageOversized,
@@ -1124,13 +1125,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       for (const location of importedLocations) {
         for (const photo of location.photos) {
           try {
-            if (!photo.url.startsWith("data:")) continue;
+            const isData = photo.url.startsWith("data:");
+            const isBlob = photo.url.startsWith("blob:");
+            if (!isData && !isBlob) continue;
             if (loadCompressionJob !== activeLoadCompressionJob) return;
 
             const dimensions = await getImageDimensions(photo.url);
             if (!dimensions || !isImageOversized(dimensions)) continue;
 
-            const compressedBlob = await compressDataUrl(photo.url);
+            const compressedBlob = isData
+              ? await compressDataUrl(photo.url)
+              : await compressBlobUrl(photo.url);
             const compressedUrl = URL.createObjectURL(compressedBlob);
 
             if (loadCompressionJob !== activeLoadCompressionJob) {
@@ -1178,6 +1183,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
               return didUpdate ? { locations } : state;
             });
 
+            if (didUpdate && isBlob) {
+              // Revoke the old oversized blob URL to free memory
+              URL.revokeObjectURL(photo.url);
+            }
             if (!didUpdate) {
               URL.revokeObjectURL(compressedUrl);
             }

@@ -143,3 +143,19 @@ export async function compressDataUrl(dataUrl: string): Promise<Blob> {
     return fallback;
   }
 }
+
+export async function compressBlobUrl(blobUrl: string): Promise<Blob> {
+  if (!hasBrowserImageApis()) {
+    const resp = await fetch(blobUrl);
+    return resp.blob();
+  }
+
+  const fallbackResp = await fetch(blobUrl);
+  const fallback = await fallbackResp.blob();
+
+  try {
+    return await drawCompressedImage(blobUrl, fallback);
+  } catch {
+    return fallback;
+  }
+}
