@@ -1,125 +1,112 @@
-# TASK.md — Geo-Anchored Photo Bloom
+# TASK.md — Breadcrumb Thumbnail Trail
 
 ⚠️ DO NOT MERGE. Create PR and stop.
 
 ## Overview
 
-Add a "Photo Bloom" photo style where photos physically emerge from the city's map coordinate, like postcards unfolding from the pin. Instead of appearing as a floating overlay disconnected from geography, photos bloom outward from their location on the map, and collapse back when leaving.
-
-This is the #1 ranked feature from the product brainstorm — the most direct fix for the photo-map disconnect.
+After leaving a stop, its hero photo shrinks into a tiny circular thumbnail "breadcrumb" that remains pinned to the route at the city's coordinate. As the trip progresses, the full route becomes studded with visual memories — a satisfying accumulation that transforms the final map into a dense visual summary.
 
 ## Current Behavior
 
-- Photos render in a fixed overlay positioned relative to the viewport (screen-space)
-- Photos have no spatial relationship to their city's actual map position
-- The overlay feels disconnected from the map — it's "on top of" rather than "from"
+- After leaving a location, nothing visual remains on the map
+- The route line is the only persistent element
 
 ## Desired Behavior
 
-New `PhotoStyle`: `"bloom"` — photos fan out from the city's projected screen position:
+### 1. Breadcrumb Data Model
 
-1. **On ARRIVE**: The city pin position is projected to screen coords via `map.project()`. Photos emerge from that point, fanning outward in a radial bloom pattern (like a flower opening or postcards unfolding).
-2. **During ARRIVE**: Photos settle into their final layout positions but maintain thin tether lines (or subtle connector shadows) back to the origin point, anchoring them visually to the location.
-3. **On exit**: Photos collapse back toward the city pin coordinate, shrinking and converging, as if being folded back into the map.
-4. **Camera movement**: During ARRIVE phase, if the camera drifts slightly, the bloom origin tracks the projected city position so photos stay anchored.
-
-## Implementation
-
-### 1. Types (`src/types/index.ts`)
-
-Extend `PhotoStyle`:
+Track breadcrumbs in the animation store:
 ```ts
-export type PhotoStyle = "classic" | "kenburns" | "bloom";
+interface Breadcrumb {
+  locationId: string;
+  coordinates: [number, number]; // [lng, lat]
+  heroPhotoUrl: string;          // URL of the hero/first photo
+  cityName: string;
+  visitedAtSegment: number;      // segment index when this was visited
+}
+
+breadcrumbs: Breadcrumb[];        // grows as trip progresses
+addBreadcrumb: (b: Breadcrumb) => void;
+clearBreadcrumbs: () => void;
 ```
 
-### 2. Photo Bloom Animation (`src/lib/photoAnimation.ts`)
+### 2. Breadcrumb Rendering (`src/components/editor/BreadcrumbTrail.tsx`) — NEW
 
-Add bloom-specific functions:
-- `getBloomTransform(progress: number, index: number, total: number, originX: number, originY: number, targetRect: {x,y,w,h})` — returns transform from origin point to final layout position
-  - progress 0: all photos stacked at origin (scale ~0.2, position = origin)
-  - progress 0→0.7: photos spread outward to their layout positions with spring-like easing
-  - progress 0.7→1.0: photos settle with a subtle overshoot/bounce
+A component that renders all accumulated breadcrumbs on the map:
 
-Add bloom exit:
-- `getBloomExitTransform(progress: number, index: number, total: number, originX: number, originY: number, currentRect: {x,y,w,h})` — reverse of enter (collapse back to origin)
+**Each breadcrumb:**
+- Circular thumbnail: 28-36px diameter
+- White border (2px)
+- Box shadow for depth
+- Photo uses `object-fit: cover`
+- Positioned at city coordinate via `map.project()`
+- Opacity: 0.6-0.8 (slightly faded, not competing with active content)
 
-### 3. Bloom Origin Tracking
+**Accumulation animation:**
+- When a new breadcrumb appears (leaving a city), it shrinks from the active photo size to breadcrumb size with a smooth spring transition
+- New breadcrumbs start at full opacity and settle to 0.7
 
-**In preview** (`PhotoOverlay.tsx`):
-- Accept `bloomOrigin: {x: number, y: number} | null` prop — the screen-space position of the current city
-- This comes from `map.project(cityLngLat)` computed in `MapCanvas.tsx` or `EditorLayout.tsx`
-- During bloom animation, use this as the source point for photo emergence
-- Update on each animation frame if camera moves (the projected point shifts)
+**Visual hierarchy:**
+- Breadcrumbs render BELOW the route line and active overlays
+- Newest breadcrumb slightly larger/more opaque than older ones (optional)
 
-**In `EditorLayout.tsx` / `MapStage.tsx`**:
-- When `photoStyle === "bloom"`, compute the city's projected screen position from the map ref
-- Pass it down to `PhotoOverlay` as `bloomOrigin`
-- Use `useAnimationStore` to get the current target location's coordinates
-- Recompute on map `move` events during ARRIVE
+### 3. Animation Engine Integration (`src/engine/AnimationEngine.ts`)
 
-### 4. PhotoOverlay Changes (`src/components/editor/PhotoOverlay.tsx`)
+- When transitioning from ARRIVE to next segment's HOVER, emit a breadcrumb event
+- Or: in EditorLayout, detect when `showPhotoOverlay` goes from true→false and add a breadcrumb for that location
 
-When `photoStyle === "bloom"`:
-- **Enter phase**: Each photo starts at `bloomOrigin` (stacked, tiny) and animates to its computed layout position using `getBloomTransform()` with staggered delays
-- **Settled phase**: Photos at final positions. Optionally render thin SVG tether lines from each photo's center back to `bloomOrigin` (2px, semi-transparent, the segment's accent color or white)
-- **Exit phase**: Photos animate back toward `bloomOrigin` using `getBloomExitTransform()`, shrinking and converging
+### 4. Map Position Tracking
 
-Animation timing:
-- Enter bloom: ~1.2s total, each photo staggered by ~0.1s
-- Tether lines: fade in after photos settle, fade out before exit starts
-- Exit collapse: ~0.8s total
+- Breadcrumbs must update position when camera moves (they're geo-anchored)
+- Use `map.project(coordinates)` to convert lng/lat to screen pixels
+- Update on map `move` events
 
-### 5. VideoExporter Changes (`src/engine/VideoExporter.ts`)
+### 5. Video Export (`src/engine/VideoExporter.ts`)
 
-For bloom style during export:
-- Compute `bloomOrigin` by projecting the city's LngLat with `this.map.project()`
-- During enter: interpolate each photo from origin to layout position
-- During settled: draw photos at layout positions + optional tether lines (canvas `lineTo`)
-- During exit: interpolate photos back to origin
-- Use same math functions as preview (`getBloomTransform` / `getBloomExitTransform`)
+- Draw breadcrumbs at projected coordinates on the canvas
+- Circular clip mask for each thumbnail
+- White border stroke
+- Draw BEFORE route lines and active photos (behind everything)
+- Only draw breadcrumbs for locations that have been "visited" (segment index ≤ current)
 
-### 6. UI — Photo Style Picker
+### 6. Settings (`src/stores/uiStore.ts`)
 
-In `PhotoLayoutEditor.tsx`, add "Bloom" option to the photo style selector alongside "Classic" and "Ken Burns":
-- Icon: a radial/burst icon (🌸 or a custom flower/bloom SVG)
-- Label: "Bloom"
-- Tooltip: "Photos emerge from the city location"
+```ts
+breadcrumbsEnabled: boolean; // default: true
+```
 
-### 7. Tether Lines (Optional but recommended)
-
-Thin connector lines from each photo back to the bloom origin:
-- **Preview**: Use an SVG overlay or CSS pseudo-elements
-- **Export**: Use canvas `ctx.beginPath()` + `ctx.lineTo()` + `ctx.stroke()`
-- Style: 1-2px wide, semi-transparent white or the segment's mood color, with a slight curve (quadratic bezier)
-- Fade: 0 opacity during enter animation, fade to ~0.3 after settled, fade to 0 during exit
+Persisted to localStorage. Toggle in global settings area.
 
 ## Visual Design
 
-- Photos should feel like they're physically connected to the map, not floating
-- The bloom should have organic spring-like motion (overshoot on spread, smooth collapse on exit)
-- Stagger gives a "popcorn" reveal — photos don't all appear at once
-- Tether lines are subtle but important for maintaining the geo-anchor feeling
-- The overall effect should be: "these memories live HERE on the map"
+```
+Map with route:
+  ○ ○ ○ ←── tiny photo circles along the route
+  A ──── B ──── C ──── D (current)
+  ○       ○       ○
+  ^visited ^visited ^visited
+```
+
+Each ○ is a 32px circular photo thumbnail with white border, pinned to that city's coordinate.
 
 ## Files to create/modify
 
-- `src/types/index.ts` — extend `PhotoStyle` 
-- `src/lib/photoAnimation.ts` — add bloom transform functions
-- `src/components/editor/PhotoOverlay.tsx` — bloom enter/exit/tether rendering
-- `src/components/editor/EditorLayout.tsx` — compute & pass bloom origin
-- `src/components/editor/MapStage.tsx` — pass bloom origin through
-- `src/engine/VideoExporter.ts` — bloom compositing in export
-- `src/components/editor/PhotoLayoutEditor.tsx` — add bloom to style picker
+- `src/components/editor/BreadcrumbTrail.tsx` — NEW: breadcrumb rendering component
+- `src/stores/animationStore.ts` — breadcrumb state + actions
+- `src/components/editor/EditorLayout.tsx` — add breadcrumb on location exit
+- `src/components/editor/MapStage.tsx` — render BreadcrumbTrail component
+- `src/engine/VideoExporter.ts` — draw breadcrumbs in export
+- `src/stores/uiStore.ts` — breadcrumbsEnabled toggle
 
 ## Verification
 
 - `npx tsc --noEmit` and `npm run build` must pass
-- Bloom style selectable in UI alongside Classic and Ken Burns
-- Photos visually emerge from city location (not from screen center)
-- Photos collapse back to city on exit
-- Export matches preview behavior
-- Classic and Ken Burns styles unaffected (no regression)
-- Tether lines visible when photos are settled
+- Breadcrumbs appear as route progresses past each city
+- Breadcrumbs are geo-anchored and move with camera
+- Breadcrumbs accumulate (don't disappear)
+- Export shows breadcrumbs matching preview
+- Toggle enables/disables the feature
+- Reset/replay clears breadcrumbs
 
 ## Working directory
 `/home/kaike/.openclaw/workspace/trace-recap`

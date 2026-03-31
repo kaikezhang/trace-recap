@@ -17,6 +17,7 @@ interface PersistedUISettings {
   sceneTransition: SceneTransition;
   moodColorsEnabled: boolean;
   chapterPinsEnabled: boolean;
+  breadcrumbsEnabled: boolean;
 }
 
 function loadPersistedSettings(): Partial<PersistedUISettings> {
@@ -59,6 +60,7 @@ interface UIState {
   sceneTransition: SceneTransition; // Scene transition style between locations
   moodColorsEnabled: boolean; // Use photo-extracted colors for route lines
   chapterPinsEnabled: boolean; // Show chapter pins at visited cities
+  breadcrumbsEnabled: boolean; // Show breadcrumb thumbnails at visited locations
 
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -77,6 +79,7 @@ interface UIState {
   setSceneTransition: (transition: SceneTransition) => void;
   setMoodColorsEnabled: (enabled: boolean) => void;
   setChapterPinsEnabled: (enabled: boolean) => void;
+  setBreadcrumbsEnabled: (enabled: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -97,6 +100,7 @@ export const useUIStore = create<UIState>((set) => ({
   sceneTransition: saved.sceneTransition ?? "dissolve",
   moodColorsEnabled: saved.moodColorsEnabled ?? true,
   chapterPinsEnabled: saved.chapterPinsEnabled ?? true,
+  breadcrumbsEnabled: saved.breadcrumbsEnabled ?? true,
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
@@ -115,6 +119,7 @@ export const useUIStore = create<UIState>((set) => ({
   setSceneTransition: (sceneTransition) => set({ sceneTransition }),
   setMoodColorsEnabled: (moodColorsEnabled) => set({ moodColorsEnabled }),
   setChapterPinsEnabled: (chapterPinsEnabled) => set({ chapterPinsEnabled }),
+  setBreadcrumbsEnabled: (breadcrumbsEnabled) => set({ breadcrumbsEnabled }),
 }));
 
 // Persist user settings on change (debounced)
@@ -134,6 +139,7 @@ useUIStore.subscribe((state) => {
       sceneTransition: state.sceneTransition,
       moodColorsEnabled: state.moodColorsEnabled,
       chapterPinsEnabled: state.chapterPinsEnabled,
+      breadcrumbsEnabled: state.breadcrumbsEnabled,
     });
   }, 500);
 });

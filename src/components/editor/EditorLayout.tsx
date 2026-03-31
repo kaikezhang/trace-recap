@@ -107,6 +107,8 @@ function EditorContent() {
   );
   const engineRef = useRef<AnimationEngine | null>(null);
   const demoLoadedRef = useRef(false);
+  const prevShowPhotosRef = useRef(false);
+  const prevPhotoLocationIdRef = useRef<string | null>(null);
 
   const setPlaybackState = useAnimationStore((s) => s.setPlaybackState);
   const setCurrentTime = useAnimationStore((s) => s.setCurrentTime);
@@ -142,6 +144,9 @@ function EditorContent() {
 
   const setVisitedLocationIds = useAnimationStore((s) => s.setVisitedLocationIds);
   const setCurrentArrivalLocationId = useAnimationStore((s) => s.setCurrentArrivalLocationId);
+  const addBreadcrumb = useAnimationStore((s) => s.addBreadcrumb);
+  const setBreadcrumbs = useAnimationStore((s) => s.setBreadcrumbs);
+  const clearBreadcrumbs = useAnimationStore((s) => s.clearBreadcrumbs);
   const reset = useAnimationStore((s) => s.reset);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
@@ -450,6 +455,27 @@ function EditorContent() {
         }
       }
 
+      // Breadcrumb: when photos stop showing, drop a breadcrumb for the location that was just visited
+      const wasShowingPhotos = prevShowPhotosRef.current;
+      const prevLocId = prevPhotoLocationIdRef.current;
+      if (wasShowingPhotos && !e.showPhotos && prevLocId) {
+        const loc = locations.find((l) => l.id === prevLocId);
+        if (loc && loc.photos.length > 0) {
+          addBreadcrumb({
+            locationId: loc.id,
+            coordinates: loc.coordinates,
+            heroPhotoUrl: loc.photos[0].url,
+            cityName: loc.name,
+            visitedAtSegment: e.segmentIndex,
+          });
+        }
+      }
+      prevShowPhotosRef.current = e.showPhotos;
+      if (e.showPhotos && e.phase === "ARRIVE") {
+        const seg = segments[e.segmentIndex];
+        prevPhotoLocationIdRef.current = seg?.toId ?? null;
+      }
+
       // Scene transition metadata
       setSceneTransitionProgress(e.sceneTransitionProgress);
       setTransitionBearing(e.transitionBearing);
@@ -586,11 +612,46 @@ function EditorContent() {
   const handleReset = useCallback(() => {
     engineRef.current?.reset();
     reset();
+    prevShowPhotosRef.current = false;
+    prevPhotoLocationIdRef.current = null;
   }, [reset]);
 
   const handleSeek = useCallback((progress: number) => {
-    engineRef.current?.seekTo(progress);
-  }, []);
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    engine.seekTo(progress);
+
+    // Rebuild breadcrumb state for the seek position
+    const seekTime = progress * engine.getTotalDuration();
+    const timeline = engine.getTimeline();
+    const groups = engine.getGroups();
+
+    const newBreadcrumbs: import("@/stores/animationStore").Breadcrumb[] = [];
+    for (let i = 0; i < groups.length; i++) {
+      const entry = timeline[i];
+      if (!entry) continue;
+      // A breadcrumb appears after the group's phases complete (photos dismissed)
+      if (seekTime >= entry.startTime + entry.duration) {
+        const toLoc = groups[i].toLoc;
+        if (toLoc.photos.length > 0) {
+          newBreadcrumbs.push({
+            locationId: toLoc.id,
+            coordinates: toLoc.coordinates,
+            heroPhotoUrl: toLoc.photos[0].url,
+            cityName: toLoc.name,
+            visitedAtSegment: i,
+          });
+        }
+      }
+    }
+
+    setBreadcrumbs(newBreadcrumbs);
+
+    // Reset transition tracking refs to match seek state
+    prevShowPhotosRef.current = false;
+    prevPhotoLocationIdRef.current = null;
+  }, [setBreadcrumbs]);
 
   const handleEditLayout = useCallback((locationId: string) => {
     setEditingLocationId(locationId);
