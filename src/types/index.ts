@@ -112,7 +112,7 @@ export interface PhotoLayout {
   borderRadius?: number;   // border radius in px (0-20), default 8
   enterAnimation?: PhotoAnimation; // per-location enter animation, falls back to global default
   exitAnimation?: PhotoAnimation; // per-location exit animation, falls back to global default
-  photoStyle?: PhotoStyle; // per-location photo style override (classic or kenburns)
+  photoStyle?: PhotoStyle; // per-location photo style override
   sceneTransition?: SceneTransition; // per-location scene transition override
   customProportions?: {
     rows?: number[];       // relative row heights (e.g. [2, 1] = first row 2x the second)
@@ -122,7 +122,7 @@ export interface PhotoLayout {
 
 export type PhotoAnimation = "scale" | "fade" | "slide" | "flip" | "scatter" | "typewriter" | "none";
 
-export type PhotoStyle = "classic" | "kenburns";
+export type PhotoStyle = "classic" | "kenburns" | "portal";
 
 export type SceneTransition = "cut" | "dissolve" | "blur-dissolve" | "wipe";
 

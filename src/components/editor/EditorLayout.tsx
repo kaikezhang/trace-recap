@@ -713,6 +713,7 @@ function EditorContent() {
                   hasSegments={hasSegments}
                   photos={visiblePhotos}
                   photoLayout={visiblePhotoLocation?.photoLayout}
+                  photoLocationId={visiblePhotoLocation?.id ?? null}
                   photoOverlayOpacity={photoOverlayOpacity}
                   playHintMessage={playHintMessage}
                   showPhotoOverlay={showPhotoOverlay}
@@ -749,6 +750,7 @@ function EditorContent() {
                     hasSegments={hasSegments}
                     photos={visiblePhotos}
                     photoLayout={visiblePhotoLocation?.photoLayout}
+                    photoLocationId={visiblePhotoLocation?.id ?? null}
                     photoOverlayOpacity={photoOverlayOpacity}
                     playHintMessage={playHintMessage}
                     showPhotoOverlay={showPhotoOverlay}

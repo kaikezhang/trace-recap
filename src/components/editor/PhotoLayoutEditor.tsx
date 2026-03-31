@@ -39,6 +39,7 @@ import {
   Camera,
   ScanEye,
   Film,
+  Aperture,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
@@ -93,6 +94,12 @@ const PHOTO_ANIMATION_OPTIONS: PhotoAnimation[] = [
   "scatter",
   "typewriter",
   "none",
+];
+
+const PHOTO_STYLE_OPTIONS: { value: PhotoStyle; label: string; icon: typeof Camera }[] = [
+  { value: "classic", label: "Classic", icon: Camera },
+  { value: "kenburns", label: "Ken Burns", icon: ScanEye },
+  { value: "portal", label: "Portal", icon: Aperture },
 ];
 
 function getOrderedPhotos(photos: Photo[], order: string[]): Photo[] {
@@ -299,9 +306,12 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const defaultPhotoAnimation = useUIStore((s) => s.photoAnimation);
   const defaultPhotoStyle = useUIStore((s) => s.photoStyle);
   const globalSceneTransition = useUIStore((s) => s.sceneTransition);
+  const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
   const setGlobalSceneTransition = useUIStore((s) => s.setSceneTransition);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
   const removePhoto = useProjectStore((s) => s.removePhoto);
+  const segments = useProjectStore((s) => s.segments);
+  const segmentColors = useProjectStore((s) => s.segmentColors);
   const { map } = useMap();
   const layout = location.photoLayout ?? { mode: "auto" as const };
 
@@ -476,6 +486,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const activeSceneTransition: SceneTransition = resolveSceneTransition(layout, globalSceneTransition);
   type SceneTransitionOption = SceneTransition | "default";
   const selectedSceneTransition: SceneTransitionOption = layout.sceneTransition ?? "default";
+  const portalAccentColor = useMemo(() => {
+    if (!moodColorsEnabled) return "#ffffff";
+    const segmentIndex = segments.findIndex((segment) => segment.toId === location.id);
+    return segmentIndex >= 0 ? segmentColors[segmentIndex] ?? "#ffffff" : "#ffffff";
+  }, [location.id, moodColorsEnabled, segmentColors, segments]);
 
   const sceneTransitionOptions = useMemo(
     () => [
@@ -667,6 +682,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       photoLayout={layout}
       opacity={previewOpacity}
       containerMode="parent"
+      originCoordinates={location.coordinates}
+      portalAccentColor={portalAccentColor}
+      portalProgressOverride={1}
     />
   );
 
@@ -745,10 +763,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                       Photo Style
                     </p>
                     <div className="flex gap-2">
-                      {([
-                        { value: "classic" as const, label: "Classic", icon: Camera },
-                        { value: "kenburns" as const, label: "Ken Burns", icon: ScanEye },
-                      ]).map(({ value, label, icon: Icon }) => {
+                      {PHOTO_STYLE_OPTIONS.map(({ value, label, icon: Icon }) => {
                         const isActive = activePhotoStyle === value;
                         return (
                           <button
@@ -929,10 +944,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                     Photo Style
                   </p>
                   <div className="flex gap-2">
-                    {([
-                      { value: "classic" as const, label: "Classic", icon: Camera },
-                      { value: "kenburns" as const, label: "Ken Burns", icon: ScanEye },
-                    ]).map(({ value, label, icon: Icon }) => {
+                    {PHOTO_STYLE_OPTIONS.map(({ value, label, icon: Icon }) => {
                       const isActive = activePhotoStyle === value;
                       return (
                         <button
