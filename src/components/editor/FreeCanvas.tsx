@@ -52,6 +52,8 @@ type GestureState =
       type: "drag-selection";
       startClientX: number;
       startClientY: number;
+      pointerTarget: SelectionTarget;
+      shouldNarrowSelectionOnClick: boolean;
       photoStarts: Array<{
         photoId: string;
         x: number;
@@ -208,6 +210,19 @@ function normalizeSelection(selection: { photoIds: string[]; captionIds: string[
   return photoIds.length > 0 || captionIds.length > 0 ? { photoIds, captionIds } : null;
 }
 
+function arraysEqualAsSets(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const leftSet = new Set(left);
+  if (leftSet.size !== right.length) {
+    return false;
+  }
+
+  return right.every((item) => leftSet.has(item));
+}
+
 function selectionsEqual(left: Selection, right: Selection): boolean {
   if (left === right) {
     return true;
@@ -215,11 +230,11 @@ function selectionsEqual(left: Selection, right: Selection): boolean {
   if (!left || !right) {
     return left === right;
   }
-  if (left.photoIds.length !== right.photoIds.length || left.captionIds.length !== right.captionIds.length) {
-    return false;
-  }
-  return left.photoIds.every((photoId, index) => photoId === right.photoIds[index]) &&
-    left.captionIds.every((photoId, index) => photoId === right.captionIds[index]);
+
+  return (
+    arraysEqualAsSets(left.photoIds, right.photoIds) &&
+    arraysEqualAsSets(left.captionIds, right.captionIds)
+  );
 }
 
 function createSingleSelection(target: SelectionTarget): Selection {
@@ -260,6 +275,14 @@ function getSelectionTransformIds(selection: Selection): string[] {
   }
 
   return [...new Set([...selection.photoIds, ...selection.captionIds])];
+}
+
+function getSelectionItemCount(selection: Selection): number {
+  if (!selection) {
+    return 0;
+  }
+
+  return selection.photoIds.length + selection.captionIds.length;
 }
 
 function createMarqueeRect(
@@ -308,6 +331,8 @@ export default function FreeCanvas({
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
   const transformsRef = useRef(transforms);
   const captionElementRefs = useRef(new Map<string, HTMLElement>());
+  const marqueeRectRef = useRef<MarqueeRect | null>(null);
+  const didDragRef = useRef(false);
 
   useEffect(() => {
     transformsRef.current = transforms;
@@ -504,44 +529,56 @@ export default function FreeCanvas({
     [containerSize.h, containerSize.w, getCaptionBounds],
   );
 
-  const startSelectionDrag = useCallback((nextSelection: Selection, clientX: number, clientY: number) => {
-    if (!nextSelection) {
-      return;
-    }
+  const startSelectionDrag = useCallback(
+    (
+      nextSelection: Selection,
+      clientX: number,
+      clientY: number,
+      pointerTarget: SelectionTarget,
+      shouldNarrowSelectionOnClick: boolean,
+    ) => {
+      if (!nextSelection) {
+        return;
+      }
 
-    const selectedPhotoIdSet = new Set(nextSelection.photoIds);
-    const selectedCaptionIdSet = new Set(nextSelection.captionIds);
-    const photoStarts = transformsRef.current
-      .filter((transform) => selectedPhotoIdSet.has(transform.photoId))
-      .map((transform) => ({
-        photoId: transform.photoId,
-        x: transform.x,
-        y: transform.y,
-        width: transform.width,
-        height: transform.height,
-      }));
-    const captionStarts = transformsRef.current
-      .filter(
-        (transform) =>
-          selectedCaptionIdSet.has(transform.photoId) && !selectedPhotoIdSet.has(transform.photoId),
-      )
-      .map((transform) => {
-        const caption = getCaptionTransform(transform);
-        return {
+      const selectedPhotoIdSet = new Set(nextSelection.photoIds);
+      const selectedCaptionIdSet = new Set(nextSelection.captionIds);
+      const photoStarts = transformsRef.current
+        .filter((transform) => selectedPhotoIdSet.has(transform.photoId))
+        .map((transform) => ({
           photoId: transform.photoId,
-          offsetX: caption.offsetX,
-          offsetY: caption.offsetY,
-        };
-      });
+          x: transform.x,
+          y: transform.y,
+          width: transform.width,
+          height: transform.height,
+        }));
+      const captionStarts = transformsRef.current
+        .filter(
+          (transform) =>
+            selectedCaptionIdSet.has(transform.photoId) && !selectedPhotoIdSet.has(transform.photoId),
+        )
+        .map((transform) => {
+          const caption = getCaptionTransform(transform);
+          return {
+            photoId: transform.photoId,
+            offsetX: caption.offsetX,
+            offsetY: caption.offsetY,
+          };
+        });
 
-    setActiveGesture({
-      type: "drag-selection",
-      startClientX: clientX,
-      startClientY: clientY,
-      photoStarts,
-      captionStarts,
-    });
-  }, []);
+      didDragRef.current = false;
+      setActiveGesture({
+        type: "drag-selection",
+        startClientX: clientX,
+        startClientY: clientY,
+        pointerTarget,
+        shouldNarrowSelectionOnClick,
+        photoStarts,
+        captionStarts,
+      });
+    },
+    [],
+  );
 
   const handleSelectablePointerDown = useCallback(
     (target: SelectionTarget, clientX: number, clientY: number, extendSelection: boolean) => {
@@ -552,12 +589,21 @@ export default function FreeCanvas({
         return;
       }
 
-      const nextSelection = isSelectionTargetSelected(selection, target)
+      const targetAlreadySelected = isSelectionTargetSelected(selection, target);
+      const shouldNarrowSelectionOnClick =
+        targetAlreadySelected && getSelectionItemCount(selection) > 1;
+      const nextSelection = targetAlreadySelected
         ? selection ?? createSingleSelection(target)
         : createSingleSelection(target);
       setSelection(nextSelection);
       bringSelectionToFront(getSelectionTransformIds(nextSelection));
-      startSelectionDrag(nextSelection, clientX, clientY);
+      startSelectionDrag(
+        nextSelection,
+        clientX,
+        clientY,
+        target,
+        shouldNarrowSelectionOnClick,
+      );
     },
     [bringSelectionToFront, selection, startSelectionDrag],
   );
@@ -650,6 +696,7 @@ export default function FreeCanvas({
           event.clientY,
           activeGesture.containerRect,
         );
+        marqueeRectRef.current = nextMarqueeRect;
         setMarqueeRect(nextMarqueeRect);
         if (
           nextMarqueeRect.width >= MARQUEE_DRAG_THRESHOLD_PX ||
@@ -661,6 +708,15 @@ export default function FreeCanvas({
       }
 
       if (activeGesture.type === "drag-selection") {
+        if (
+          !didDragRef.current &&
+          Math.abs(event.clientX - activeGesture.startClientX) < MARQUEE_DRAG_THRESHOLD_PX &&
+          Math.abs(event.clientY - activeGesture.startClientY) < MARQUEE_DRAG_THRESHOLD_PX
+        ) {
+          return;
+        }
+
+        didDragRef.current = true;
         const dx = (event.clientX - activeGesture.startClientX) / containerSize.w;
         const dy = (event.clientY - activeGesture.startClientY) / containerSize.h;
 
@@ -827,14 +883,25 @@ export default function FreeCanvas({
 
     const handlePointerUp = () => {
       if (activeGesture.type === "marquee-select") {
+        const nextMarqueeRect = marqueeRectRef.current;
         if (
-          !marqueeRect ||
-          (marqueeRect.width < MARQUEE_DRAG_THRESHOLD_PX && marqueeRect.height < MARQUEE_DRAG_THRESHOLD_PX)
+          !nextMarqueeRect ||
+          (nextMarqueeRect.width < MARQUEE_DRAG_THRESHOLD_PX &&
+            nextMarqueeRect.height < MARQUEE_DRAG_THRESHOLD_PX)
         ) {
           setSelection(null);
         }
+        marqueeRectRef.current = null;
         setMarqueeRect(null);
+      } else if (
+        activeGesture.type === "drag-selection" &&
+        !didDragRef.current &&
+        activeGesture.shouldNarrowSelectionOnClick
+      ) {
+        setSelection(createSingleSelection(activeGesture.pointerTarget));
       }
+
+      didDragRef.current = false;
       setActiveGesture(null);
     };
 
@@ -867,7 +934,6 @@ export default function FreeCanvas({
     containerSize.w,
     getCaptionBounds,
     getSelectionFromMarquee,
-    marqueeRect,
     updateTransforms,
   ]);
 
@@ -879,6 +945,8 @@ export default function FreeCanvas({
 
       event.preventDefault();
       setActiveGesture(null);
+      didDragRef.current = false;
+      marqueeRectRef.current = null;
       setMarqueeRect(null);
       if (editingCaptionId) {
         setEditingCaptionId(null);
@@ -973,15 +1041,15 @@ export default function FreeCanvas({
 
         setEditingCaptionId(null);
         const containerRect = canvasRef.current.getBoundingClientRect();
-        setMarqueeRect(
-          createMarqueeRect(
-            event.clientX,
-            event.clientY,
-            event.clientX,
-            event.clientY,
-            containerRect,
-          ),
+        const nextMarqueeRect = createMarqueeRect(
+          event.clientX,
+          event.clientY,
+          event.clientX,
+          event.clientY,
+          containerRect,
         );
+        marqueeRectRef.current = nextMarqueeRect;
+        setMarqueeRect(nextMarqueeRect);
         setActiveGesture({
           type: "marquee-select",
           startClientX: event.clientX,
