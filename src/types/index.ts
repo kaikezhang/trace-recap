@@ -28,6 +28,10 @@ export interface Location {
   photos: Photo[];
   isWaypoint: boolean;
   photoLayout?: PhotoLayout;
+  chapterTitle?: string;      // User-editable chapter title (defaults to city name)
+  chapterNote?: string;       // Optional one-line note/caption
+  chapterDate?: string;       // Display date (e.g. "Mar 15-17")
+  chapterEmoji?: string;      // Optional emoji stamp (e.g. "🏯" "🍜" "🎌")
 }
 
 export interface Segment {

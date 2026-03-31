@@ -16,6 +16,7 @@ interface PersistedUISettings {
   photoStyle: PhotoStyle;
   sceneTransition: SceneTransition;
   moodColorsEnabled: boolean;
+  chapterPinsEnabled: boolean;
 }
 
 function loadPersistedSettings(): Partial<PersistedUISettings> {
@@ -57,6 +58,7 @@ interface UIState {
   photoStyle: PhotoStyle; // Photo display style
   sceneTransition: SceneTransition; // Scene transition style between locations
   moodColorsEnabled: boolean; // Use photo-extracted colors for route lines
+  chapterPinsEnabled: boolean; // Show chapter pins at visited cities
 
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -74,6 +76,7 @@ interface UIState {
   setPhotoStyle: (style: PhotoStyle) => void;
   setSceneTransition: (transition: SceneTransition) => void;
   setMoodColorsEnabled: (enabled: boolean) => void;
+  setChapterPinsEnabled: (enabled: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -93,6 +96,7 @@ export const useUIStore = create<UIState>((set) => ({
   photoStyle: saved.photoStyle ?? "classic",
   sceneTransition: saved.sceneTransition ?? "dissolve",
   moodColorsEnabled: saved.moodColorsEnabled ?? true,
+  chapterPinsEnabled: saved.chapterPinsEnabled ?? true,
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
@@ -110,6 +114,7 @@ export const useUIStore = create<UIState>((set) => ({
   setPhotoStyle: (photoStyle) => set({ photoStyle }),
   setSceneTransition: (sceneTransition) => set({ sceneTransition }),
   setMoodColorsEnabled: (moodColorsEnabled) => set({ moodColorsEnabled }),
+  setChapterPinsEnabled: (chapterPinsEnabled) => set({ chapterPinsEnabled }),
 }));
 
 // Persist user settings on change (debounced)
@@ -128,6 +133,7 @@ useUIStore.subscribe((state) => {
       photoStyle: state.photoStyle,
       sceneTransition: state.sceneTransition,
       moodColorsEnabled: state.moodColorsEnabled,
+      chapterPinsEnabled: state.chapterPinsEnabled,
     });
   }, 500);
 });

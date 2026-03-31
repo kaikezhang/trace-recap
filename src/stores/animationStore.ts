@@ -26,6 +26,10 @@ interface AnimationState {
   bloomOrigin: { x: number; y: number } | null;
   /** Elapsed time (seconds) since bloom enter started, driven by engine timeline */
   bloomElapsedTime: number;
+  /** IDs of locations that have been visited (ARRIVE completed) during playback */
+  visitedLocationIds: string[];
+  /** ID of the location currently arriving at (active chapter pin) */
+  currentArrivalLocationId: string | null;
 
   setPlaybackState: (state: PlaybackState) => void;
   setCurrentTime: (time: number) => void;
@@ -45,6 +49,9 @@ interface AnimationState {
   setTransitionBearing: (bearing: number | undefined) => void;
   setBloomOrigin: (origin: { x: number; y: number } | null) => void;
   setBloomElapsedTime: (time: number) => void;
+  setVisitedLocationIds: (ids: string[]) => void;
+  addVisitedLocationId: (id: string) => void;
+  setCurrentArrivalLocationId: (id: string | null) => void;
   reset: () => void;
 }
 
@@ -67,6 +74,8 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   transitionBearing: undefined,
   bloomOrigin: null,
   bloomElapsedTime: 0,
+  visitedLocationIds: [],
+  currentArrivalLocationId: null,
 
   setPlaybackState: (playbackState) => set({ playbackState }),
   setCurrentTime: (currentTime) => set({ currentTime }),
@@ -86,6 +95,14 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setTransitionBearing: (transitionBearing) => set({ transitionBearing }),
   setBloomOrigin: (bloomOrigin) => set({ bloomOrigin }),
   setBloomElapsedTime: (bloomElapsedTime) => set({ bloomElapsedTime }),
+  setVisitedLocationIds: (visitedLocationIds) => set({ visitedLocationIds }),
+  addVisitedLocationId: (id) =>
+    set((state) => ({
+      visitedLocationIds: state.visitedLocationIds.includes(id)
+        ? state.visitedLocationIds
+        : [...state.visitedLocationIds, id],
+    })),
+  setCurrentArrivalLocationId: (currentArrivalLocationId) => set({ currentArrivalLocationId }),
   reset: () =>
     set({
       playbackState: "idle",
@@ -104,5 +121,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       transitionBearing: undefined,
       bloomOrigin: null,
       bloomElapsedTime: 0,
+      visitedLocationIds: [],
+      currentArrivalLocationId: null,
     }),
 }));

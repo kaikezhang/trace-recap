@@ -139,6 +139,8 @@ function EditorContent() {
   );
   const setBloomOrigin = useAnimationStore((s) => s.setBloomOrigin);
   const setBloomElapsedTime = useAnimationStore((s) => s.setBloomElapsedTime);
+  const addVisitedLocationId = useAnimationStore((s) => s.addVisitedLocationId);
+  const setCurrentArrivalLocationId = useAnimationStore((s) => s.setCurrentArrivalLocationId);
   const reset = useAnimationStore((s) => s.reset);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
@@ -368,6 +370,36 @@ function EditorContent() {
       setCurrentCityLabelZh(e.cityLabelZh);
       setShowPhotoOverlay(e.showPhotos);
       setPhotoOverlayOpacity(e.photoOpacity);
+      // Chapter pin tracking: mark current arrival and accumulate visited locations
+      {
+        const groups = engine.getGroups();
+        const group = groups[e.groupIndex];
+        if (group) {
+          if (e.phase === "ARRIVE" && !group.toLoc.isWaypoint) {
+            setCurrentArrivalLocationId(group.toLoc.id);
+          } else if (e.phase === "HOVER" && !group.fromLoc.isWaypoint) {
+            // First location hover: mark as arrival
+            if (e.groupIndex === 0) {
+              setCurrentArrivalLocationId(group.fromLoc.id);
+            }
+          } else if (
+            (e.phase === "ZOOM_OUT" || e.phase === "FLY") &&
+            e.groupIndex > 0
+          ) {
+            // Previous location transitions to visited
+            const prevGroup = groups[e.groupIndex - 1];
+            if (prevGroup && !prevGroup.toLoc.isWaypoint) {
+              addVisitedLocationId(prevGroup.toLoc.id);
+            }
+            // Also mark the very first location as visited once we leave it
+            if (e.groupIndex === 1 && !group.fromLoc.isWaypoint) {
+              addVisitedLocationId(group.fromLoc.id);
+            }
+            setCurrentArrivalLocationId(null);
+          }
+        }
+      }
+
       // Drive bloom elapsed time from engine timeline (not wall-clock)
       if (e.showPhotos && e.phase === "ARRIVE") {
         const tl = engine.getTimeline();

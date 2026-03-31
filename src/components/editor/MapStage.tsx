@@ -6,6 +6,7 @@ import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
 import PhotoLayoutEditor from "./PhotoLayoutEditor";
 import MapEmptyState from "./MapEmptyState";
+import ChapterPinsOverlay from "./ChapterPinsOverlay";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -165,6 +166,7 @@ export default function MapStage({
   return (
     <div className="relative h-full w-full">
       <MapCanvas />
+      <ChapterPinsOverlay />
       {showEmptyState && (
         <MapEmptyState
           onSearchClick={onFocusSearch}

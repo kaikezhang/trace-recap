@@ -82,7 +82,7 @@ interface ProjectState {
   reorderLocations: (fromIndex: number, toIndex: number) => void;
   updateLocation: (
     id: string,
-    updates: Partial<Pick<Location, "name" | "nameZh" | "coordinates">>,
+    updates: Partial<Pick<Location, "name" | "nameZh" | "coordinates" | "chapterTitle" | "chapterNote" | "chapterDate" | "chapterEmoji">>,
   ) => void;
   toggleWaypoint: (locationId: string) => void;
 

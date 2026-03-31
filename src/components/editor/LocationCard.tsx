@@ -285,6 +285,43 @@ export default memo(function LocationCard({
                 </div>
               )}
 
+              {/* Chapter metadata */}
+              {!isWaypoint && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Chapter</span>
+                  <EditableName
+                    value={location.chapterTitle ?? ""}
+                    placeholder="Chapter title"
+                    onSave={(val) => updateLocation(locationId, { chapterTitle: val || undefined })}
+                    className="text-xs"
+                  />
+                  <EditableName
+                    value={location.chapterNote ?? ""}
+                    placeholder="Note (e.g. Temples & gardens)"
+                    onSave={(val) => updateLocation(locationId, { chapterNote: val || undefined })}
+                    className="text-xs text-muted-foreground"
+                  />
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <EditableName
+                        value={location.chapterDate ?? ""}
+                        placeholder="Date (e.g. Mar 15-17)"
+                        onSave={(val) => updateLocation(locationId, { chapterDate: val || undefined })}
+                        className="text-xs text-muted-foreground"
+                      />
+                    </div>
+                    <div className="w-12">
+                      <EditableName
+                        value={location.chapterEmoji ?? ""}
+                        placeholder="🏯"
+                        onSave={(val) => updateLocation(locationId, { chapterEmoji: val || undefined })}
+                        className="text-xs text-center"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Photo manager */}
               <PhotoManager locationId={locationId} onEditLayout={onEditLayout} />
 
