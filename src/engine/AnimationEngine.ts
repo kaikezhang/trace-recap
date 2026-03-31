@@ -452,7 +452,12 @@ export class AnimationEngine {
 
     if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
       showPhotos = true;
-      photoOpacity = 1;
+      // Last 30% of ARRIVE: start fading out
+      if (phaseProgress > 0.7) {
+        photoOpacity = 1 - ((phaseProgress - 0.7) / 0.3);
+      } else {
+        photoOpacity = 1;
+      }
     } else if (groupIndex > 0) {
       const prevGroup = this.groups[groupIndex - 1];
       if (prevGroup && prevGroup.toLoc.photos.length > 0) {
