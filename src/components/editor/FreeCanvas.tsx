@@ -643,10 +643,29 @@ export default function FreeCanvas({
   );
 
   // Scale caption font proportionally to container width (reference: 1000px) to match PhotoOverlay
-  const captionScale = containerSize.w > 0 ? containerSize.w / 1000 : 1;
+  // Measure actual DOM size for accurate caption font scaling (matches PhotoOverlay's ResizeObserver)
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [measuredSize, setMeasuredSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width);
+        const h = Math.round(entry.contentRect.height);
+        if (w > 0 && h > 0) {
+          setMeasuredSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+        }
+      }
+    });
+    obs.observe(canvasRef.current);
+    return () => obs.disconnect();
+  }, []);
+  const effectiveW = measuredSize.w > 0 ? measuredSize.w : containerSize.w;
+  const captionScale = effectiveW > 0 ? effectiveW / 1000 : 1;
 
   return (
     <div
+      ref={canvasRef}
       className="absolute inset-0 z-20"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) {
