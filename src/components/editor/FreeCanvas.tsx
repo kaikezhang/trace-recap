@@ -1,15 +1,12 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DEFAULT_CAPTION_BG_COLOR } from "@/lib/constants";
+import {
+  CAPTION_FONT_OPTIONS,
+  DEFAULT_CAPTION_BG_COLOR,
+  DEFAULT_CAPTION_FONT_FAMILY,
+} from "@/lib/constants";
 import type { FreePhotoTransform, Photo } from "@/types";
-
-const CAPTION_FONT_OPTIONS = [
-  { value: "system-ui", label: "System UI" },
-  { value: "serif", label: "Serif" },
-  { value: "monospace", label: "Monospace" },
-  { value: "cursive", label: "Cursive" },
-] as const;
 
 const CAPTION_COLOR_PRESETS = [
   "#ffffff",
@@ -31,6 +28,9 @@ const MIN_PHOTO_SIZE = 0.05;
 const MIN_CAPTION_VISIBLE_PX = 24;
 const ROTATION_SNAP_TARGETS = [0, 90, -90, 180] as const;
 const ROTATION_SNAP_THRESHOLD = 5;
+const TOOLBAR_MARGIN_PX = 12;
+const TOOLBAR_WIDTH_PX = 260;
+const TOOLBAR_HEIGHT_PX = 124;
 
 type Selection =
   | { kind: "photo"; photoId: string }
@@ -149,6 +149,40 @@ function getHandleCursor(handle: ResizeHandle): string {
   }
 }
 
+function getCaptionToolbarPosition(
+  captionCenterX: number,
+  captionCenterY: number,
+  containerSize: { w: number; h: number },
+) {
+  const safeWidth = Math.max(containerSize.w - TOOLBAR_MARGIN_PX * 2, 180);
+  const toolbarWidth = Math.min(TOOLBAR_WIDTH_PX, safeWidth);
+  const halfToolbarWidth = toolbarWidth / 2;
+  const minToolbarLeft = halfToolbarWidth + TOOLBAR_MARGIN_PX;
+  const maxToolbarLeft = Math.max(
+    minToolbarLeft,
+    containerSize.w - halfToolbarWidth - TOOLBAR_MARGIN_PX,
+  );
+  const toolbarLeft = clamp(
+    captionCenterX * containerSize.w,
+    minToolbarLeft,
+    maxToolbarLeft,
+  );
+  const requestedTop = captionCenterY < 0.5
+    ? captionCenterY * containerSize.h + TOOLBAR_MARGIN_PX
+    : captionCenterY * containerSize.h - TOOLBAR_HEIGHT_PX - TOOLBAR_MARGIN_PX;
+  const toolbarTop = clamp(
+    requestedTop,
+    TOOLBAR_MARGIN_PX,
+    Math.max(TOOLBAR_MARGIN_PX, containerSize.h - TOOLBAR_HEIGHT_PX - TOOLBAR_MARGIN_PX),
+  );
+
+  return {
+    toolbarLeft,
+    toolbarTop,
+    toolbarWidth,
+  };
+}
+
 export default function FreeCanvas({
   photos,
   transforms,
@@ -156,7 +190,7 @@ export default function FreeCanvas({
   mapSnapshot,
   borderRadius,
   onTransformsChange,
-  defaultCaptionFontFamily = "system-ui",
+  defaultCaptionFontFamily = DEFAULT_CAPTION_FONT_FAMILY,
   defaultCaptionFontSize = 14,
   initialGesture,
   onInitialGestureHandled,
@@ -634,6 +668,11 @@ export default function FreeCanvas({
         const captionSelected = selection?.kind === "caption" && selection.photoId === photo.id;
         const captionCenterX = transform.x + transform.width / 2 + caption.offsetX;
         const captionCenterY = transform.y + transform.height / 2 + caption.offsetY;
+        const toolbarPosition = getCaptionToolbarPosition(
+          captionCenterX,
+          captionCenterY,
+          containerSize,
+        );
 
         return (
           <Fragment key={photo.id}>
@@ -702,100 +741,114 @@ export default function FreeCanvas({
             </div>
 
             {captionShouldRender ? (
-              <div
-                className={`absolute max-w-[40%] touch-none ${editingCaptionId === photo.id ? "" : "cursor-grab active:cursor-grabbing"}`}
-                onPointerDown={(event) => {
-                  if (editingCaptionId === photo.id) {
-                    return;
-                  }
+              <>
+                <div
+                  className={`absolute max-w-[40%] touch-none ${editingCaptionId === photo.id ? "" : "cursor-grab active:cursor-grabbing"}`}
+                  onPointerDown={(event) => {
+                    if (editingCaptionId === photo.id) {
+                      return;
+                    }
 
-                  event.stopPropagation();
-                  beginCaptionDrag(photo.id, event.clientX, event.clientY);
-                }}
-                onDoubleClick={(event) => {
-                  event.stopPropagation();
-                  setSelection({ kind: "caption", photoId: photo.id });
-                  setEditingCaptionId(photo.id);
-                  setDraftCaptionText(captionText);
-                }}
-                style={{
-                  left: `${captionCenterX * 100}%`,
-                  top: `${captionCenterY * 100}%`,
-                  transform: `translate(-50%, -50%) rotate(${caption.rotation}deg)`,
-                  zIndex: transform.zIndex + 1,
-                }}
-              >
-                {editingCaptionId === photo.id ? (
-                  <input
-                    ref={(node) => {
-                      if (node) {
-                        captionElementRefs.current.set(photo.id, node);
-                      } else {
-                        captionElementRefs.current.delete(photo.id);
-                      }
-                    }}
-                    autoFocus
-                    value={draftCaptionText}
-                    onChange={(event) => setDraftCaptionText(event.target.value)}
-                    onBlur={() => {
-                      commitCaptionText(photo.id, draftCaptionText);
-                      setEditingCaptionId(null);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
+                    event.stopPropagation();
+                    beginCaptionDrag(photo.id, event.clientX, event.clientY);
+                  }}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    setSelection({ kind: "caption", photoId: photo.id });
+                    setEditingCaptionId(photo.id);
+                    setDraftCaptionText(captionText);
+                  }}
+                  style={{
+                    left: `${captionCenterX * 100}%`,
+                    top: `${captionCenterY * 100}%`,
+                    transform: `translate(-50%, -50%) rotate(${caption.rotation}deg)`,
+                    zIndex: transform.zIndex + 1,
+                  }}
+                >
+                  {editingCaptionId === photo.id ? (
+                    <input
+                      ref={(node) => {
+                        if (node) {
+                          captionElementRefs.current.set(photo.id, node);
+                        } else {
+                          captionElementRefs.current.delete(photo.id);
+                        }
+                      }}
+                      autoFocus
+                      value={draftCaptionText}
+                      onChange={(event) => setDraftCaptionText(event.target.value)}
+                      onBlur={() => {
                         commitCaptionText(photo.id, draftCaptionText);
                         setEditingCaptionId(null);
-                      } else if (event.key === "Escape") {
-                        setEditingCaptionId(null);
-                      }
-                    }}
-                    className="w-[180px] rounded-md border border-indigo-300 bg-white/95 px-2 py-1 text-center text-sm text-gray-900 shadow-lg outline-none focus:border-indigo-500"
-                    style={{
-                      fontFamily: caption.fontFamily ?? defaultCaptionFontFamily,
-                      fontSize: `${scaledCaptionFontSize}px`,
-                    }}
-                  />
-                ) : (
-                  <div
-                    ref={(node) => {
-                      if (node) {
-                        captionElementRefs.current.set(photo.id, node);
-                      } else {
-                        captionElementRefs.current.delete(photo.id);
-                      }
-                    }}
-                    className={`rounded-md px-2 py-1 text-center shadow-sm ${
-                      captionSelected ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-white/20" : ""
-                    }`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSelection({ kind: "caption", photoId: photo.id });
-                    }}
-                    style={{
-                      backgroundColor: caption.bgColor,
-                      color: caption.color ?? "#ffffff",
-                      fontFamily: caption.fontFamily ?? defaultCaptionFontFamily,
-                      fontSize: `${scaledCaptionFontSize}px`,
-                      textShadow: "0 1px 3px rgba(0,0,0,0.35)",
-                    }}
-                  >
-                    {captionText || "Add caption"}
-                  </div>
-                )}
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          commitCaptionText(photo.id, draftCaptionText);
+                          setEditingCaptionId(null);
+                        } else if (event.key === "Escape") {
+                          setEditingCaptionId(null);
+                        }
+                      }}
+                      className="w-[180px] rounded-md border border-indigo-300 bg-white/95 px-2 py-1 text-center text-sm text-gray-900 shadow-lg outline-none focus:border-indigo-500"
+                      style={{
+                        fontFamily: caption.fontFamily ?? defaultCaptionFontFamily,
+                        fontSize: `${scaledCaptionFontSize}px`,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      ref={(node) => {
+                        if (node) {
+                          captionElementRefs.current.set(photo.id, node);
+                        } else {
+                          captionElementRefs.current.delete(photo.id);
+                        }
+                      }}
+                      className={`rounded-md px-2 py-1 text-center shadow-sm ${
+                        captionSelected ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-white/20" : ""
+                      }`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelection({ kind: "caption", photoId: photo.id });
+                      }}
+                      style={{
+                        backgroundColor: caption.bgColor,
+                        color: caption.color ?? "#ffffff",
+                        fontFamily: caption.fontFamily ?? defaultCaptionFontFamily,
+                        fontSize: `${scaledCaptionFontSize}px`,
+                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                      }}
+                    >
+                      {captionText || "Add caption"}
+                    </div>
+                  )}
+                </div>
 
                 {captionSelected && editingCaptionId !== photo.id ? (
                   <div
-                    className="absolute left-1/2 top-0 z-10 flex min-w-[240px] -translate-x-1/2 -translate-y-[calc(100%+12px)] flex-col gap-2 rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
+                    className="absolute z-10 flex flex-col gap-2 rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
                     onPointerDown={(event) => event.stopPropagation()}
+                    style={{
+                      left: `${toolbarPosition.toolbarLeft}px`,
+                      top: `${toolbarPosition.toolbarTop}px`,
+                      width: `${toolbarPosition.toolbarWidth}px`,
+                      transform: "translateX(-50%)",
+                      zIndex: transform.zIndex + 2,
+                    }}
                   >
                     <div className="flex items-center gap-2">
                       <select
                         className="h-8 flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
+                        style={{ fontFamily: caption.fontFamily ?? defaultCaptionFontFamily }}
                         value={caption.fontFamily ?? defaultCaptionFontFamily}
                         onChange={(event) => applyCaptionStyle(photo.id, { fontFamily: event.target.value })}
                       >
                         {CAPTION_FONT_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
+                          <option
+                            key={option.value}
+                            value={option.value}
+                            style={{ fontFamily: option.value }}
+                          >
                             {option.label}
                           </option>
                         ))}
@@ -809,6 +862,9 @@ export default function FreeCanvas({
                         onChange={(event) => applyCaptionStyle(photo.id, { fontSize: Number(event.target.value) })}
                         className="h-1 w-24 accent-indigo-500"
                       />
+                      <span className="w-10 text-right text-[10px] text-gray-500">
+                        {caption.fontSize ?? defaultCaptionFontSize}px
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
@@ -870,7 +926,7 @@ export default function FreeCanvas({
                     </div>
                   </div>
                 ) : null}
-              </div>
+              </>
             ) : null}
           </Fragment>
         );

@@ -21,6 +21,25 @@ export const TARGET_DURATION = {
 
 export const FPS = 30;
 export const DEFAULT_CAPTION_BG_COLOR = "rgba(255,255,255,0.74)";
+export const DEFAULT_CAPTION_FONT_FAMILY = "system-ui";
+
+export const CAPTION_FONT_OPTIONS = [
+  { value: "system-ui", label: "System UI" },
+  { value: "\"Noto Sans SC\", sans-serif", label: "Noto Sans SC (思源黑体)" },
+  { value: "\"Noto Serif SC\", serif", label: "Noto Serif SC (思源宋体)" },
+  { value: "\"ZCOOL KuaiLe\", sans-serif", label: "ZCOOL KuaiLe (站酷快乐体)" },
+  { value: "\"ZCOOL XiaoWei\", serif", label: "ZCOOL XiaoWei (站酷小薇体)" },
+  { value: "\"Ma Shan Zheng\", cursive", label: "Ma Shan Zheng (马善政楷体)" },
+  { value: "\"Liu Jian Mao Cao\", cursive", label: "Liu Jian Mao Cao (流坚毛草)" },
+  { value: "serif", label: "Serif" },
+  { value: "monospace", label: "Monospace" },
+  { value: "cursive", label: "Cursive" },
+] as const;
+
+export type CaptionFontFamily = (typeof CAPTION_FONT_OPTIONS)[number]["value"];
+
+export const ALLOWED_CAPTION_FONTS: ReadonlyArray<CaptionFontFamily> =
+  CAPTION_FONT_OPTIONS.map((option) => option.value);
 
 export interface TransportModeConfig {
   id: TransportMode;
