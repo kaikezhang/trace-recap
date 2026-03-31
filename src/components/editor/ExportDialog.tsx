@@ -76,6 +76,7 @@ export default function ExportDialog() {
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadSize, setDownloadSize] = useState<string | null>(null);
+  const [downloadExt, setDownloadExt] = useState<"mp4" | "webm">("mp4");
   const [exportError, setExportError] = useState<string | null>(null);
   const [encodingMethod, setEncodingMethod] = useState<"webcodecs" | "mediarecorder" | "server" | null>(null);
   const exporterRef = useRef<VideoExporter | null>(null);
@@ -86,6 +87,7 @@ export default function ExportDialog() {
     setIsExporting(true);
     setDownloadUrl(null);
     setDownloadSize(null);
+    setDownloadExt("mp4");
     setProgress(null);
     setExportError(null);
     setEncodingMethod(null);
@@ -115,6 +117,8 @@ export default function ExportDialog() {
         setDownloadUrl(url);
         const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
         setDownloadSize(`${sizeMB} MB`);
+        const ext = blob.type.includes("webm") ? "webm" : "mp4";
+        setDownloadExt(ext);
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -151,6 +155,7 @@ export default function ExportDialog() {
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
     setDownloadUrl(null);
     setDownloadSize(null);
+    setDownloadExt("mp4");
     setProgress(null);
     setExportError(null);
     setOpen(newOpen);
@@ -192,10 +197,10 @@ export default function ExportDialog() {
               )}
             </div>
             <div className="flex gap-2 w-full">
-              <a href={downloadUrl} download="trace-recap.mp4" className="flex-1">
+              <a href={downloadUrl} download={`trace-recap.${downloadExt}`} className="flex-1">
                 <Button className="w-full bg-indigo-500 hover:bg-indigo-600">
                   <Download className="h-4 w-4 mr-2" />
-                  Download MP4
+                  Download {downloadExt.toUpperCase()}
                 </Button>
               </a>
               <Button

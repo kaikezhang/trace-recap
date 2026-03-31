@@ -70,7 +70,8 @@ export class MediaRecorderExporter {
   private fps: number;
   private mimeType: string;
   private frameInterval: number; // ms between frames
-  private lastFrameTime = 0;
+  private frameCount = 0;
+  private startTime = 0;
   private stopped = false;
 
   constructor(canvas: HTMLCanvasElement, options: MediaRecorderExportOptions) {
@@ -105,29 +106,51 @@ export class MediaRecorderExporter {
     };
   }
 
+  /** The MIME type selected by this exporter (e.g. "video/mp4" or "video/webm"). */
+  get selectedMimeType(): string {
+    return this.mimeType;
+  }
+
   /** Start recording. Must be called before captureFrame(). */
   start(): void {
     // timeslice = 1000ms — request data every second to avoid OOM on long videos
     this.recorder.start(1000);
-    this.lastFrameTime = performance.now();
+    this.frameCount = 0;
+    this.startTime = performance.now();
   }
 
   /**
    * Capture the current canvas state as a video frame.
-   * Enforces frame-rate timing via wall-clock delay so the MediaRecorder
-   * timestamps frames at the correct interval.
+   * Uses a virtual clock (frame count × frame interval) so export duration
+   * is deterministic regardless of device render speed.
    */
   async captureFrame(): Promise<void> {
-    // Enforce timing: wait until at least frameInterval ms since last frame
+    // Virtual target: where the clock *should* be for this frame
+    const targetTime = this.startTime + this.frameCount * this.frameInterval;
     const now = performance.now();
-    const elapsed = now - this.lastFrameTime;
-    const wait = this.frameInterval - elapsed;
+    const wait = targetTime - now;
     if (wait > 1) {
       await new Promise<void>((r) => setTimeout(r, wait));
     }
 
     this.track.requestFrame();
-    this.lastFrameTime = performance.now();
+    this.frameCount++;
+  }
+
+  /** Release all resources (recorder, stream tracks). Safe to call multiple times. */
+  cleanup(): void {
+    if (this.stopped) return;
+    this.stopped = true;
+
+    try {
+      if (this.recorder.state !== "inactive") {
+        this.recorder.stop();
+      }
+    } catch {
+      // Ignore — recorder may already be stopped
+    }
+
+    this.stream.getTracks().forEach((t) => t.stop());
   }
 
   /** Stop recording and return the final video blob. */
@@ -135,24 +158,26 @@ export class MediaRecorderExporter {
     if (this.stopped) {
       throw new Error("MediaRecorderExporter already finalized");
     }
-    this.stopped = true;
 
     // Capture one last frame to flush
     this.track.requestFrame();
 
     return new Promise<Blob>((resolve, reject) => {
       this.recorder.onstop = () => {
+        this.stopped = true;
+        this.stream.getTracks().forEach((t) => t.stop());
+
         if (this.chunks.length === 0) {
           reject(new Error("MediaRecorder produced no data"));
           return;
         }
         const blob = new Blob(this.chunks, { type: this.mimeType });
-        // Clean up
-        this.stream.getTracks().forEach((t) => t.stop());
         resolve(blob);
       };
 
       this.recorder.onerror = (e) => {
+        this.stopped = true;
+        this.stream.getTracks().forEach((t) => t.stop());
         reject(new Error(`MediaRecorder error: ${(e as ErrorEvent).message ?? "unknown"}`));
       };
 

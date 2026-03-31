@@ -1098,26 +1098,37 @@ export class VideoExporter {
 
     mrExporter.start();
 
-    for (let i = 0; i < totalFrames; i++) {
-      if (this.cancelled) return null;
+    try {
+      for (let i = 0; i < totalFrames; i++) {
+        if (this.cancelled) {
+          mrExporter.cleanup();
+          return null;
+        }
 
-      await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
-      await mrExporter.captureFrame();
+        await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
+        await mrExporter.captureFrame();
 
-      onProgress({
-        phase: "capturing",
-        current: i + 1,
-        total: totalFrames,
-        encodingMethod: "mediarecorder",
-      });
+        onProgress({
+          phase: "capturing",
+          current: i + 1,
+          total: totalFrames,
+          encodingMethod: "mediarecorder",
+        });
+      }
+
+      if (this.cancelled) {
+        mrExporter.cleanup();
+        return null;
+      }
+
+      onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "mediarecorder" });
+      const blob = await mrExporter.finalize();
+      onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "mediarecorder" });
+      return blob;
+    } catch (e) {
+      mrExporter.cleanup();
+      throw e;
     }
-
-    if (this.cancelled) return null;
-
-    onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "mediarecorder" });
-    const blob = await mrExporter.finalize();
-    onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "mediarecorder" });
-    return blob;
   }
 
   private async exportWithServer(
