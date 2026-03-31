@@ -40,12 +40,13 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+
 
 # Auto-generated
-next-env.d.ts
-next-env.d.ts
+
 package-lock.json
 
 # worktree temp dirs
 tmp/
+next-env.d.ts
+
