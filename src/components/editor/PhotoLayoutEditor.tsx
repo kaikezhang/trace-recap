@@ -140,6 +140,7 @@ function usePhotoDimensions(photos: Photo[]): Array<Photo & { aspect: number }> 
     }));
   const [dims, setDims] = useState<Array<Photo & { aspect: number }>>(() => buildMetas());
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- photoKey is a stable string derived from photos; using photos directly causes infinite re-renders
   useEffect(() => {
     setDims(buildMetas());
     if (photos.length === 0) {
@@ -169,7 +170,7 @@ function usePhotoDimensions(photos: Photo[]): Array<Photo & { aspect: number }> 
     return () => {
       cancelled = true;
     };
-  }, [photoKey, photos]);
+  }, [photoKey]);
 
   return dims;
 }
