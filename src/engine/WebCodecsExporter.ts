@@ -1,6 +1,14 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 
 export function isWebCodecsSupported(): boolean {
+  // iOS browsers (Safari, Chrome, Firefox) all use WebKit which has
+  // VideoEncoder/VideoFrame objects but encoding often fails at runtime.
+  // Skip WebCodecs on iOS to avoid double-encoding (attempt + fallback).
+  const isIOS = typeof navigator !== "undefined" &&
+    /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+    !(window as unknown as Record<string, unknown>).MSStream;
+  if (isIOS) return false;
+
   return (
     typeof VideoEncoder !== "undefined" &&
     typeof VideoFrame !== "undefined"
