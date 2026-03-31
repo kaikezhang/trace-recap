@@ -1,6 +1,6 @@
 import * as turf from "@turf/turf";
 import type mapboxgl from "mapbox-gl";
-import type { ExportSettings, Photo, PhotoAnimation, PhotoStyle } from "@/types";
+import type { ExportSettings, Photo, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 import type { AnimationEvent } from "./AnimationEngine";
 import {
@@ -18,6 +18,7 @@ import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
 import { isMediaRecorderSupported, MediaRecorderExporter } from "./MediaRecorderExporter";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { resolveSceneTransition, computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from "@/lib/sceneTransition";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -975,6 +976,296 @@ export class VideoExporter {
     }
   }
 
+  /**
+   * Draw incoming photo set during scene transitions (dissolve/blur-dissolve/wipe).
+   * Composites the incoming location's photos with transition-appropriate opacity/blur/clip.
+   */
+  private drawSceneTransitionPhotos(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    scaleX: number,
+    captured: { progress: AnimationEvent | null },
+    frameIndex: number,
+    fps: number,
+  ): void {
+    const progress = captured.progress;
+    if (!progress) return;
+    if (progress.sceneTransitionProgress === undefined) return;
+    if (progress.incomingGroupIndex === undefined) return;
+
+    // Get global scene transition setting
+    const uiState = useUIStore.getState();
+    const globalTransition = uiState.sceneTransition ?? "dissolve";
+
+    const groups = this.engine.getGroups();
+
+    // Resolve per-location transition from outgoing location
+    const outgoingGroup = progress.outgoingGroupIndex !== undefined ? groups[progress.outgoingGroupIndex] : undefined;
+    const outgoingLayout = outgoingGroup?.toLoc.photoLayout;
+    const effectiveTransition: SceneTransition = resolveSceneTransition(outgoingLayout, globalTransition);
+
+    if (effectiveTransition === "cut") return;
+
+    const incomingGroup = groups[progress.incomingGroupIndex];
+    if (!incomingGroup) return;
+
+    const incomingPhotos: Photo[] = incomingGroup.toLoc.photos;
+    if (incomingPhotos.length === 0) return;
+
+    const transitionProgress = progress.sceneTransitionProgress;
+
+    // Apply outgoing transition to the ALREADY drawn photos
+    // We need to modulate what was just drawn by drawPhotos.
+    // Since drawPhotos already drew the outgoing photos, we can't easily change their opacity retroactively.
+    // Instead, for the export, we handle the transition by drawing the incoming photos with the appropriate opacity.
+    // The outgoing photos' exit was already handled by drawPhotos via photoOpacity.
+
+    // Compute incoming transition values
+    let incomingOpacity = 1;
+    let incomingBlur = 0;
+    let clipPath: { direction: string; position: number } | null = null;
+
+    switch (effectiveTransition) {
+      case "dissolve": {
+        const { incoming } = computeDissolveOpacity(transitionProgress);
+        incomingOpacity = incoming;
+        break;
+      }
+      case "blur-dissolve": {
+        const { incoming, blur } = computeBlurDissolve(transitionProgress);
+        incomingOpacity = incoming;
+        incomingBlur = blur;
+        break;
+      }
+      case "wipe": {
+        const bearing = progress.transitionBearing ?? 0;
+        const { wipePosition } = computeWipeProgress(transitionProgress, bearing);
+        const normBearing = ((bearing % 360) + 360) % 360;
+        let direction: string;
+        if (normBearing >= 315 || normBearing < 45) direction = "north";
+        else if (normBearing >= 45 && normBearing < 135) direction = "east";
+        else if (normBearing >= 135 && normBearing < 225) direction = "south";
+        else direction = "west";
+        clipPath = { direction, position: wipePosition };
+        break;
+      }
+    }
+
+    if (incomingOpacity <= 0) return;
+
+    // Draw incoming photos
+    const layout = incomingGroup.toLoc.photoLayout;
+    const gapPx = layout?.gap ?? 8;
+    const borderRadiusPx = layout?.borderRadius ?? 8;
+
+    const orderedPhotos = (() => {
+      if (layout?.order && layout.order.length > 0) {
+        const photoMap = new Map(incomingPhotos.map((p) => [p.id, p]));
+        const ordered = layout.order
+          .map((id) => photoMap.get(id))
+          .filter((p): p is Photo => !!p);
+        for (const p of incomingPhotos) {
+          if (!ordered.find((o) => o.id === p.id)) ordered.push(p);
+        }
+        return ordered;
+      }
+      return incomingPhotos;
+    })();
+
+    const loaded: { photo: Photo; preloaded: PreloadedPhoto }[] = [];
+    for (const photo of orderedPhotos) {
+      const preloaded = this.photoImages.get(photo.url);
+      if (preloaded) loaded.push({ photo, preloaded });
+    }
+    if (loaded.length === 0) return;
+
+    const pad = 6 * scaleX;
+    const radius = borderRadiusPx * scaleX;
+    const shadowOffX = 2 * scaleX;
+    const shadowOffY = 2 * scaleX;
+    const captionFontSize = 14 * scaleX;
+    const captionH = 28 * scaleX;
+
+    const insetW = canvasWidth * 0.95;
+    const insetH = canvasHeight * 0.88;
+    const insetX = (canvasWidth - insetW) / 2;
+    const insetY = (canvasHeight - insetH) / 2;
+
+    const containerAspect = insetW / insetH;
+    const layoutMetas = loaded.map(({ photo, preloaded }) => ({
+      id: photo.id,
+      aspect: preloaded.aspect,
+    }));
+    const widthPx = insetW / scaleX;
+    const rects = layout?.mode === "manual" && layout.template
+      ? computeTemplateLayout(layoutMetas, containerAspect, layout.template, gapPx, widthPx, layout.customProportions, layout.layoutSeed)
+      : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
+    const count = loaded.length;
+    const isPolaroid = layout?.template === "polaroid";
+    const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
+
+    // Apply canvas clip for wipe transition
+    if (clipPath) {
+      ctx.save();
+      ctx.beginPath();
+      const pos = clipPath.position;
+      switch (clipPath.direction) {
+        case "north":
+          ctx.rect(0, (1 - pos) * canvasHeight, canvasWidth, pos * canvasHeight);
+          break;
+        case "south":
+          ctx.rect(0, 0, canvasWidth, pos * canvasHeight);
+          break;
+        case "east":
+          ctx.rect((1 - pos) * canvasWidth, 0, pos * canvasWidth, canvasHeight);
+          break;
+        case "west":
+          ctx.rect(0, 0, pos * canvasWidth, canvasHeight);
+          break;
+      }
+      ctx.clip();
+    }
+
+    for (let i = 0; i < rects.length; i++) {
+      const rect = rects[i];
+      const { photo, preloaded } = loaded[i];
+      const hasCaption = !!photo.caption;
+      const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
+
+      const rx = insetX + rect.x * insetW;
+      const ry = insetY + rect.y * insetH;
+      const rw = rect.width * insetW;
+      const rh = rect.height * insetH;
+      const frameW = rw;
+      const frameH = rh;
+
+      let rotation: number;
+      if (rect.rotation != null) {
+        rotation = rect.rotation;
+      } else if (count <= 3) {
+        if (i === 0) rotation = -2;
+        else if (i === count - 1) rotation = 2;
+        else rotation = 0;
+      } else {
+        rotation = i % 2 === 0 ? -1.5 : 1.5;
+      }
+
+      const centerX = rx + frameW / 2;
+      const centerY = ry + frameH / 2;
+
+      ctx.save();
+      ctx.globalAlpha = incomingOpacity;
+      if (incomingBlur > 0) {
+        ctx.filter = `blur(${incomingBlur * scaleX}px)`;
+      }
+      ctx.translate(centerX, centerY);
+      ctx.rotate(rotation * Math.PI / 180);
+
+      if (isPolaroid) {
+        const polPadSide = frameW * 0.04;
+        const polPadBottom = frameH * 0.10;
+        const polPadTop = frameW * 0.04;
+        const polRadius = 4 * scaleX;
+
+        ctx.shadowColor = "rgba(0,0,0,0.25)";
+        ctx.shadowBlur = 16 * scaleX;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4 * scaleX;
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.roundRect(-frameW / 2, -frameH / 2, frameW, frameH, polRadius);
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+
+        const imgAreaX = -frameW / 2 + polPadSide;
+        const imgAreaY = -frameH / 2 + polPadTop;
+        const imgAreaW = frameW - polPadSide * 2;
+        const imgAreaH = frameH - polPadTop - polPadBottom;
+
+        const imgAspect = preloaded.aspect;
+        const areaAspect = imgAreaW / imgAreaH;
+        let drawW: number, drawH: number, drawX: number, drawY: number;
+
+        if (photoStyle === "kenburns") {
+          if (imgAspect > areaAspect) { drawH = imgAreaH; drawW = imgAreaH * imgAspect; }
+          else { drawW = imgAreaW; drawH = imgAreaW / imgAspect; }
+          drawX = imgAreaX + (imgAreaW - drawW) * fp.x;
+          drawY = imgAreaY + (imgAreaH - drawH) * fp.y;
+        } else {
+          if (imgAspect > areaAspect) { drawW = imgAreaW; drawH = imgAreaW / imgAspect; drawX = imgAreaX; drawY = imgAreaY + (imgAreaH - drawH) / 2; }
+          else { drawH = imgAreaH; drawW = imgAreaH * imgAspect; drawX = imgAreaX + (imgAreaW - drawW) / 2; drawY = imgAreaY; }
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(imgAreaX, imgAreaY, imgAreaW, imgAreaH);
+        ctx.clip();
+        ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
+        ctx.restore();
+
+        if (hasCaption) {
+          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = "#374151";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(photo.caption!, 0, imgAreaY + imgAreaH + (polPadBottom - polPadTop) / 2, imgAreaW);
+        }
+      } else {
+        const imgAspect = preloaded.aspect;
+        const targetAspect = frameW / frameH;
+        let drawW: number, drawH: number, drawX: number, drawY: number;
+
+        if (photoStyle === "kenburns") {
+          if (imgAspect > targetAspect) { drawH = frameH; drawW = frameH * imgAspect; }
+          else { drawW = frameW; drawH = frameW / imgAspect; }
+          drawX = -frameW / 2 + (frameW - drawW) * fp.x;
+          drawY = -frameH / 2 + (frameH - drawH) * fp.y;
+        } else {
+          if (imgAspect > targetAspect) { drawW = frameW; drawH = frameW / imgAspect; drawX = -frameW / 2; drawY = -drawH / 2; }
+          else { drawH = frameH; drawW = frameH * imgAspect; drawX = -drawW / 2; drawY = -frameH / 2; }
+        }
+
+        ctx.shadowColor = "rgba(0,0,0,0.3)";
+        ctx.shadowBlur = 12 * scaleX;
+        ctx.shadowOffsetX = shadowOffX;
+        ctx.shadowOffsetY = shadowOffY;
+
+        ctx.save();
+        ctx.beginPath();
+        if (photoStyle === "kenburns") {
+          ctx.roundRect(-frameW / 2, -frameH / 2, frameW, frameH, radius);
+        } else {
+          ctx.roundRect(drawX, drawY, drawW, drawH, radius);
+        }
+        ctx.clip();
+        ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
+        ctx.restore();
+
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+
+        if (hasCaption) {
+          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = "#374151";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(photo.caption!, 0, drawY + drawH + captionH / 2, drawW);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // Restore clip if wipe was applied
+    if (clipPath) {
+      ctx.restore();
+    }
+  }
+
   /** Draw a filled rounded rectangle */
   private drawRoundedRect(
     ctx: CanvasRenderingContext2D,
@@ -1120,6 +1411,7 @@ export class VideoExporter {
     this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
     this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured, frameIndex, fps);
+    this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured, frameIndex, fps);
 
     // Clear photo start tracking when photos stop showing so re-entry is tracked fresh
     const capturedProgress = captured.progress as AnimationEvent | null;

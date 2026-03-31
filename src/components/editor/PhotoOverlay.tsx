@@ -5,8 +5,9 @@ import { motion, type Transition, type TargetAndTransition } from "framer-motion
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import { resolvePhotoAnimations, resolvePhotoStyle, getKenBurnsTransform, KEN_BURNS_DURATION_SEC } from "@/lib/photoAnimation";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
-import type { Photo, PhotoLayout, PhotoAnimation } from "@/types";
+import type { Photo, PhotoLayout, PhotoAnimation, SceneTransition } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
+import { computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from "@/lib/sceneTransition";
 
 /** Compute framer-motion initial/animate values for a given animation style */
 function getEnterAnimation(
@@ -141,6 +142,16 @@ interface PhotoOverlayProps {
   photoLayout?: PhotoLayout;
   opacity?: number; // 0-1, for fade-out transition
   containerMode?: "viewport" | "parent"; // 'parent' uses 100% sizing instead of vw/vh
+  /** Active scene transition type */
+  sceneTransition?: SceneTransition;
+  /** Scene transition progress (0-1): 0 = fully outgoing, 1 = fully incoming */
+  sceneTransitionProgress?: number;
+  /** Photos from the incoming location during a scene transition */
+  incomingPhotos?: Photo[];
+  /** PhotoLayout of the incoming location during a scene transition */
+  incomingPhotoLayout?: PhotoLayout;
+  /** Bearing for wipe direction */
+  transitionBearing?: number;
 }
 
 interface PhotoMeta extends Photo {
@@ -192,7 +203,18 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
   return dims;
 }
 
-export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1, containerMode = "viewport" }: PhotoOverlayProps) {
+export default function PhotoOverlay({
+  photos,
+  visible,
+  photoLayout,
+  opacity = 1,
+  containerMode = "viewport",
+  sceneTransition,
+  sceneTransitionProgress,
+  incomingPhotos,
+  incomingPhotoLayout,
+  transitionBearing,
+}: PhotoOverlayProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const photoAnimation = useUIStore((s) => s.photoAnimation);
   const globalPhotoStyle = useUIStore((s) => s.photoStyle);
@@ -282,6 +304,123 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
   // Caption sizing: match export constants (captionFontSize ~14px at 1000px width, plus gap)
   const captionH = 28; // space for caption text + gap below image
 
+  // Scene transition: compute outgoing wrapper styles
+  const isActiveTransition = sceneTransition && sceneTransition !== "cut" && sceneTransitionProgress !== undefined;
+  const transitionOutgoingStyle = useMemo<React.CSSProperties>(() => {
+    if (!isActiveTransition || sceneTransitionProgress === undefined) return {};
+    switch (sceneTransition) {
+      case "dissolve": {
+        const { outgoing } = computeDissolveOpacity(sceneTransitionProgress);
+        return { opacity: outgoing };
+      }
+      case "blur-dissolve": {
+        const { outgoing, blur } = computeBlurDissolve(sceneTransitionProgress);
+        return { opacity: outgoing, filter: `blur(${blur}px)` };
+      }
+      case "wipe": {
+        const { wipePosition } = computeWipeProgress(sceneTransitionProgress, transitionBearing ?? 0);
+        // Wipe out: reveal incoming by shrinking outgoing from the travel direction
+        const bearing = transitionBearing ?? 0;
+        const normBearing = ((bearing % 360) + 360) % 360;
+        // Map bearing to a clip direction
+        let clipPath: string;
+        if (normBearing >= 315 || normBearing < 45) {
+          // North: wipe upward (top to bottom)
+          clipPath = `inset(0 0 ${wipePosition * 100}% 0)`;
+        } else if (normBearing >= 45 && normBearing < 135) {
+          // East: wipe rightward
+          clipPath = `inset(0 ${wipePosition * 100}% 0 0)`;
+        } else if (normBearing >= 135 && normBearing < 225) {
+          // South: wipe downward
+          clipPath = `inset(${wipePosition * 100}% 0 0 0)`;
+        } else {
+          // West: wipe leftward
+          clipPath = `inset(0 0 0 ${wipePosition * 100}%)`;
+        }
+        return { clipPath };
+      }
+      default:
+        return {};
+    }
+  }, [isActiveTransition, sceneTransition, sceneTransitionProgress, transitionBearing]);
+
+  // Incoming photos for scene transition
+  const incomingMetas = usePhotoDimensions(incomingPhotos ?? []);
+  const hasIncomingPhotos = isActiveTransition && incomingMetas.length > 0;
+  const incomingGapPx = incomingPhotoLayout?.gap ?? 8;
+  const incomingBorderRadiusPx = incomingPhotoLayout?.borderRadius ?? 8;
+  const { enterAnimation: incomingEnterAnim } = resolvePhotoAnimations(incomingPhotoLayout, photoAnimation);
+  const incomingPhotoStyleResolved = resolvePhotoStyle(incomingPhotoLayout, globalPhotoStyle);
+
+  const incomingOrderedMetas: PhotoMeta[] = useMemo(() => {
+    if (!hasIncomingPhotos) return [];
+    if (incomingPhotoLayout?.order && incomingPhotoLayout.order.length > 0) {
+      const metaMap = new Map(incomingMetas.map((m) => [m.id, m]));
+      const ordered = incomingPhotoLayout.order
+        .map((id) => metaMap.get(id))
+        .filter((m): m is PhotoMeta => !!m);
+      for (const m of incomingMetas) {
+        if (!ordered.find((o) => o.id === m.id)) ordered.push(m);
+      }
+      return ordered;
+    }
+    return incomingMetas;
+  }, [hasIncomingPhotos, incomingMetas, incomingPhotoLayout]);
+
+  const incomingLayoutMetas: LayoutPhotoMeta[] = hasIncomingPhotos
+    ? incomingOrderedMetas.map((m) => ({ id: m.id, aspect: m.aspect }))
+    : [];
+
+  const incomingRects = useMemo(() => {
+    if (!hasIncomingPhotos) return [];
+    const w = containerSize.w || 1000;
+    if (incomingPhotoLayout?.mode === "manual" && incomingPhotoLayout.template) {
+      return computeTemplateLayout(
+        incomingLayoutMetas,
+        containerAspect,
+        incomingPhotoLayout.template,
+        incomingGapPx,
+        w,
+        incomingPhotoLayout.customProportions,
+        incomingPhotoLayout.layoutSeed
+      );
+    }
+    return computeAutoLayout(incomingLayoutMetas, containerAspect, incomingGapPx, w);
+  }, [hasIncomingPhotos, incomingLayoutMetas, containerAspect, incomingGapPx, containerSize.w, incomingPhotoLayout]);
+
+  const transitionIncomingStyle = useMemo<React.CSSProperties>(() => {
+    if (!isActiveTransition || sceneTransitionProgress === undefined) return {};
+    switch (sceneTransition) {
+      case "dissolve": {
+        const { incoming } = computeDissolveOpacity(sceneTransitionProgress);
+        return { opacity: incoming };
+      }
+      case "blur-dissolve": {
+        const { incoming, blur } = computeBlurDissolve(sceneTransitionProgress);
+        return { opacity: incoming, filter: `blur(${blur}px)` };
+      }
+      case "wipe": {
+        const { wipePosition } = computeWipeProgress(sceneTransitionProgress, transitionBearing ?? 0);
+        const bearing = transitionBearing ?? 0;
+        const normBearing = ((bearing % 360) + 360) % 360;
+        // Incoming wipe: inverse of outgoing
+        let clipPath: string;
+        if (normBearing >= 315 || normBearing < 45) {
+          clipPath = `inset(${(1 - wipePosition) * 100}% 0 0 0)`;
+        } else if (normBearing >= 45 && normBearing < 135) {
+          clipPath = `inset(0 0 0 ${(1 - wipePosition) * 100}%)`;
+        } else if (normBearing >= 135 && normBearing < 225) {
+          clipPath = `inset(0 0 ${(1 - wipePosition) * 100}% 0)`;
+        } else {
+          clipPath = `inset(0 ${(1 - wipePosition) * 100}% 0 0)`;
+        }
+        return { clipPath };
+      }
+      default:
+        return {};
+    }
+  }, [isActiveTransition, sceneTransition, sceneTransitionProgress, transitionBearing]);
+
   return (
     <div
       ref={containerRef}
@@ -295,7 +434,8 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
         right: 0,
       }}
     >
-      <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
+      {/* Outgoing photos */}
+      <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionOutgoingStyle }}>
         {hasDisplayPhotos && rects.map((rect, i) => {
             const photo = orderedMetas[i];
             if (!photo) return null;
@@ -422,6 +562,109 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
             );
           })}
       </div>
+
+      {/* Incoming photos — scene transition overlay */}
+      {hasIncomingPhotos && (
+        <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionIncomingStyle }}>
+          {incomingRects.map((rect, i) => {
+            const photo = incomingOrderedMetas[i];
+            if (!photo) return null;
+            const n = incomingOrderedMetas.length;
+            const hasCaption = !!photo.caption;
+            const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
+            const isPolaroid = incomingPhotoLayout?.template === "polaroid";
+
+            const rotation = rect.rotation != null
+              ? rect.rotation
+              : n <= 3
+                ? (i === 0 ? -2 : i === n - 1 ? 2 : 0)
+                : (i % 2 === 0 ? -1.5 : 1.5);
+
+            const isKenBurns = incomingPhotoStyleResolved === "kenburns";
+            const kbStart = isKenBurns ? getKenBurnsTransform(0, i, fp) : null;
+            const kbEnd = isKenBurns ? getKenBurnsTransform(1, i, fp) : null;
+
+            const enter = getEnterAnimation(incomingEnterAnim, i, n);
+            const enterDelay = typeof (enter.transition as { delay?: number }).delay === "number"
+              ? (enter.transition as { delay?: number }).delay!
+              : 0;
+
+            return (
+              <motion.div
+                key={`incoming-${photo.id}`}
+                initial={enter.initial}
+                animate={{ ...enter.animate, rotate: rotation }}
+                transition={enter.transition}
+                className="absolute overflow-hidden drop-shadow-xl"
+                style={{
+                  left: `${rect.x * 100}%`,
+                  top: `${rect.y * 100}%`,
+                  width: `${rect.width * 100}%`,
+                  height: `${rect.height * 100}%`,
+                  borderRadius: isPolaroid ? "4px" : `${incomingBorderRadiusPx}px`,
+                  rotate: rotation,
+                  display: "flex",
+                  flexDirection: "column" as const,
+                  ...(isPolaroid ? {
+                    background: "white",
+                    padding: "4% 4% 10% 4%",
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+                  } : {}),
+                }}
+              >
+                <div
+                  className="w-full overflow-hidden"
+                  style={{ flex: 1, minHeight: 0, borderRadius: `${incomingBorderRadiusPx}px` }}
+                >
+                  {isKenBurns && kbStart && kbEnd ? (
+                    <motion.img
+                      src={photo.url}
+                      alt={photo.caption || ""}
+                      className="w-full h-full object-cover"
+                      initial={{
+                        scale: kbStart.scale,
+                        x: `${kbStart.translateX}%`,
+                        y: `${kbStart.translateY}%`,
+                      }}
+                      animate={{
+                        scale: kbEnd.scale,
+                        x: `${kbEnd.translateX}%`,
+                        y: `${kbEnd.translateY}%`,
+                      }}
+                      transition={{
+                        duration: KEN_BURNS_DURATION_SEC,
+                        delay: enterDelay,
+                        ease: "linear",
+                        repeat: 0,
+                      }}
+                      style={{
+                        objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
+                      }}
+                    />
+                  ) : (
+                    <img
+                      src={photo.url}
+                      alt={photo.caption || ""}
+                      className="w-full h-full object-contain"
+                      style={{
+                        objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
+                      }}
+                    />
+                  )}
+                </div>
+                {hasCaption && (
+                  <p
+                    className="text-sm text-gray-700 text-center truncate px-1"
+                    style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, flexShrink: 0 }}
+                  >
+                    {photo.caption}
+                  </p>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

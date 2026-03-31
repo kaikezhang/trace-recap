@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AspectRatio, PhotoAnimation, PhotoStyle } from "@/types";
+import type { AspectRatio, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
 
 export type BottomSheetState = "collapsed" | "half" | "full";
 
@@ -14,6 +14,7 @@ interface PersistedUISettings {
   viewportRatio: AspectRatio;
   photoAnimation: PhotoAnimation;
   photoStyle: PhotoStyle;
+  sceneTransition: SceneTransition;
   moodColorsEnabled: boolean;
 }
 
@@ -54,6 +55,7 @@ interface UIState {
   viewportRatio: AspectRatio; // WYSIWYG viewport aspect ratio
   photoAnimation: PhotoAnimation; // Photo enter/exit animation style
   photoStyle: PhotoStyle; // Photo display style (classic or kenburns)
+  sceneTransition: SceneTransition; // Scene transition style between locations
   moodColorsEnabled: boolean; // Use photo-extracted colors for route lines
 
   setLeftPanelOpen: (open: boolean) => void;
@@ -70,6 +72,7 @@ interface UIState {
   setViewportRatio: (ratio: AspectRatio) => void;
   setPhotoAnimation: (animation: PhotoAnimation) => void;
   setPhotoStyle: (style: PhotoStyle) => void;
+  setSceneTransition: (transition: SceneTransition) => void;
   setMoodColorsEnabled: (enabled: boolean) => void;
 }
 
@@ -88,6 +91,7 @@ export const useUIStore = create<UIState>((set) => ({
   viewportRatio: saved.viewportRatio ?? "free",
   photoAnimation: saved.photoAnimation ?? "scale",
   photoStyle: saved.photoStyle ?? "classic",
+  sceneTransition: saved.sceneTransition ?? "dissolve",
   moodColorsEnabled: saved.moodColorsEnabled ?? true,
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
@@ -104,6 +108,7 @@ export const useUIStore = create<UIState>((set) => ({
   setViewportRatio: (viewportRatio) => set({ viewportRatio }),
   setPhotoAnimation: (photoAnimation) => set({ photoAnimation }),
   setPhotoStyle: (photoStyle) => set({ photoStyle }),
+  setSceneTransition: (sceneTransition) => set({ sceneTransition }),
   setMoodColorsEnabled: (moodColorsEnabled) => set({ moodColorsEnabled }),
 }));
 
@@ -121,6 +126,7 @@ useUIStore.subscribe((state) => {
       viewportRatio: state.viewportRatio,
       photoAnimation: state.photoAnimation,
       photoStyle: state.photoStyle,
+      sceneTransition: state.sceneTransition,
       moodColorsEnabled: state.moodColorsEnabled,
     });
   }, 500);

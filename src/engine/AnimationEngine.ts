@@ -35,6 +35,15 @@ export interface AnimationEvent {
   groupIndex: number;
   /** All segment indices in the current group (for route drawing) */
   groupSegmentIndices: number[];
+  /** Scene transition progress (0-1): 0 = fully outgoing, 1 = fully incoming.
+   *  Only set during the transition window between locations. */
+  sceneTransitionProgress?: number;
+  /** Group index of the outgoing (departing) location during a scene transition */
+  outgoingGroupIndex?: number;
+  /** Group index of the incoming (arriving) location during a scene transition */
+  incomingGroupIndex?: number;
+  /** Bearing from outgoing to incoming location (degrees), for wipe direction */
+  transitionBearing?: number;
 }
 
 type AnimationListener = (event: AnimationEvent) => void;
@@ -469,6 +478,48 @@ export class AnimationEngine {
       }
     }
 
+    // Scene transition metadata: track the dissolve window between locations.
+    // Transition window spans: outgoing HOVER+ZOOM_OUT → incoming ZOOM_IN.
+    // Progress goes 0 (fully outgoing) → 1 (fully incoming).
+    let sceneTransitionProgress: number | undefined;
+    let outgoingGroupIndex: number | undefined;
+    let incomingGroupIndex: number | undefined;
+    let transitionBearing: number | undefined;
+
+    if (groupIndex > 0) {
+      const prevGroup = this.groups[groupIndex - 1];
+      const prevHasPhotos = prevGroup && prevGroup.toLoc.photos.length > 0;
+      const nextHasPhotos = group.toLoc.photos.length > 0;
+
+      if (prevHasPhotos || nextHasPhotos) {
+        if (phase === "HOVER") {
+          // Early transition: outgoing photos fading out
+          sceneTransitionProgress = phaseProgress * 0.4; // 0 → 0.4
+          outgoingGroupIndex = groupIndex - 1;
+          incomingGroupIndex = groupIndex;
+        } else if (phase === "ZOOM_OUT") {
+          // Mid transition: outgoing nearly gone
+          sceneTransitionProgress = 0.4 + phaseProgress * 0.2; // 0.4 → 0.6
+          outgoingGroupIndex = groupIndex - 1;
+          incomingGroupIndex = groupIndex;
+        } else if (phase === "ZOOM_IN" && nextHasPhotos) {
+          // Late transition: incoming photos fading in
+          sceneTransitionProgress = 0.6 + phaseProgress * 0.4; // 0.6 → 1.0
+          outgoingGroupIndex = groupIndex - 1;
+          incomingGroupIndex = groupIndex;
+        }
+
+        // Compute bearing between outgoing and incoming locations
+        if (sceneTransitionProgress !== undefined && prevGroup) {
+          const fromCoords = prevGroup.toLoc.coordinates;
+          const toCoords = group.toLoc.coordinates;
+          const dLng = toCoords[0] - fromCoords[0];
+          const dLat = toCoords[1] - fromCoords[1];
+          transitionBearing = (Math.atan2(dLng, dLat) * 180) / Math.PI;
+        }
+      }
+    }
+
     const progress = clamped / this.totalDuration;
     this.emit({
       type: "progress",
@@ -482,6 +533,10 @@ export class AnimationEngine {
       photoOpacity,
       groupIndex,
       groupSegmentIndices: segIndices,
+      sceneTransitionProgress,
+      outgoingGroupIndex,
+      incomingGroupIndex,
+      transitionBearing,
     });
 
     // Route draw progress for all segments in the group
