@@ -717,14 +717,16 @@ export default function PhotoOverlay({
                   {displayIsFreeMode && hasCaption && (
                     <div
                       key={`${photo.id}-caption`}
-                      className="absolute whitespace-nowrap px-2 py-1 text-center drop-shadow-lg"
+                      className="absolute whitespace-nowrap rounded-md px-2 py-1 text-center shadow-sm"
                       style={{
                         left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
                         top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
                         transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
+                        backgroundColor: "rgba(255,255,255,0.74)",
                         color: captionDisplay.color,
                         fontFamily: captionDisplay.fontFamily,
                         fontSize: `${captionDisplay.fontSizePx}px`,
+                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
                         zIndex: freeTransform?.zIndex ?? index,
                       }}
                     >
@@ -842,14 +844,16 @@ export default function PhotoOverlay({
                 {displayIsFreeMode && hasCaption && (
                   <div
                     key={`${photo.id}-caption`}
-                    className="absolute whitespace-nowrap px-2 py-1 text-center drop-shadow-lg"
+                    className="absolute whitespace-nowrap rounded-md px-2 py-1 text-center shadow-sm"
                     style={{
                       left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
                       top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
                       transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
+                      backgroundColor: "rgba(255,255,255,0.74)",
                       color: captionDisplay.color,
                       fontFamily: captionDisplay.fontFamily,
                       fontSize: `${captionDisplay.fontSizePx}px`,
+                      textShadow: "0 1px 3px rgba(0,0,0,0.35)",
                       opacity: exitProgress > 0 ? exit.exitOpacity : 1,
                       zIndex: (freeTransform?.zIndex ?? index) + 1,
                     }}
@@ -979,14 +983,16 @@ export default function PhotoOverlay({
                   {incomingIsFreeMode && hasCaption && (
                     <div
                       key={`incoming-${photo.id}-caption`}
-                      className="absolute whitespace-nowrap px-2 py-1 text-center drop-shadow-lg"
+                      className="absolute whitespace-nowrap rounded-md px-2 py-1 text-center shadow-sm"
                       style={{
                         left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
                         top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
                         transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
+                        backgroundColor: "rgba(255,255,255,0.74)",
                         color: captionDisplay.color,
                         fontFamily: captionDisplay.fontFamily,
                         fontSize: `${captionDisplay.fontSizePx}px`,
+                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
                         zIndex: (freeTransform?.zIndex ?? index) + 1,
                       }}
                     >
