@@ -457,13 +457,13 @@ export class AnimationEngine {
       const prevGroup = this.groups[groupIndex - 1];
       if (prevGroup && prevGroup.toLoc.photos.length > 0) {
         if (phase === "HOVER") {
-          // HOVER: keep photos at full opacity
+          // HOVER: start fading out previous photos
           showPhotos = true;
-          photoOpacity = 1;
+          photoOpacity = 1 - phaseProgress * 0.5; // fade from 1 → 0.5 during HOVER
         } else if (phase === "ZOOM_OUT") {
-          // ZOOM_OUT: slow fade from 1 → 0.3 (exit animation plays during this)
+          // ZOOM_OUT: continue fade from 0.5 → 0
           showPhotos = true;
-          photoOpacity = 1 - phaseProgress * 0.7;
+          photoOpacity = 0.5 * (1 - phaseProgress);
         } else if (phase === "FLY" && phaseProgress < 0.3) {
           // Continue fading through first 30% of FLY for smoother exit
           showPhotos = true;
