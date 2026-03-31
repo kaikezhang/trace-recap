@@ -156,6 +156,17 @@ let persistenceInitialized = false;
 let skipNextPersist = false;
 let persistSuspended = false;
 let lastSavedProjectJson = "";
+let diffCheckDisabled = false;
+
+function tryUpdateLastSavedJson(data: unknown): void {
+  if (diffCheckDisabled) return;
+  try {
+    lastSavedProjectJson = JSON.stringify(data);
+  } catch {
+    diffCheckDisabled = true;
+    lastSavedProjectJson = "";
+  }
+}
 let saveCommitChain: Promise<void> = Promise.resolve();
 const projectSaveVersions = new Map<string, number>();
 let activeLoadCompressionJob = 0;
@@ -693,19 +704,22 @@ async function persistProjectSnapshot(
     currentProjectName,
   );
 
-  let nextProjectJson: string;
-  try {
-    nextProjectJson = JSON.stringify(data);
-  } catch (error) {
-    console.warn("Project data too large to serialize for diff check, saving directly.", error);
-    nextProjectJson = "";
-  }
-  if (
-    nextProjectJson &&
-    currentProjectId === useProjectStore.getState().currentProjectId &&
-    nextProjectJson === lastSavedProjectJson
-  ) {
-    return false;
+  let nextProjectJson = "";
+  if (!diffCheckDisabled) {
+    try {
+      nextProjectJson = JSON.stringify(data);
+    } catch {
+      console.warn("Project too large for diff check — disabling for this session.");
+      diffCheckDisabled = true;
+      nextProjectJson = "";
+    }
+    if (
+      nextProjectJson &&
+      currentProjectId === useProjectStore.getState().currentProjectId &&
+      nextProjectJson === lastSavedProjectJson
+    ) {
+      return false;
+    }
   }
 
   const existingMeta = await resolveExistingProjectMeta(currentProjectId);
@@ -1273,7 +1287,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segmentColors: {},
         projects,
       });
-      lastSavedProjectJson = JSON.stringify(data);
+      tryUpdateLastSavedJson(data);
 
       useHistoryStore.getState().resetHistory();
       await get().regenerateSegmentGeometries();
@@ -1354,6 +1368,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const projects = await listProjectsFromDB();
 
       clearDirtyTracking();
+      diffCheckDisabled = false;
       set({
         currentProjectId: id,
         currentProjectName: projectName,
@@ -1364,7 +1379,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segmentTimingOverrides: {},
         segmentColors: {},
       });
-      lastSavedProjectJson = JSON.stringify(data);
+      tryUpdateLastSavedJson(data);
       useHistoryStore.getState().resetHistory();
 
       return id;
@@ -1401,7 +1416,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segmentTimingOverrides: parsed.segmentTimingOverrides,
         segmentColors: {},
       });
-      lastSavedProjectJson = JSON.stringify(data);
+      tryUpdateLastSavedJson(data);
       useHistoryStore.getState().resetHistory();
 
       await get().regenerateSegmentGeometries();
@@ -1443,7 +1458,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           segmentTimingOverrides: {},
           segmentColors: {},
         });
-        lastSavedProjectJson = JSON.stringify(data);
+        tryUpdateLastSavedJson(data);
         useHistoryStore.getState().resetHistory();
         return;
       }
@@ -1463,7 +1478,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segmentTimingOverrides: parsed.segmentTimingOverrides,
         segmentColors: {},
       });
-      lastSavedProjectJson = JSON.stringify(data);
+      tryUpdateLastSavedJson(data);
       useHistoryStore.getState().resetHistory();
 
       await get().regenerateSegmentGeometries();
