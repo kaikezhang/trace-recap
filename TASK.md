@@ -1,38 +1,38 @@
-# TASK: Hide Chapter Pin Numbers During Playback
+# TASK: Fix Caption Editor Issues (PR #80 Review Feedback)
 
 ⚠️ DO NOT MERGE. Create PR and stop.
 
-## Bug Description
+## Context
+PR #80 added photo caption editing with font/size controls. Codex reviewed and found 4 issues.
+You are on branch `fix/caption-editor-fixes` which already has the caption editor code merged with latest main.
 
-During preview playback, the numbered chapter pins (purple circles with "1", "2", "3" etc.) remain visible on the map. In the exported video, these numbered pins are correctly hidden — only the photo-based chapter pins (small circular thumbnails) appear after a city is visited.
+## Issues to Fix
 
-**Expected behavior**: During playback (playing or paused states), the numbered chapter pins should be hidden, matching the export behavior. They should only show when playback is **stopped/idle** (for editing purposes).
+### 1. Export path caption overlap
+In `VideoExporter.ts`, `drawPhotos()` and `drawSceneTransitionPhotos()` don't reserve space for captions.
+Large font sizes cause caption text to overlap with photo content.
+**Fix**: Calculate caption height and subtract it from the available photo area.
 
-## Current Behavior
-- **Stopped**: Numbered pins visible ✅ (correct — useful for editing)
-- **Playing**: Numbered pins visible ❌ (should be hidden)
-- **Paused**: Numbered pins visible ❌ (should be hidden)
-- **Export**: Numbered pins hidden ✅ (correct)
+### 2. Preview vs Export scaling mismatch
+Preview (`PhotoOverlay.tsx`) uses `containerSize.w / 1000` as scale factor.
+Export (`VideoExporter.ts`) uses `scaleX` based on full canvas width.
+These produce different font sizes — not WYSIWYG.
+**Fix**: Use the same scaling formula in both paths. The reference width should be 1000px in both.
 
-## Where to Fix
+### 3. Uncontrolled caption input
+`PhotoManager.tsx` uses `defaultValue` for the caption input — doesn't update on undo/redo or project reload.
+**Fix**: Use controlled `value` prop with onChange handler.
 
-Look at `src/components/editor/ChapterPinsOverlay.tsx` — this renders the numbered chapter pins on the map. It needs to check the playback state from `animationStore` and hide when playing or paused.
+### 4. Import normalization missing
+`captionFontFamily` and `captionFontSize` from loaded projects aren't validated.
+**Fix**: In `projectStore.ts` import/load path, clamp `captionFontSize` to [8, 72] and whitelist `captionFontFamily` to known fonts. Unknown values → defaults.
 
-The playback state is available from `useAnimationStore`:
-```ts
-const playbackState = useAnimationStore((s) => s.playbackState);
-// playbackState: "idle" | "playing" | "paused"
-```
-
-When `playbackState !== "idle"`, the numbered chapter pins should not render (return null or hide with opacity/display:none).
-
-## Files to Modify
-- `src/components/editor/ChapterPinsOverlay.tsx` — Add playback state check to hide pins during playback
+## Files to Change
+- `src/engine/VideoExporter.ts`
+- `src/components/editor/PhotoOverlay.tsx`
+- `src/components/editor/PhotoManager.tsx`
+- `src/stores/projectStore.ts`
 
 ## Verification
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm run build` passes
-- [ ] During preview: numbered pins hidden while playing
-- [ ] During preview: numbered pins hidden while paused
-- [ ] When stopped: numbered pins visible (for editing)
-- [ ] Photo-based breadcrumb pins (small photo circles) still appear during playback (these are separate)
+- `npx tsc --noEmit` must pass
+- `npm run build` must pass

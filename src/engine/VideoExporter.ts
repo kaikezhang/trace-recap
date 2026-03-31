@@ -1395,7 +1395,8 @@ export class VideoExporter {
     const radius = borderRadiusPx * scaleX;
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
-    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * scaleX;
+    const captionScale = canvasWidth / 1000;
+    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * captionScale;
     const captionH = captionFontSizeVal * 2;
     const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
 
@@ -1867,31 +1868,32 @@ export class VideoExporter {
         }
       } else {
         // Default: direct image with rounded corners
+        const availH = hasCaption ? frameH - captionH : frameH;
         const imgAspect = preloaded.aspect;
-        const targetAspect = frameW / frameH;
+        const targetAspect = frameW / availH;
         let drawW: number, drawH: number, drawX: number, drawY: number;
 
         if (photoStyle === "kenburns") {
           // Ken Burns: use "cover" (fill area, may crop) + focal-aware positioning
           if (imgAspect > targetAspect) {
-            drawH = frameH;
-            drawW = frameH * imgAspect;
+            drawH = availH;
+            drawW = availH * imgAspect;
           } else {
             drawW = frameW;
             drawH = frameW / imgAspect;
           }
           drawX = -frameW / 2 + (frameW - drawW) * fp.x;
-          drawY = -frameH / 2 + (frameH - drawH) * fp.y;
+          drawY = -frameH / 2 + (availH - drawH) * fp.y;
         } else {
           // Classic: use "contain" (fit entire image, no crop)
           if (imgAspect > targetAspect) {
             drawW = frameW;
             drawH = frameW / imgAspect;
             drawX = -frameW / 2;
-            drawY = -drawH / 2;
+            drawY = -frameH / 2 + (availH - drawH) / 2;
           } else {
-            drawH = frameH;
-            drawW = frameH * imgAspect;
+            drawH = availH;
+            drawW = availH * imgAspect;
             drawX = -drawW / 2;
             drawY = -frameH / 2;
           }
@@ -1908,7 +1910,7 @@ export class VideoExporter {
         ctx.beginPath();
         if (photoStyle === "kenburns") {
           // Clip to frame bounds for Ken Burns (image overflows due to cover+zoom)
-          ctx.roundRect(-frameW / 2, -frameH / 2, frameW, frameH, radius);
+          ctx.roundRect(-frameW / 2, -frameH / 2, frameW, availH, radius);
         } else {
           ctx.roundRect(drawX, drawY, drawW, drawH, radius);
         }
@@ -1919,7 +1921,7 @@ export class VideoExporter {
           const kbStagger = this.getStaggerDelay(enterAnimStyle, i);
           const kbProgress = Math.max(0, Math.min(1, (kenBurnsElapsed - kbStagger) / KEN_BURNS_DURATION_SEC));
           const kb = getKenBurnsTransform(kbProgress, i, fp);
-          ctx.translate(kb.translateX * frameW / 100, kb.translateY * frameH / 100);
+          ctx.translate(kb.translateX * frameW / 100, kb.translateY * availH / 100);
           ctx.scale(kb.scale, kb.scale);
         }
         ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
@@ -1939,7 +1941,7 @@ export class VideoExporter {
           ctx.fillText(
             photo.caption!,
             0,
-            drawY + drawH + captionH / 2,
+            -frameH / 2 + availH + captionH / 2,
             drawW
           );
         }
@@ -2063,7 +2065,8 @@ export class VideoExporter {
     const radius = borderRadiusPx * scaleX;
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
-    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * scaleX;
+    const captionScale = canvasWidth / 1000;
+    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * captionScale;
     const captionH = captionFontSizeVal * 2;
     const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
 
@@ -2216,18 +2219,19 @@ export class VideoExporter {
           ctx.fillText(photo.caption!, 0, imgAreaY + imgAreaH + (polPadBottom - polPadTop) / 2, imgAreaW);
         }
       } else {
+        const availH = hasCaption ? frameH - captionH : frameH;
         const imgAspect = preloaded.aspect;
-        const targetAspect = frameW / frameH;
+        const targetAspect = frameW / availH;
         let drawW: number, drawH: number, drawX: number, drawY: number;
 
         if (photoStyle === "kenburns") {
-          if (imgAspect > targetAspect) { drawH = frameH; drawW = frameH * imgAspect; }
+          if (imgAspect > targetAspect) { drawH = availH; drawW = availH * imgAspect; }
           else { drawW = frameW; drawH = frameW / imgAspect; }
           drawX = -frameW / 2 + (frameW - drawW) * fp.x;
-          drawY = -frameH / 2 + (frameH - drawH) * fp.y;
+          drawY = -frameH / 2 + (availH - drawH) * fp.y;
         } else {
-          if (imgAspect > targetAspect) { drawW = frameW; drawH = frameW / imgAspect; drawX = -frameW / 2; drawY = -drawH / 2; }
-          else { drawH = frameH; drawW = frameH * imgAspect; drawX = -drawW / 2; drawY = -frameH / 2; }
+          if (imgAspect > targetAspect) { drawW = frameW; drawH = frameW / imgAspect; drawX = -frameW / 2; drawY = -frameH / 2 + (availH - drawH) / 2; }
+          else { drawH = availH; drawW = availH * imgAspect; drawX = -drawW / 2; drawY = -frameH / 2; }
         }
 
         ctx.shadowColor = "rgba(0,0,0,0.3)";
@@ -2238,7 +2242,7 @@ export class VideoExporter {
         ctx.save();
         ctx.beginPath();
         if (photoStyle === "kenburns") {
-          ctx.roundRect(-frameW / 2, -frameH / 2, frameW, frameH, radius);
+          ctx.roundRect(-frameW / 2, -frameH / 2, frameW, availH, radius);
         } else {
           ctx.roundRect(drawX, drawY, drawW, drawH, radius);
         }
@@ -2256,7 +2260,7 @@ export class VideoExporter {
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(photo.caption!, 0, drawY + drawH + captionH / 2, drawW);
+          ctx.fillText(photo.caption!, 0, -frameH / 2 + availH + captionH / 2, drawW);
         }
       }
 

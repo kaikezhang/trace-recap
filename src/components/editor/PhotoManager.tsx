@@ -166,14 +166,11 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
                 </div>
                 <input
                   type="text"
-                  defaultValue={photo.caption ?? ""}
+                  value={photo.caption ?? ""}
                   placeholder="Add caption..."
                   className="w-full mt-1 px-1 py-0.5 text-[10px] text-gray-600 bg-transparent border border-transparent rounded hover:border-gray-300 focus:border-indigo-400 focus:outline-none truncate"
-                  onBlur={(e) => {
-                    const val = e.target.value.trim();
-                    if (val !== (photo.caption ?? "")) {
-                      setPhotoCaption(locationId, photo.id, val);
-                    }
+                  onChange={(e) => {
+                    setPhotoCaption(locationId, photo.id, e.target.value);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
