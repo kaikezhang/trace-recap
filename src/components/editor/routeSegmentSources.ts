@@ -1,4 +1,6 @@
-import * as turf from "@turf/turf";
+import { lineString } from "@turf/helpers";
+import { length } from "@turf/length";
+import { lineSliceAlong } from "@turf/line-slice-along";
 import type mapboxgl from "mapbox-gl";
 
 export const SEGMENT_LAYER_PREFIX = "segment-";
@@ -39,14 +41,14 @@ export function getRouteDataForFraction(
     return getFullRouteData(geometry);
   }
 
-  const line = turf.lineString(geometry.coordinates);
-  const totalLength = turf.length(line);
+  const line = lineString(geometry.coordinates);
+  const totalLength = length(line);
 
   if (totalLength <= 0) {
     return getFullRouteData(geometry);
   }
 
-  const sliced = turf.lineSliceAlong(line, 0, fraction * totalLength);
+  const sliced = lineSliceAlong(line, 0, fraction * totalLength);
 
   return getFullRouteData(sliced.geometry);
 }

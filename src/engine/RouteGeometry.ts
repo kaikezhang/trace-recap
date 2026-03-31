@@ -1,4 +1,9 @@
-import * as turf from "@turf/turf";
+import { bearing as getBearing } from "@turf/bearing";
+import { bezierSpline } from "@turf/bezier-spline";
+import { destination } from "@turf/destination";
+import { distance } from "@turf/distance";
+import { greatCircle } from "@turf/great-circle";
+import { lineString, point } from "@turf/helpers";
 import type { TransportMode } from "@/types";
 import { TRANSPORT_MODES } from "@/lib/constants";
 
@@ -33,7 +38,7 @@ function generateGreatCircle(
   from: [number, number],
   to: [number, number]
 ): GeoJSON.LineString {
-  const gc = turf.greatCircle(turf.point(from), turf.point(to), {
+  const gc = greatCircle(point(from), point(to), {
     npoints: 100,
   });
 
@@ -67,24 +72,24 @@ function generateFerryRoute(
 ): GeoJSON.LineString {
   const midLng = (from[0] + to[0]) / 2;
   const midLat = (from[1] + to[1]) / 2;
-  const bearing = turf.bearing(turf.point(from), turf.point(to));
+  const bearing = getBearing(point(from), point(to));
   const perpBearing = bearing + 90;
-  const dist = turf.distance(turf.point(from), turf.point(to));
+  const dist = distance(point(from), point(to));
   const offset = dist * 0.2;
 
-  const controlPoint = turf.destination(
-    turf.point([midLng, midLat]),
+  const controlPoint = destination(
+    point([midLng, midLat]),
     offset,
     perpBearing
   );
 
-  const line = turf.lineString([
+  const line = lineString([
     from,
     controlPoint.geometry.coordinates as [number, number],
     to,
   ]);
 
-  const curved = turf.bezierSpline(line, { resolution: 10000, sharpness: 0.85 });
+  const curved = bezierSpline(line, { resolution: 10000, sharpness: 0.85 });
   return curved.geometry as GeoJSON.LineString;
 }
 

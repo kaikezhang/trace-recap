@@ -1,5 +1,7 @@
 "use client";
 
+import { lineString } from "@turf/helpers";
+import { length } from "@turf/length";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { MapProvider, useMap } from "./MapContext";
@@ -16,7 +18,6 @@ import {
   SEGMENT_SOURCE_PREFIX,
   setSegmentSourceData,
 } from "./routeSegmentSources";
-import * as turf from "@turf/turf";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { demoProject } from "@/lib/demoProject";
 import {
@@ -533,7 +534,7 @@ function EditorContent() {
       const mergedGeom = group.mergedGeometry;
       const mergedLength =
         mergedGeom && mergedGeom.coordinates.length > 1
-          ? turf.length(turf.lineString(mergedGeom.coordinates))
+          ? length(lineString(mergedGeom.coordinates))
           : 0;
 
       let accumulatedLength = 0;
@@ -545,9 +546,7 @@ function EditorContent() {
         if (!seg?.geometry || seg.geometry.coordinates.length < 2) continue;
         if (!map.getSource(`${SEGMENT_SOURCE_PREFIX}${seg.id}`)) continue;
 
-        const segLength = turf.length(
-          turf.lineString(seg.geometry.coordinates),
-        );
+        const segLength = length(lineString(seg.geometry.coordinates));
         const segStart = accumulatedLength;
         const segEnd = accumulatedLength + segLength;
         accumulatedLength = segEnd;
@@ -718,17 +717,13 @@ function EditorContent() {
                 let accumulatedDist = 0;
                 let totalDist = 0;
                 try {
-                  const mergedLine = turf.lineString(
-                    group.mergedGeometry.coordinates,
-                  );
-                  totalDist = turf.length(mergedLine);
+                  const mergedLine = lineString(group.mergedGeometry.coordinates);
+                  totalDist = length(mergedLine);
                   // Sum segment distances up to the waypoint (locIdx segments from start)
                   for (let si = 0; si < group.segments.length; si++) {
                     const seg = group.segments[si];
                     if (seg.geometry && seg.geometry.coordinates.length >= 2) {
-                      const segLen = turf.length(
-                        turf.lineString(seg.geometry.coordinates),
-                      );
+                      const segLen = length(lineString(seg.geometry.coordinates));
                       if (si < locIdx) {
                         accumulatedDist += segLen;
                       }

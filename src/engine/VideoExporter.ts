@@ -1,4 +1,5 @@
-import * as turf from "@turf/turf";
+import { lineString } from "@turf/helpers";
+import { length } from "@turf/length";
 import type mapboxgl from "mapbox-gl";
 import type { ExportSettings, Photo, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
@@ -251,7 +252,7 @@ export class VideoExporter {
     const mergedGeom = group.mergedGeometry;
     const mergedLength =
       mergedGeom && mergedGeom.coordinates.length > 1
-        ? turf.length(turf.lineString(mergedGeom.coordinates))
+        ? length(lineString(mergedGeom.coordinates))
         : 0;
 
     let accumulatedLength = 0;
@@ -263,7 +264,7 @@ export class VideoExporter {
       if (!seg?.geometry || seg.geometry.coordinates.length < 2) continue;
       if (!this.map.getSource(`${SEGMENT_SOURCE_PREFIX}${seg.id}`)) continue;
 
-      const segLength = turf.length(turf.lineString(seg.geometry.coordinates));
+      const segLength = length(lineString(seg.geometry.coordinates));
       const segStart = accumulatedLength;
       const segEnd = accumulatedLength + segLength;
       accumulatedLength = segEnd;

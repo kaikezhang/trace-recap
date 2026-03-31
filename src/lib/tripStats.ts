@@ -1,4 +1,5 @@
-import * as turf from "@turf/turf";
+import { lineString } from "@turf/helpers";
+import { length } from "@turf/length";
 import type { Location, Segment, AnimationPhase } from "@/types";
 
 export interface TripStats {
@@ -30,7 +31,7 @@ export const TRANSPORT_MODE_EMOJI: Record<string, string> = {
 function getSegmentDistanceKm(segment: Segment): number {
   if (!segment.geometry) return 0;
   try {
-    return turf.length(turf.lineString(segment.geometry.coordinates), { units: "kilometers" });
+    return length(lineString(segment.geometry.coordinates), { units: "kilometers" });
   } catch {
     return 0;
   }

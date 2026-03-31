@@ -1,4 +1,8 @@
-import * as turf from "@turf/turf";
+import { along } from "@turf/along";
+import { bbox } from "@turf/bbox";
+import { distance } from "@turf/distance";
+import { featureCollection, lineString, point } from "@turf/helpers";
+import { length } from "@turf/length";
 import BezierEasing from "bezier-easing";
 import type { AnimationGroup, AnimationPhase, CameraState } from "@/types";
 
@@ -41,16 +45,16 @@ export class CameraController {
         toCoords = mg.coordinates[mg.coordinates.length - 1] as [number, number];
       }
 
-      const distKm = turf.distance(
-        turf.point(group.fromLoc.coordinates),
-        turf.point(group.toLoc.coordinates)
+      const distKm = distance(
+        point(group.fromLoc.coordinates),
+        point(group.toLoc.coordinates)
       );
 
       // Fly zoom: fit ALL locations in the group using bbox
-      const points = group.allLocations.map((loc) => turf.point(loc.coordinates));
-      const bbox = turf.bbox(turf.featureCollection(points));
-      const bboxWidth = Math.abs(bbox[2] - bbox[0]);
-      const bboxHeight = Math.abs(bbox[3] - bbox[1]);
+      const points = group.allLocations.map((loc) => point(loc.coordinates));
+      const groupBounds = bbox(featureCollection(points));
+      const bboxWidth = Math.abs(groupBounds[2] - groupBounds[0]);
+      const bboxHeight = Math.abs(groupBounds[3] - groupBounds[1]);
       const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
       const flyZoom = clamp(
         Math.log2(360 / maxSpan) - 1,
@@ -62,7 +66,7 @@ export class CameraController {
       let routeLength = distKm;
       if (routeLine && routeLine.coordinates && routeLine.coordinates.length >= 2) {
         try {
-          routeLength = turf.length(turf.lineString(routeLine.coordinates));
+          routeLength = length(lineString(routeLine.coordinates));
         } catch {
           // Invalid coordinates — fallback to straight-line distance
           routeLength = distKm;
@@ -74,9 +78,9 @@ export class CameraController {
       let midpoint: [number, number];
       if (routeLine && routeLine.coordinates && routeLine.coordinates.length >= 2) {
         try {
-          const line = turf.lineString(routeLine.coordinates);
-          const len = turf.length(line);
-          const midPt = turf.along(line, len / 2);
+          const line = lineString(routeLine.coordinates);
+          const len = length(line);
+          const midPt = along(line, len / 2);
           midpoint = midPt.geometry.coordinates as [number, number];
         } catch {
           midpoint = [
@@ -117,14 +121,14 @@ export class CameraController {
         if (nextDist < 50) {
           // Very close next stop: fit both in view
           const nextCam = basicData[i + 1];
-          const bbox = turf.bbox(
-            turf.featureCollection([
-              turf.point(cam.toCenter),
-              turf.point(nextCam.toCenter),
+          const bounds = bbox(
+            featureCollection([
+              point(cam.toCenter),
+              point(nextCam.toCenter),
             ])
           );
-          const bboxWidth = Math.abs(bbox[2] - bbox[0]);
-          const bboxHeight = Math.abs(bbox[3] - bbox[1]);
+          const bboxWidth = Math.abs(bounds[2] - bounds[0]);
+          const bboxHeight = Math.abs(bounds[3] - bounds[1]);
           const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
           const fitZoom = Math.log2(360 / maxSpan) - 1;
           cam.arriveZoom = clamp(fitZoom, 7, 10);
