@@ -649,13 +649,17 @@ export class VideoExporter {
       enterAnimation: enterAnimStyle,
       exitAnimation: exitAnimStyle,
     } = resolvePhotoAnimations(layout, this.settings.photoAnimation ?? "scale");
-    const groupIdx = progress.groupIndex;
+
+    // Use the photo source group index for tracking (prev group during fade-out)
+    const photoGroupIdx = progress.phase === "ARRIVE"
+      ? progress.groupIndex
+      : progress.groupIndex - 1; // HOVER/ZOOM_OUT = fading out prev group's photos
 
     // Track when photos first appeared for this group
-    if (!this.photoShowStartFrame.has(groupIdx)) {
-      this.photoShowStartFrame.set(groupIdx, frameIndex);
+    if (!this.photoShowStartFrame.has(photoGroupIdx)) {
+      this.photoShowStartFrame.set(photoGroupIdx, frameIndex);
     }
-    const enterStartFrame = this.photoShowStartFrame.get(groupIdx)!;
+    const enterStartFrame = this.photoShowStartFrame.get(photoGroupIdx)!;
 
     // Enter animation: ~0.4s per photo, with per-photo stagger
     const enterDurationSec = 0.4;

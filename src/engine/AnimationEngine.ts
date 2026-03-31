@@ -453,6 +453,18 @@ export class AnimationEngine {
     if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
       showPhotos = true;
       photoOpacity = 1;
+    } else if (groupIndex > 0) {
+      const prevGroup = this.groups[groupIndex - 1];
+      if (prevGroup && prevGroup.toLoc.photos.length > 0) {
+        if (phase === "HOVER") {
+          // Fade out previous photos during HOVER
+          showPhotos = true;
+          photoOpacity = 1 - phaseProgress;
+        } else if (phase === "ZOOM_OUT") {
+          showPhotos = true;
+          photoOpacity = Math.max(0, 0.3 * (1 - phaseProgress));
+        }
+      }
     }
 
     const progress = clamped / this.totalDuration;
