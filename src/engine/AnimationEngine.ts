@@ -513,7 +513,10 @@ export class AnimationEngine {
         if (sceneTransitionProgress !== undefined && prevGroup) {
           const fromCoords = prevGroup.toLoc.coordinates;
           const toCoords = group.toLoc.coordinates;
-          const dLng = toCoords[0] - fromCoords[0];
+          let dLng = toCoords[0] - fromCoords[0];
+          // Normalize longitude delta for antimeridian crossings
+          if (dLng > 180) dLng -= 360;
+          if (dLng < -180) dLng += 360;
           const dLat = toCoords[1] - fromCoords[1];
           transitionBearing = (Math.atan2(dLng, dLat) * 180) / Math.PI;
         }
