@@ -29,8 +29,8 @@ const MIN_CAPTION_VISIBLE_PX = 24;
 const ROTATION_SNAP_TARGETS = [0, 90, -90, 180] as const;
 const ROTATION_SNAP_THRESHOLD = 5;
 const TOOLBAR_MARGIN_PX = 12;
-const TOOLBAR_WIDTH_PX = 260;
-const TOOLBAR_HEIGHT_PX = 124;
+const TOOLBAR_WIDTH_PX = 320;
+const TOOLBAR_HEIGHT_PX = 132;
 const MARQUEE_DRAG_THRESHOLD_PX = 4;
 
 type Selection = {
@@ -1252,7 +1252,7 @@ export default function FreeCanvas({
       ) : null}
       {showCaptionToolbar && selectedCaptionToolbarState ? (
         <div
-          className="absolute z-10 flex flex-col gap-2 rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
+          className="absolute z-10 flex flex-col gap-2 overflow-hidden rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
           onPointerDown={(event) => event.stopPropagation()}
           style={{
             left: `${selectedCaptionToolbarState.toolbarPosition.toolbarLeft}px`,
@@ -1263,7 +1263,7 @@ export default function FreeCanvas({
         >
           <div className="flex items-center gap-2">
             <select
-              className="h-8 flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
+              className="h-8 min-w-0 flex-1 truncate rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
               style={{ fontFamily: selectedCaptionToolbarState.fontFamily }}
               value={selectedCaptionToolbarState.fontFamilyMixed ? "__mixed" : selectedCaptionToolbarState.fontFamily}
               onChange={(event) => {
@@ -1375,9 +1375,16 @@ export default function FreeCanvas({
                 </button>
               ))}
             </div>
-            <span className="text-[10px] text-gray-400">
-              {selectedCaptionToolbarState.bgColorMixed ? "Mixed" : " "}
-            </span>
+            <input
+              type="text"
+              value={selectedCaptionToolbarState.bgColorMixed ? "" : (selectedCaptionToolbarState.bgColor === "transparent" ? "" : selectedCaptionToolbarState.bgColor)}
+              onChange={(event) => {
+                const val = event.target.value.trim();
+                if (val) applyCaptionStyle(selectedCaptionToolbarState.photoIds, { bgColor: val });
+              }}
+              placeholder={selectedCaptionToolbarState.bgColorMixed ? "Mixed" : "custom"}
+              className="h-8 w-20 rounded-md border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
+            />
           </div>
         </div>
       ) : null}
