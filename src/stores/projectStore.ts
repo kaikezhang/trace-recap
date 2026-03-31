@@ -1121,22 +1121,44 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (!projectId) return;
 
       const importedLocations = get().locations;
+      let totalPhotos = 0;
+      let skippedType = 0;
+      let skippedSize = 0;
+      let compressed = 0;
+      let failed = 0;
+
+      for (const loc of importedLocations) {
+        totalPhotos += loc.photos.length;
+      }
+      console.log(`[compress] Starting compression check: ${totalPhotos} photos across ${importedLocations.length} locations`);
 
       for (const location of importedLocations) {
         for (const photo of location.photos) {
           try {
             const isData = photo.url.startsWith("data:");
             const isBlob = photo.url.startsWith("blob:");
-            if (!isData && !isBlob) continue;
-            if (loadCompressionJob !== activeLoadCompressionJob) return;
+            if (!isData && !isBlob) {
+              skippedType++;
+              continue;
+            }
+            if (loadCompressionJob !== activeLoadCompressionJob) {
+              console.log(`[compress] Aborted — load job changed`);
+              return;
+            }
 
             const dimensions = await getImageDimensions(photo.url);
-            if (!dimensions || !isImageOversized(dimensions)) continue;
+            if (!dimensions || !isImageOversized(dimensions)) {
+              skippedSize++;
+              console.log(`[compress] Skip ${photo.id}: ${dimensions?.width}x${dimensions?.height} (not oversized)`);
+              continue;
+            }
 
+            console.log(`[compress] Compressing ${photo.id}: ${dimensions.width}x${dimensions.height} (${isBlob ? 'blob' : 'data'} URL)`);
             const compressedBlob = isData
               ? await compressDataUrl(photo.url)
               : await compressBlobUrl(photo.url);
             const compressedUrl = URL.createObjectURL(compressedBlob);
+            console.log(`[compress] Compressed ${photo.id}: ${(compressedBlob.size / 1024 / 1024).toFixed(1)}MB`);
 
             if (loadCompressionJob !== activeLoadCompressionJob) {
               URL.revokeObjectURL(compressedUrl);
@@ -1184,24 +1206,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             });
 
             if (didUpdate && isBlob) {
-              // Revoke the old oversized blob URL to free memory
               URL.revokeObjectURL(photo.url);
             }
             if (!didUpdate) {
               URL.revokeObjectURL(compressedUrl);
+              console.log(`[compress] ${photo.id}: URL changed during compression, discarded`);
+            } else {
+              compressed++;
+              console.log(`[compress] ✅ ${photo.id} replaced`);
             }
 
             await new Promise<void>((resolve) => {
               window.setTimeout(resolve, 0);
             });
           } catch (error) {
+            failed++;
             console.error(
-              `Failed to compress imported photo ${photo.id}.`,
+              `[compress] ❌ Failed to compress photo ${photo.id}.`,
               error,
             );
           }
         }
       }
+      console.log(`[compress] Done! ${compressed} compressed, ${skippedType} skipped (url type), ${skippedSize} skipped (small enough), ${failed} failed, ${totalPhotos} total`);
     };
 
     try {
