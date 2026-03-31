@@ -1,112 +1,30 @@
-# TASK.md — Breadcrumb Thumbnail Trail
+# TASK: Fix Codex Review Issues on PR #74 (Trip Stats Spine)
 
-⚠️ DO NOT MERGE. Create PR and stop.
+⚠️ DO NOT MERGE. Push fixes to `feat/trip-stats` branch only.
 
-## Overview
+## Issues to Fix (from Codex review)
 
-After leaving a stop, its hero photo shrinks into a tiny circular thumbnail "breadcrumb" that remains pinned to the route at the city's coordinate. As the trip progresses, the full route becomes studded with visual memories — a satisfying accumulation that transforms the final map into a dense visual summary.
+### 1. Export distance never animates during FLY
+- `drawTripStats()` reads `progress.routeDrawFraction` from `"progress"` events
+- But `routeDrawFraction` is only emitted on `"routeDrawProgress"` events
+- **Fix**: In VideoExporter, also capture `routeDrawFraction` from `routeDrawProgress` events and pass it to `drawTripStats()`
 
-## Current Behavior
+### 2. `computeTripStats()` advances cities and transport too early
+- City count increases on `ZOOM_IN` but should increase on `ARRIVE`
+- Transport mode icon appears on `HOVER`/`ZOOM_OUT` before that mode is used
+- **Fix**: City count should only increment on `ARRIVE`. Transport mode should only appear when that segment's `FLY` phase starts.
 
-- After leaving a location, nothing visual remains on the map
-- The route line is the only persistent element
+### 3. Transport modes not in first-use order
+- Hardcoded `MODE_ORDER` sorts by a fixed list instead of first-use order
+- **Fix**: Track insertion order — modes should appear in the order they are first encountered during the trip
 
-## Desired Behavior
+### 4. Export bar layout doesn't match preview
+- Preview uses separate sections, separators, per-mode motion elements
+- Export collapses everything into a single `fillText()` string
+- **Fix**: Export should render each section/icon individually with proper spacing, matching the preview layout. Add fade/slide-in timing to match framer-motion animations.
 
-### 1. Breadcrumb Data Model
-
-Track breadcrumbs in the animation store:
-```ts
-interface Breadcrumb {
-  locationId: string;
-  coordinates: [number, number]; // [lng, lat]
-  heroPhotoUrl: string;          // URL of the hero/first photo
-  cityName: string;
-  visitedAtSegment: number;      // segment index when this was visited
-}
-
-breadcrumbs: Breadcrumb[];        // grows as trip progresses
-addBreadcrumb: (b: Breadcrumb) => void;
-clearBreadcrumbs: () => void;
-```
-
-### 2. Breadcrumb Rendering (`src/components/editor/BreadcrumbTrail.tsx`) — NEW
-
-A component that renders all accumulated breadcrumbs on the map:
-
-**Each breadcrumb:**
-- Circular thumbnail: 28-36px diameter
-- White border (2px)
-- Box shadow for depth
-- Photo uses `object-fit: cover`
-- Positioned at city coordinate via `map.project()`
-- Opacity: 0.6-0.8 (slightly faded, not competing with active content)
-
-**Accumulation animation:**
-- When a new breadcrumb appears (leaving a city), it shrinks from the active photo size to breadcrumb size with a smooth spring transition
-- New breadcrumbs start at full opacity and settle to 0.7
-
-**Visual hierarchy:**
-- Breadcrumbs render BELOW the route line and active overlays
-- Newest breadcrumb slightly larger/more opaque than older ones (optional)
-
-### 3. Animation Engine Integration (`src/engine/AnimationEngine.ts`)
-
-- When transitioning from ARRIVE to next segment's HOVER, emit a breadcrumb event
-- Or: in EditorLayout, detect when `showPhotoOverlay` goes from true→false and add a breadcrumb for that location
-
-### 4. Map Position Tracking
-
-- Breadcrumbs must update position when camera moves (they're geo-anchored)
-- Use `map.project(coordinates)` to convert lng/lat to screen pixels
-- Update on map `move` events
-
-### 5. Video Export (`src/engine/VideoExporter.ts`)
-
-- Draw breadcrumbs at projected coordinates on the canvas
-- Circular clip mask for each thumbnail
-- White border stroke
-- Draw BEFORE route lines and active photos (behind everything)
-- Only draw breadcrumbs for locations that have been "visited" (segment index ≤ current)
-
-### 6. Settings (`src/stores/uiStore.ts`)
-
-```ts
-breadcrumbsEnabled: boolean; // default: true
-```
-
-Persisted to localStorage. Toggle in global settings area.
-
-## Visual Design
-
-```
-Map with route:
-  ○ ○ ○ ←── tiny photo circles along the route
-  A ──── B ──── C ──── D (current)
-  ○       ○       ○
-  ^visited ^visited ^visited
-```
-
-Each ○ is a 32px circular photo thumbnail with white border, pinned to that city's coordinate.
-
-## Files to create/modify
-
-- `src/components/editor/BreadcrumbTrail.tsx` — NEW: breadcrumb rendering component
-- `src/stores/animationStore.ts` — breadcrumb state + actions
-- `src/components/editor/EditorLayout.tsx` — add breadcrumb on location exit
-- `src/components/editor/MapStage.tsx` — render BreadcrumbTrail component
-- `src/engine/VideoExporter.ts` — draw breadcrumbs in export
-- `src/stores/uiStore.ts` — breadcrumbsEnabled toggle
-
-## Verification
-
-- `npx tsc --noEmit` and `npm run build` must pass
-- Breadcrumbs appear as route progresses past each city
-- Breadcrumbs are geo-anchored and move with camera
-- Breadcrumbs accumulate (don't disappear)
-- Export shows breadcrumbs matching preview
-- Toggle enables/disables the feature
-- Reset/replay clears breadcrumbs
-
-## Working directory
-`/home/kaike/.openclaw/workspace/trace-recap`
+## Constraints
+- `npx tsc --noEmit` must pass
+- `npm run build` must pass
+- Push to `feat/trip-stats` branch
+- DO NOT create a new PR or merge anything

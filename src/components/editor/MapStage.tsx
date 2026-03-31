@@ -5,6 +5,7 @@ import MapCanvas from "./MapCanvas";
 import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
 import PhotoLayoutEditor from "./PhotoLayoutEditor";
+import TripStatsBar from "./TripStatsBar";
 import MapEmptyState from "./MapEmptyState";
 import ChapterPinsOverlay from "./ChapterPinsOverlay";
 import BreadcrumbTrail from "./BreadcrumbTrail";
@@ -215,6 +216,7 @@ export default function MapStage({
         portalAccentColor={getPortalAccentColor(photoLocationId)}
         incomingPortalAccentColor={isTransitioning ? getPortalAccentColor(incomingPhotoLocationId) : undefined}
       />
+      <TripStatsBar />
       {showPhotoLayoutEditor && editingLocation && (
         <PhotoLayoutEditor
           location={editingLocation}

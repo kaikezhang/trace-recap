@@ -36,6 +36,7 @@ import {
 import { useProjectStore } from "@/stores/projectStore";
 import { resolveSceneTransition, computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from "@/lib/sceneTransition";
 import { computePortalLayout, computePortalPhaseProgress } from "@/lib/portalLayout";
+import { computeTripStats, getSortedTransportModes, TRANSPORT_MODE_EMOJI } from "@/lib/tripStats";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -75,6 +76,8 @@ export class VideoExporter {
   /** Track previous showPhotos state for breadcrumb emission during export */
   private prevExportShowPhotos = false;
   private prevExportPhotoLocationId: string | null = null;
+  /** Frame counter for trip stats bar fade/slide-in animation */
+  private tripStatsBarAge: number = 0;
 
   constructor(
     engine: AnimationEngine,
@@ -806,6 +809,133 @@ export class VideoExporter {
     ctx.fillStyle = "#374151";
     ctx.textBaseline = "middle";
     ctx.fillText(label, x + padH, y + boxHeight / 2);
+  }
+
+  /** Draw the trip stats bar at the bottom center of the canvas, matching the preview layout */
+  private drawTripStats(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    scaleX: number,
+    captured: { progress: AnimationEvent | null; routeDraw: AnimationEvent | null }
+  ): void {
+    const progress = captured.progress;
+    if (!progress) return;
+
+    const tripStatsEnabled = useUIStore.getState().tripStatsEnabled;
+    if (!tripStatsEnabled) return;
+
+    const locations = this.engine.getLocations();
+    const segments = this.engine.getSegments();
+
+    // Issue 1 fix: read routeDrawFraction from routeDrawProgress event, not progress event
+    let flyProgress = 0;
+    if (progress.phase === "FLY") {
+      if (captured.routeDraw?.routeDrawFraction !== undefined) {
+        flyProgress = captured.routeDraw.routeDrawFraction;
+      } else if (progress.routeDrawFraction !== undefined) {
+        flyProgress = progress.routeDrawFraction;
+      }
+    }
+
+    const stats = computeTripStats(
+      locations,
+      segments,
+      progress.segmentIndex,
+      progress.phase,
+      flyProgress,
+      progress.showPhotos
+    );
+
+    const sortedModes = getSortedTransportModes(stats.transportModes);
+
+    // Issue 4 fix: render each section individually with separators, matching preview layout
+    const fontSize = 13 * scaleX;
+    const font = `500 ${fontSize}px system-ui, -apple-system, sans-serif`;
+    const gap = 10 * scaleX; // gap-2.5 equivalent
+    const separatorW = 1 * scaleX;
+    const padH = 16 * scaleX; // px-4 equivalent
+    const padV = 6 * scaleX;
+
+    // Format distance
+    const distStr = stats.totalDistanceKm >= 1000
+      ? `${(stats.totalDistanceKm / 1000).toFixed(1)}k km`
+      : `${Math.round(stats.totalDistanceKm)} km`;
+
+    // Build section labels
+    const sections: string[] = [
+      `📍 ${stats.citiesVisited}/${stats.totalCities} cities`,
+      `📸 ${stats.photosShown} photos`,
+      `🛣️ ${distStr}`,
+    ];
+    if (sortedModes.length > 0) {
+      sections.push(sortedModes.map((m) => TRANSPORT_MODE_EMOJI[m] ?? m).join(" "));
+    }
+
+    // Measure each section width
+    ctx.font = font;
+    const sectionWidths = sections.map((s) => ctx.measureText(s).width);
+
+    // Total bar width: padH + sections with gaps and separators + padH
+    let contentWidth = 0;
+    for (let i = 0; i < sectionWidths.length; i++) {
+      contentWidth += sectionWidths[i];
+      if (i < sectionWidths.length - 1) {
+        contentWidth += gap + separatorW + gap; // gap | separator | gap
+      }
+    }
+
+    const boxWidth = padH + contentWidth + padH;
+    const boxHeight = padV + fontSize * 1.4 + padV;
+    const x = (canvasWidth - boxWidth) / 2;
+    const y = canvasHeight - 56 * scaleX - boxHeight;
+    const radiusTop = 8 * scaleX;
+
+    // Compute animation progress for fade/slide-in
+    const barAge = this.tripStatsBarAge ?? 0;
+    const fadeIn = Math.min(1, barAge / 10); // fade over ~10 frames (~0.3s at 30fps)
+    const slideY = (1 - fadeIn) * 16 * scaleX;
+
+    ctx.save();
+    ctx.globalAlpha = fadeIn;
+
+    // Background with slide offset
+    ctx.beginPath();
+    ctx.roundRect(x, y + slideY, boxWidth, boxHeight, [radiusTop, radiusTop, 0, 0]);
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fill();
+
+    // Draw each section individually
+    ctx.font = font;
+    ctx.fillStyle = "#ffffff";
+    ctx.textBaseline = "middle";
+    const textY = y + slideY + boxHeight / 2;
+    let cursorX = x + padH;
+
+    for (let i = 0; i < sections.length; i++) {
+      // Per-section staggered fade (later sections appear slightly after earlier ones)
+      const sectionDelay = i * 3; // 3 frames stagger
+      const sectionAge = Math.max(0, barAge - sectionDelay);
+      const sectionAlpha = Math.min(1, sectionAge / 8);
+      ctx.globalAlpha = fadeIn * sectionAlpha;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(sections[i], cursorX, textY);
+      cursorX += sectionWidths[i];
+
+      // Draw separator between sections
+      if (i < sections.length - 1) {
+        cursorX += gap;
+        ctx.globalAlpha = fadeIn * 0.2; // separator at 20% white opacity
+        ctx.fillRect(cursorX, y + slideY + boxHeight / 2 - 7 * scaleX, separatorW, 14 * scaleX);
+        cursorX += separatorW + gap;
+      }
+    }
+
+    ctx.restore();
+
+    // Track bar age for animation
+    this.tripStatsBarAge = (this.tripStatsBarAge ?? 0) + 1;
   }
 
   private applyRouteDrawFromCapture(captured: { routeDraw: AnimationEvent | null }): void {
@@ -2162,6 +2292,7 @@ export class VideoExporter {
     this.exportBreadcrumbs = [];
     this.prevExportShowPhotos = false;
     this.prevExportPhotoLocationId = null;
+    this.tripStatsBarAge = 0;
     const { signal } = this.abortController;
 
     const totalDuration = this.engine.getTotalDuration();
@@ -2308,6 +2439,7 @@ export class VideoExporter {
     this.updateChapterPinState(captured.progress);
     this.drawChapterPins(offCtx, scaleX, scaleY);
 
+    this.drawTripStats(offCtx, offscreen.width, offscreen.height, scaleX, captured);
     this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
     this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
 
