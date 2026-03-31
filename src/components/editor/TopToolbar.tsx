@@ -204,7 +204,15 @@ export default function TopToolbar() {
         ...(seg.iconVariant ? { iconVariant: seg.iconVariant } : {}),
         ...(seg.iconStyle ? { iconStyle: seg.iconStyle } : {}),
       })),
-      segmentTimingOverrides,
+      // Convert segment ID-keyed timing to index-keyed for portable export
+      timingOverrides: Object.fromEntries(
+        Object.entries(segmentTimingOverrides)
+          .map(([segId, duration]) => {
+            const idx = segments.findIndex((s) => s.id === segId);
+            return idx >= 0 ? [String(idx), duration] : null;
+          })
+          .filter(Boolean) as [string, number][],
+      ),
     };
 
     zip.file("route.json", JSON.stringify(routeData, null, 2));

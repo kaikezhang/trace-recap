@@ -1022,6 +1022,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   loadRouteData: async (data) => {
     try {
+      // Ensure there's a project to save into
+      if (!get().currentProjectId) {
+        await get().createNewProject(data.name);
+      }
       get().importRoute(data);
       await get().regenerateSegmentGeometries();
     } catch (error) {
