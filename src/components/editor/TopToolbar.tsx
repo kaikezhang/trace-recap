@@ -14,6 +14,7 @@ import {
   MoreVertical,
   Settings,
   ChevronDown,
+  Palette,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import type { AspectRatio, MapStyle, MapStyleCategory, PhotoAnimation } from "@/types";
+import type { AspectRatio, MapStyle, MapStyleCategory } from "@/types";
 import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
 
 export default function TopToolbar() {
@@ -71,6 +72,8 @@ export default function TopToolbar() {
   const setRouteLabelBottomPercent = useUIStore((s) => s.setRouteLabelBottomPercent);
   const routeLabelSize = useUIStore((s) => s.routeLabelSize);
   const setRouteLabelSize = useUIStore((s) => s.setRouteLabelSize);
+  const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
+  const setMoodColorsEnabled = useUIStore((s) => s.setMoodColorsEnabled);
 
   const setProjectListOpen = useUIStore((s) => s.setProjectListOpen);
   const currentProjectName = useProjectStore((s) => s.currentProjectName);
@@ -472,6 +475,35 @@ export default function TopToolbar() {
                       setRouteLabelSize(val);
                     }}
                   />
+                </div>
+                <hr className="border-gray-100" />
+                {/* Mood Colors toggle */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Palette className="h-4 w-4" />
+                    Mood Colors
+                  </label>
+                  <p className="text-[11px] text-muted-foreground/70">
+                    Color route lines using dominant colors from attached photos
+                  </p>
+                  <div className="flex gap-2">
+                    {([
+                      { value: true, label: "On" },
+                      { value: false, label: "Off" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={String(opt.value)}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                          moodColorsEnabled === opt.value
+                            ? "bg-indigo-500 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
+                        onClick={() => setMoodColorsEnabled(opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
               </div>

@@ -16,6 +16,8 @@ import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import { getExportViewportSize } from "@/lib/viewportRatio";
 import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
 import { isMediaRecorderSupported, MediaRecorderExporter } from "./MediaRecorderExporter";
+import { useUIStore } from "@/stores/uiStore";
+import { useProjectStore } from "@/stores/projectStore";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -285,7 +287,8 @@ export class VideoExporter {
     canvasWidth: number,
     scaleX: number,
     label: string,
-    baseFontSize: number = 18
+    baseFontSize: number = 18,
+    accentColor: string = "#6366f1"
   ): void {
     const fontSize = baseFontSize * scaleX;
     const font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
@@ -323,7 +326,7 @@ export class VideoExporter {
     const dotY = y + boxHeight / 2;
     ctx.beginPath();
     ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
-    ctx.fillStyle = "#6366f1";
+    ctx.fillStyle = accentColor;
     ctx.fill();
 
     ctx.font = font;
@@ -405,7 +408,10 @@ export class VideoExporter {
     const labelZh = captured.progress?.cityLabelZh;
     const label = lang === "zh" ? (labelZh || labelEn) : labelEn;
     if (label) {
-      this.drawCityLabel(ctx, canvasWidth, scaleX, label, baseFontSize);
+      // Use mood color for the accent dot if available
+      const segIdx = captured.progress?.segmentIndex ?? -1;
+      const accentColor = this.getSegmentAccentColor(segIdx);
+      this.drawCityLabel(ctx, canvasWidth, scaleX, label, baseFontSize, accentColor);
     }
   }
 
@@ -421,6 +427,16 @@ export class VideoExporter {
       case "scale":
       default: return index * 0.08;
     }
+  }
+
+  /** Get accent color for a segment — mood color if enabled, else default indigo */
+  private getSegmentAccentColor(segmentIndex: number): string {
+    const moodEnabled = useUIStore.getState().moodColorsEnabled;
+    const segColors = useProjectStore.getState().segmentColors;
+    if (moodEnabled && segColors[segmentIndex]) {
+      return segColors[segmentIndex];
+    }
+    return "#6366f1";
   }
 
   /** Cubic ease-out: matches framer-motion's default easeOut */

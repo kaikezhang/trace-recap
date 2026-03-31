@@ -14,6 +14,7 @@ interface PersistedUISettings {
   viewportRatio: AspectRatio;
   photoAnimation: PhotoAnimation;
   photoStyle: PhotoStyle;
+  moodColorsEnabled: boolean;
 }
 
 function loadPersistedSettings(): Partial<PersistedUISettings> {
@@ -53,6 +54,7 @@ interface UIState {
   viewportRatio: AspectRatio; // WYSIWYG viewport aspect ratio
   photoAnimation: PhotoAnimation; // Photo enter/exit animation style
   photoStyle: PhotoStyle; // Photo display style (classic or kenburns)
+  moodColorsEnabled: boolean; // Use photo-extracted colors for route lines
 
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -68,6 +70,7 @@ interface UIState {
   setViewportRatio: (ratio: AspectRatio) => void;
   setPhotoAnimation: (animation: PhotoAnimation) => void;
   setPhotoStyle: (style: PhotoStyle) => void;
+  setMoodColorsEnabled: (enabled: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -85,6 +88,7 @@ export const useUIStore = create<UIState>((set) => ({
   viewportRatio: saved.viewportRatio ?? "free",
   photoAnimation: saved.photoAnimation ?? "scale",
   photoStyle: saved.photoStyle ?? "classic",
+  moodColorsEnabled: saved.moodColorsEnabled ?? true,
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
@@ -100,6 +104,7 @@ export const useUIStore = create<UIState>((set) => ({
   setViewportRatio: (viewportRatio) => set({ viewportRatio }),
   setPhotoAnimation: (photoAnimation) => set({ photoAnimation }),
   setPhotoStyle: (photoStyle) => set({ photoStyle }),
+  setMoodColorsEnabled: (moodColorsEnabled) => set({ moodColorsEnabled }),
 }));
 
 // Persist user settings on change (debounced)
@@ -116,6 +121,7 @@ useUIStore.subscribe((state) => {
       viewportRatio: state.viewportRatio,
       photoAnimation: state.photoAnimation,
       photoStyle: state.photoStyle,
+      moodColorsEnabled: state.moodColorsEnabled,
     });
   }, 500);
 });
