@@ -13,7 +13,7 @@ import {
   setSegmentSourceData,
 } from "./routeSegmentSources";
 import { useProjectStore } from "@/stores/projectStore";
-import { useLocationsForMap } from "@/stores/selectors";
+import { useLocationsForMap, usePhotoFingerprint } from "@/stores/selectors";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
 import { MAPBOX_TOKEN, getDefaultMapOptions, applyStyleOverrides } from "@/lib/mapbox";
@@ -63,6 +63,7 @@ export default memo(function MapCanvas() {
   const setSegmentColor = useProjectStore((s) => s.setSegmentColor);
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
+  const photoFingerprint = usePhotoFingerprint();
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
   const currentGroupSegmentIndices = useAnimationStore((s) => s.currentGroupSegmentIndices);
@@ -135,12 +136,19 @@ export default memo(function MapCanvas() {
     let cancelled = false;
     const allLocations = useProjectStore.getState().locations;
     const allSegments = useProjectStore.getState().segments;
+    const currentColors = useProjectStore.getState().segmentColors;
 
     for (let i = 0; i < allSegments.length; i++) {
       const seg = allSegments[i];
       // Use destination location's photos for this segment's color
       const destLoc = allLocations.find((l) => l.id === seg.toId);
-      if (!destLoc || destLoc.photos.length === 0) continue;
+      if (!destLoc || destLoc.photos.length === 0) {
+        // Clear color for segments with no photos
+        if (currentColors[i]) {
+          setSegmentColor(i, "");
+        }
+        continue;
+      }
 
       const firstPhotoUrl = destLoc.photos[0].url;
       extractDominantColor(firstPhotoUrl).then((color) => {
@@ -156,7 +164,7 @@ export default memo(function MapCanvas() {
     return () => {
       cancelled = true;
     };
-  }, [locations, segments, moodColorsEnabled, setSegmentColor]);
+  }, [locations, segments, moodColorsEnabled, setSegmentColor, photoFingerprint]);
 
   // Sync markers
   useEffect(() => {

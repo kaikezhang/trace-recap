@@ -1120,6 +1120,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segments: parsed.segments,
         mapStyle: parsed.mapStyle,
         segmentTimingOverrides: parsed.segmentTimingOverrides,
+        segmentColors: {},
         projects,
       });
       lastSavedProjectJson = JSON.stringify(data);
@@ -1211,6 +1212,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segments: [],
         mapStyle: DEFAULT_MAP_STYLE,
         segmentTimingOverrides: {},
+        segmentColors: {},
       });
       lastSavedProjectJson = JSON.stringify(data);
       useHistoryStore.getState().resetHistory();
@@ -1247,6 +1249,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segments: parsed.segments,
         mapStyle: parsed.mapStyle,
         segmentTimingOverrides: parsed.segmentTimingOverrides,
+        segmentColors: {},
       });
       lastSavedProjectJson = JSON.stringify(data);
       useHistoryStore.getState().resetHistory();
@@ -1288,6 +1291,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           segments: [],
           mapStyle: DEFAULT_MAP_STYLE,
           segmentTimingOverrides: {},
+          segmentColors: {},
         });
         lastSavedProjectJson = JSON.stringify(data);
         useHistoryStore.getState().resetHistory();
@@ -1307,6 +1311,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segments: parsed.segments,
         mapStyle: parsed.mapStyle,
         segmentTimingOverrides: parsed.segmentTimingOverrides,
+        segmentColors: {},
       });
       lastSavedProjectJson = JSON.stringify(data);
       useHistoryStore.getState().resetHistory();
