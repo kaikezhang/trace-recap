@@ -36,6 +36,7 @@ import {
 import { useProjectStore } from "@/stores/projectStore";
 import { resolveSceneTransition, computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from "@/lib/sceneTransition";
 import { computePortalLayout, computePortalPhaseProgress } from "@/lib/portalLayout";
+import { computeTripStats, getSortedTransportModes, TRANSPORT_MODE_EMOJI } from "@/lib/tripStats";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -804,6 +805,82 @@ export class VideoExporter {
 
     ctx.font = font;
     ctx.fillStyle = "#374151";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + padH, y + boxHeight / 2);
+  }
+
+  /** Draw the trip stats bar at the bottom center of the canvas */
+  private drawTripStats(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    scaleX: number,
+    captured: { progress: AnimationEvent | null }
+  ): void {
+    const progress = captured.progress;
+    if (!progress) return;
+
+    const tripStatsEnabled = useUIStore.getState().tripStatsEnabled;
+    if (!tripStatsEnabled) return;
+
+    const locations = this.engine.getLocations();
+    const segments = this.engine.getSegments();
+
+    // Compute fly progress for current segment
+    let flyProgress = 0;
+    if (progress.phase === "FLY" && progress.routeDrawFraction !== undefined) {
+      flyProgress = progress.routeDrawFraction;
+    }
+
+    const stats = computeTripStats(
+      locations,
+      segments,
+      progress.segmentIndex,
+      progress.phase,
+      flyProgress,
+      progress.showPhotos
+    );
+
+    const sortedModes = getSortedTransportModes(stats.transportModes);
+
+    // Build the text segments
+    const parts: string[] = [];
+    parts.push(`📍 ${stats.citiesVisited}/${stats.totalCities} cities`);
+    parts.push(`📸 ${stats.photosShown} photos`);
+    const distStr = stats.totalDistanceKm >= 1000
+      ? `${(stats.totalDistanceKm / 1000).toFixed(1)}k km`
+      : `${Math.round(stats.totalDistanceKm)} km`;
+    parts.push(`🛣️ ${distStr}`);
+    if (sortedModes.length > 0) {
+      const modeEmojis = sortedModes.map((m) => TRANSPORT_MODE_EMOJI[m] ?? m).join("");
+      parts.push(modeEmojis);
+    }
+
+    const label = parts.join("  |  ");
+    const fontSize = 13 * scaleX;
+    const font = `500 ${fontSize}px system-ui, -apple-system, sans-serif`;
+    ctx.font = font;
+    const metrics = ctx.measureText(label);
+
+    const padH = 16 * scaleX;
+    const padV = 6 * scaleX;
+    const boxWidth = padH + metrics.width + padH;
+    const boxHeight = padV + fontSize * 1.4 + padV;
+    const x = (canvasWidth - boxWidth) / 2;
+    const y = canvasHeight - 56 * scaleX - boxHeight;
+    const radiusTop = 8 * scaleX;
+
+    // Background
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxWidth, boxHeight, [radiusTop, radiusTop, 0, 0]);
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fill();
+    ctx.restore();
+
+    // Text
+    ctx.font = font;
+    ctx.fillStyle = "#ffffff";
     ctx.textBaseline = "middle";
     ctx.fillText(label, x + padH, y + boxHeight / 2);
   }
@@ -2308,6 +2385,7 @@ export class VideoExporter {
     this.updateChapterPinState(captured.progress);
     this.drawChapterPins(offCtx, scaleX, scaleY);
 
+    this.drawTripStats(offCtx, offscreen.width, offscreen.height, scaleX, captured);
     this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
     this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
 

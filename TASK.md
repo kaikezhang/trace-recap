@@ -1,112 +1,122 @@
-# TASK.md — Breadcrumb Thumbnail Trail
+# TASK.md — Trip Stats Spine
 
 ⚠️ DO NOT MERGE. Create PR and stop.
 
 ## Overview
 
-After leaving a stop, its hero photo shrinks into a tiny circular thumbnail "breadcrumb" that remains pinned to the route at the city's coordinate. As the trip progresses, the full route becomes studded with visual memories — a satisfying accumulation that transforms the final map into a dense visual summary.
+Add a "Trip Stats" overlay that grows with the trip, showing accumulated statistics as the route progresses. Stats appear as a slim information bar along the bottom edge of the map, revealing distance traveled, countries/cities visited, photo count, and transport modes used. This gives TraceRecap a "recap" identity — not just animation, but a data-rich trip summary.
 
 ## Current Behavior
 
-- After leaving a location, nothing visual remains on the map
-- The route line is the only persistent element
+- No statistics or data overlays during playback
+- Route distance is calculated but not displayed
 
 ## Desired Behavior
 
-### 1. Breadcrumb Data Model
+### 1. Stats Data Model (`src/lib/tripStats.ts`) — NEW
 
-Track breadcrumbs in the animation store:
+Compute stats from project data:
 ```ts
-interface Breadcrumb {
-  locationId: string;
-  coordinates: [number, number]; // [lng, lat]
-  heroPhotoUrl: string;          // URL of the hero/first photo
-  cityName: string;
-  visitedAtSegment: number;      // segment index when this was visited
+interface TripStats {
+  totalDistanceKm: number;       // sum of all segment distances
+  citiesVisited: number;         // count of non-waypoint locations visited so far
+  totalCities: number;           // total non-waypoint locations
+  photosShown: number;           // photos in visited locations
+  totalPhotos: number;           // all photos
+  transportModes: Map<string, number>; // mode → distance in km
+  currentSegmentIndex: number;
+  elapsedPercent: number;        // 0-1 trip progress
 }
-
-breadcrumbs: Breadcrumb[];        // grows as trip progresses
-addBreadcrumb: (b: Breadcrumb) => void;
-clearBreadcrumbs: () => void;
 ```
 
-### 2. Breadcrumb Rendering (`src/components/editor/BreadcrumbTrail.tsx`) — NEW
+Function: `computeTripStats(locations, segments, currentSegmentIndex)` → `TripStats`
 
-A component that renders all accumulated breadcrumbs on the map:
+### 2. Stats Bar Component (`src/components/editor/TripStatsBar.tsx`) — NEW
 
-**Each breadcrumb:**
-- Circular thumbnail: 28-36px diameter
-- White border (2px)
-- Box shadow for depth
-- Photo uses `object-fit: cover`
-- Positioned at city coordinate via `map.project()`
-- Opacity: 0.6-0.8 (slightly faded, not competing with active content)
+A slim bar at the bottom of the map viewport:
 
-**Accumulation animation:**
-- When a new breadcrumb appears (leaving a city), it shrinks from the active photo size to breadcrumb size with a smooth spring transition
-- New breadcrumbs start at full opacity and settle to 0.7
+**Layout (horizontal, left to right):**
+```
+📍 3/7 cities  |  📸 12 photos  |  🛣️ 847 km  |  ✈️🚄🚗
+```
 
-**Visual hierarchy:**
-- Breadcrumbs render BELOW the route line and active overlays
-- Newest breadcrumb slightly larger/more opaque than older ones (optional)
+**Design:**
+- Height: 32-40px
+- Background: bg-black/50 backdrop-blur-sm
+- Text: white, 12-13px, tabular-nums for numbers
+- Icons: emoji or Lucide icons
+- Separator: thin vertical divider (white/20%)
+- Rounded top corners
+- Positioned at bottom center of map viewport
 
-### 3. Animation Engine Integration (`src/engine/AnimationEngine.ts`)
+**Animation:**
+- Stats counter-animate as they increase (numbers tick up)
+- New transport mode icons slide in when first used
+- Bar fades in when playback starts, fades out when stopped
 
-- When transitioning from ARRIVE to next segment's HOVER, emit a breadcrumb event
-- Or: in EditorLayout, detect when `showPhotoOverlay` goes from true→false and add a breadcrumb for that location
+**Progressive reveal:**
+- Cities count: updates as each city is visited
+- Photo count: updates as each city's photos are shown
+- Distance: ticks up continuously during FLY phases
+- Transport modes: icon appears when that mode is first used
 
-### 4. Map Position Tracking
+### 3. Animation Integration
 
-- Breadcrumbs must update position when camera moves (they're geo-anchored)
-- Use `map.project(coordinates)` to convert lng/lat to screen pixels
-- Update on map `move` events
+- Stats update on every `progress` event from AnimationEngine
+- Distance accumulates proportionally during FLY phase based on segment progress
+- Cities count increases on ARRIVE at non-waypoint locations
+- Photo count increases when photos are shown
 
-### 5. Video Export (`src/engine/VideoExporter.ts`)
+### 4. Video Export (`src/engine/VideoExporter.ts`)
 
-- Draw breadcrumbs at projected coordinates on the canvas
-- Circular clip mask for each thumbnail
-- White border stroke
-- Draw BEFORE route lines and active photos (behind everything)
-- Only draw breadcrumbs for locations that have been "visited" (segment index ≤ current)
+Draw the stats bar on the canvas:
+- Same layout as preview
+- Positioned at bottom center
+- Semi-transparent background with rounded corners
+- White text with proper font sizing (scaled to canvas)
+- Transport mode icons as text/emoji
 
-### 6. Settings (`src/stores/uiStore.ts`)
+### 5. Settings (`src/stores/uiStore.ts`)
 
 ```ts
-breadcrumbsEnabled: boolean; // default: true
+tripStatsEnabled: boolean; // default: true
 ```
 
-Persisted to localStorage. Toggle in global settings area.
+Persisted to localStorage.
 
-## Visual Design
+## Stats Computation Details
 
-```
-Map with route:
-  ○ ○ ○ ←── tiny photo circles along the route
-  A ──── B ──── C ──── D (current)
-  ○       ○       ○
-  ^visited ^visited ^visited
-```
+**Distance:**
+- Use `turf.length(segment.geometry)` for each segment
+- During FLY phase, interpolate: `segmentDistance * flyProgress`
+- Sum all completed segments + partial current segment
 
-Each ○ is a 32px circular photo thumbnail with white border, pinned to that city's coordinate.
+**Transport modes:**
+- Read from `segment.transportMode` for completed segments
+- Show as small icons in order of first use
+- Available modes: walk, car, bus, train, flight, bicycle, ferry, motorcycle
+
+**Cities:**
+- Count non-waypoint locations where segment index ≤ current
+- Format: "3/7 cities" or just "3 cities"
 
 ## Files to create/modify
 
-- `src/components/editor/BreadcrumbTrail.tsx` — NEW: breadcrumb rendering component
-- `src/stores/animationStore.ts` — breadcrumb state + actions
-- `src/components/editor/EditorLayout.tsx` — add breadcrumb on location exit
-- `src/components/editor/MapStage.tsx` — render BreadcrumbTrail component
-- `src/engine/VideoExporter.ts` — draw breadcrumbs in export
-- `src/stores/uiStore.ts` — breadcrumbsEnabled toggle
+- `src/lib/tripStats.ts` — NEW: stats computation
+- `src/components/editor/TripStatsBar.tsx` — NEW: stats bar component
+- `src/components/editor/MapStage.tsx` — render TripStatsBar
+- `src/engine/VideoExporter.ts` — draw stats in export
+- `src/stores/uiStore.ts` — tripStatsEnabled toggle
 
 ## Verification
 
 - `npx tsc --noEmit` and `npm run build` must pass
-- Breadcrumbs appear as route progresses past each city
-- Breadcrumbs are geo-anchored and move with camera
-- Breadcrumbs accumulate (don't disappear)
-- Export shows breadcrumbs matching preview
+- Stats bar appears during playback at bottom of viewport
+- Numbers update progressively as trip progresses
+- Distance ticks up during travel
+- Transport mode icons appear when first used
+- Export shows stats bar matching preview
 - Toggle enables/disables the feature
-- Reset/replay clears breadcrumbs
 
 ## Working directory
 `/home/kaike/.openclaw/workspace/trace-recap`

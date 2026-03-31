@@ -18,6 +18,7 @@ interface PersistedUISettings {
   moodColorsEnabled: boolean;
   chapterPinsEnabled: boolean;
   breadcrumbsEnabled: boolean;
+  tripStatsEnabled: boolean;
 }
 
 function loadPersistedSettings(): Partial<PersistedUISettings> {
@@ -61,6 +62,7 @@ interface UIState {
   moodColorsEnabled: boolean; // Use photo-extracted colors for route lines
   chapterPinsEnabled: boolean; // Show chapter pins at visited cities
   breadcrumbsEnabled: boolean; // Show breadcrumb thumbnails at visited locations
+  tripStatsEnabled: boolean; // Show trip stats bar during playback
 
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -80,6 +82,7 @@ interface UIState {
   setMoodColorsEnabled: (enabled: boolean) => void;
   setChapterPinsEnabled: (enabled: boolean) => void;
   setBreadcrumbsEnabled: (enabled: boolean) => void;
+  setTripStatsEnabled: (enabled: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -101,6 +104,7 @@ export const useUIStore = create<UIState>((set) => ({
   moodColorsEnabled: saved.moodColorsEnabled ?? true,
   chapterPinsEnabled: saved.chapterPinsEnabled ?? true,
   breadcrumbsEnabled: saved.breadcrumbsEnabled ?? true,
+  tripStatsEnabled: saved.tripStatsEnabled ?? true,
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
@@ -120,6 +124,7 @@ export const useUIStore = create<UIState>((set) => ({
   setMoodColorsEnabled: (moodColorsEnabled) => set({ moodColorsEnabled }),
   setChapterPinsEnabled: (chapterPinsEnabled) => set({ chapterPinsEnabled }),
   setBreadcrumbsEnabled: (breadcrumbsEnabled) => set({ breadcrumbsEnabled }),
+  setTripStatsEnabled: (tripStatsEnabled) => set({ tripStatsEnabled }),
 }));
 
 // Persist user settings on change (debounced)
@@ -140,6 +145,7 @@ useUIStore.subscribe((state) => {
       moodColorsEnabled: state.moodColorsEnabled,
       chapterPinsEnabled: state.chapterPinsEnabled,
       breadcrumbsEnabled: state.breadcrumbsEnabled,
+      tripStatsEnabled: state.tripStatsEnabled,
     });
   }, 500);
 });
