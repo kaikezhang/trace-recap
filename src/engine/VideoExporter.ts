@@ -27,6 +27,12 @@ import { getExportViewportSize } from "@/lib/viewportRatio";
 import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
 import { isMediaRecorderSupported, MediaRecorderExporter } from "./MediaRecorderExporter";
 import { useUIStore } from "@/stores/uiStore";
+import {
+  BREADCRUMB_SOURCE_ID,
+  BREADCRUMB_LAYER_ID,
+  getBreadcrumbImageId,
+  createCircularImageFromElement,
+} from "@/components/editor/BreadcrumbTrail";
 import { useProjectStore } from "@/stores/projectStore";
 import { resolveSceneTransition, computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from "@/lib/sceneTransition";
 import { computePortalLayout, computePortalPhaseProgress } from "@/lib/portalLayout";
@@ -64,6 +70,7 @@ export class VideoExporter {
     locationId: string;
     coordinates: [number, number];
     heroPhotoUrl: string;
+    addedAtFrame: number;
   }> = [];
   /** Track previous showPhotos state for breadcrumb emission during export */
   private prevExportShowPhotos = false;
@@ -306,81 +313,73 @@ export class VideoExporter {
     iconAnimator.drawToCanvas(ctx, px, py, sz);
   }
 
-  /** Draw breadcrumb thumbnails at visited locations on the export canvas */
-  private drawBreadcrumbs(
-    ctx: CanvasRenderingContext2D,
-    scaleX: number,
-    scaleY: number
-  ): void {
+  /** Update the Mapbox breadcrumb source with animated scale/opacity for export */
+  private updateBreadcrumbMapSource(frameIndex: number, fps: number): void {
+    const source = this.map.getSource(BREADCRUMB_SOURCE_ID) as
+      | mapboxgl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
     const breadcrumbsEnabled = useUIStore.getState().breadcrumbsEnabled;
-    if (!breadcrumbsEnabled || this.exportBreadcrumbs.length === 0) return;
+    if (!breadcrumbsEnabled || this.exportBreadcrumbs.length === 0) {
+      source.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
 
-    const size = 32 * scaleX;
-    const borderWidth = 2 * scaleX;
-    const halfSize = size / 2;
+    const animFrames = Math.round(0.3 * fps); // ~300ms of animation
 
-    for (let i = 0; i < this.exportBreadcrumbs.length; i++) {
-      const bc = this.exportBreadcrumbs[i];
-      const point = this.map.project(bc.coordinates);
-      const px = point.x * scaleX;
-      const py = point.y * scaleY;
+    const features: GeoJSON.Feature<GeoJSON.Point>[] =
+      this.exportBreadcrumbs.map((bc, i) => {
+        const isNewest = i === this.exportBreadcrumbs.length - 1;
+        const settledOpacity = isNewest ? 0.8 : 0.7;
 
-      const isNewest = i === this.exportBreadcrumbs.length - 1;
-      const opacity = isNewest ? 0.8 : 0.7;
+        const elapsed = frameIndex - bc.addedAtFrame;
+        const t = Math.min(1, animFrames > 0 ? elapsed / animFrames : 1);
+        // Cubic ease-out matching preview
+        const ease = 1 - Math.pow(1 - t, 3);
 
-      ctx.save();
-      ctx.globalAlpha = opacity;
+        const scale = 2 - ease; // 2 → 1
+        const opacity = 1 - ease * (1 - settledOpacity); // 1 → settled
 
-      // Clip to circle
-      ctx.beginPath();
-      ctx.arc(px, py, halfSize, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
+        return {
+          type: "Feature" as const,
+          geometry: {
+            type: "Point" as const,
+            coordinates: bc.coordinates,
+          },
+          properties: {
+            imageId: getBreadcrumbImageId(bc.locationId),
+            scale,
+            opacity,
+          },
+        };
+      });
 
-      // Draw photo
-      const preloaded = this.photoImages.get(bc.heroPhotoUrl);
-      if (preloaded) {
-        const imgAspect = preloaded.aspect;
-        let sw = size;
-        let sh = size;
-        let sx = px - halfSize;
-        let sy = py - halfSize;
-        // object-fit: cover
-        if (imgAspect > 1) {
-          sw = size * imgAspect;
-          sx = px - sw / 2;
-        } else {
-          sh = size / imgAspect;
-          sy = py - sh / 2;
+    source.setData({ type: "FeatureCollection", features });
+  }
+
+  /** Ensure the breadcrumb layer is positioned below route segment layers */
+  private ensureBreadcrumbLayerOrder(): void {
+    if (!this.map.getLayer(BREADCRUMB_LAYER_ID)) return;
+    const style = this.map.getStyle();
+    if (!style?.layers) return;
+    for (const layer of style.layers) {
+      if (
+        layer.id.startsWith("segment-glow-") ||
+        layer.id.startsWith("segment-")
+      ) {
+        try {
+          this.map.moveLayer(BREADCRUMB_LAYER_ID, layer.id);
+        } catch {
+          /* already in position */
         }
-        ctx.drawImage(preloaded.img, sx, sy, sw, sh);
+        return;
       }
-
-      ctx.restore();
-
-      // White border
-      ctx.save();
-      ctx.globalAlpha = opacity;
-      ctx.beginPath();
-      ctx.arc(px, py, halfSize, 0, Math.PI * 2);
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = borderWidth;
-      ctx.stroke();
-
-      // Shadow effect
-      ctx.shadowColor = "rgba(0,0,0,0.3)";
-      ctx.shadowBlur = 8 * scaleX;
-      ctx.beginPath();
-      ctx.arc(px, py, halfSize + borderWidth / 2, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,255,255,0.01)";
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-      ctx.restore();
     }
   }
 
   /** Update breadcrumb tracking during export based on animation progress events */
-  private updateExportBreadcrumbs(event: AnimationEvent): void {
+  private updateExportBreadcrumbs(event: AnimationEvent, frameIndex: number): void {
     const wasShowingPhotos = this.prevExportShowPhotos;
     const prevLocId = this.prevExportPhotoLocationId;
 
@@ -388,10 +387,26 @@ export class VideoExporter {
       const locations = this.engine.getLocations();
       const loc = locations.find((l) => l.id === prevLocId);
       if (loc && loc.photos.length > 0 && !this.exportBreadcrumbs.some((b) => b.locationId === loc.id)) {
+        // Register circular image with the map if not already present
+        const imgId = getBreadcrumbImageId(loc.id);
+        if (!this.map.hasImage(imgId)) {
+          const preloaded = this.photoImages.get(loc.photos[0].url);
+          if (preloaded) {
+            const imageData = createCircularImageFromElement(
+              preloaded.img,
+              preloaded.aspect,
+              64, // 2x size for retina
+              4,  // 2x border
+            );
+            this.map.addImage(imgId, imageData, { pixelRatio: 2 });
+          }
+        }
+
         this.exportBreadcrumbs.push({
           locationId: loc.id,
           coordinates: loc.coordinates,
           heroPhotoUrl: loc.photos[0].url,
+          addedAtFrame: frameIndex,
         });
       }
     }
@@ -2165,6 +2180,12 @@ export class VideoExporter {
     await this.preloadPhotos();
 
     this.hideAllSegments();
+    this.ensureBreadcrumbLayerOrder();
+    // Clear breadcrumb source for fresh export
+    const bcSource = this.map.getSource(BREADCRUMB_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+    if (bcSource) {
+      bcSource.setData({ type: "FeatureCollection", features: [] });
+    }
 
     const captured = { routeDraw: null as AnimationEvent | null, progress: null as AnimationEvent | null };
     const onRouteDrawEvent = (e: AnimationEvent) => { captured.routeDraw = e; };
@@ -2237,6 +2258,11 @@ export class VideoExporter {
     } finally {
       this.restoreAllSegments();
       this.engine.getIconAnimator().hide();
+      // Clear export breadcrumb source so preview component can take over
+      const bcSrc = this.map.getSource(BREADCRUMB_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+      if (bcSrc) {
+        bcSrc.setData({ type: "FeatureCollection", features: [] });
+      }
 
       this.engine.off("routeDrawProgress", onRouteDrawEvent);
       this.engine.off("progress", onProgressEvent);
@@ -2263,16 +2289,18 @@ export class VideoExporter {
 
     this.engine.seekTo(Math.min(progress, 1));
     this.applyRouteDrawFromCapture(captured);
+
+    // Update breadcrumb tracking and Mapbox source BEFORE waiting for map idle
+    // so breadcrumbs are rendered on the map canvas at correct z-order
+    if (captured.progress) {
+      this.updateExportBreadcrumbs(captured.progress, frameIndex);
+    }
+    this.updateBreadcrumbMapSource(frameIndex, fps);
+
     await this.waitForMapIdle();
 
     offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
     offCtx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height);
-    // Update breadcrumb tracking from progress event
-    if (captured.progress) {
-      this.updateExportBreadcrumbs(captured.progress);
-    }
-    // Breadcrumbs drawn first (behind everything else)
-    this.drawBreadcrumbs(offCtx, scaleX, scaleY);
     this.drawVehicleIcon(offCtx, scaleX, scaleY);
     this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
