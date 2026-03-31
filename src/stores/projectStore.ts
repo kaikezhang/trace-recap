@@ -41,6 +41,10 @@ export interface ImportRouteData {
       focalPoint?: { x: number; y: number };
     }[];
     photoLayout?: PhotoLayout;
+    chapterTitle?: string;
+    chapterNote?: string;
+    chapterDate?: string;
+    chapterEmoji?: string;
   }[];
   segments: {
     fromIndex: number;
@@ -289,6 +293,10 @@ async function serializeLocation(loc: Location): Promise<SerializedLocation> {
           },
         }
       : {}),
+    ...(loc.chapterTitle ? { chapterTitle: loc.chapterTitle } : {}),
+    ...(loc.chapterNote ? { chapterNote: loc.chapterNote } : {}),
+    ...(loc.chapterDate ? { chapterDate: loc.chapterDate } : {}),
+    ...(loc.chapterEmoji ? { chapterEmoji: loc.chapterEmoji } : {}),
   };
 }
 
@@ -312,13 +320,17 @@ async function serializeProjectState(
     // Use cached serialization for clean locations (no photo changes)
     const cached = serializedLocationCache.get(loc.id);
     if (cached && !dirtySnapshotVersions.has(loc.id)) {
-      // Re-serialize cheap fields (name, coords, waypoint) but reuse photo data
+      // Re-serialize cheap fields (name, coords, waypoint, chapter metadata) but reuse photo data
       const updated: SerializedLocation = {
         ...cached,
         name: loc.name,
         nameZh: loc.nameZh,
         coordinates: loc.coordinates as [number, number],
         isWaypoint: loc.isWaypoint ?? false,
+        chapterTitle: loc.chapterTitle,
+        chapterNote: loc.chapterNote,
+        chapterDate: loc.chapterDate,
+        chapterEmoji: loc.chapterEmoji,
       };
       serializedLocationCache.set(loc.id, updated);
       return updated;
@@ -505,6 +517,10 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
         locationIndex < data.locations.length - 1 &&
         Boolean(loc.isWaypoint),
       ...(photoLayout ? { photoLayout } : {}),
+      ...(typeof loc.chapterTitle === "string" ? { chapterTitle: loc.chapterTitle } : {}),
+      ...(typeof loc.chapterNote === "string" ? { chapterNote: loc.chapterNote } : {}),
+      ...(typeof loc.chapterDate === "string" ? { chapterDate: loc.chapterDate } : {}),
+      ...(typeof loc.chapterEmoji === "string" ? { chapterEmoji: loc.chapterEmoji } : {}),
     };
   });
 
@@ -990,6 +1006,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                 },
               }
             : {}),
+          ...(loc.chapterTitle ? { chapterTitle: loc.chapterTitle } : {}),
+          ...(loc.chapterNote ? { chapterNote: loc.chapterNote } : {}),
+          ...(loc.chapterDate ? { chapterDate: loc.chapterDate } : {}),
+          ...(loc.chapterEmoji ? { chapterEmoji: loc.chapterEmoji } : {}),
         };
       }),
     );

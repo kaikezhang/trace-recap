@@ -351,29 +351,46 @@ export class VideoExporter {
     ctx.fillText(label, dotX + dotRadius + dotGap, dotY);
   }
 
-  /** Update chapter pin tracking state based on the current animation event */
+  /** Update chapter pin tracking state — derived from current time so seek is correct */
   private updateChapterPinState(progress: AnimationEvent | null): void {
     if (!progress) return;
     const groups = this.engine.getGroups();
-    const group = groups[progress.groupIndex];
-    if (!group) return;
+    const tl = this.engine.getTimeline();
+    const t = progress.time;
 
-    if (progress.phase === "ARRIVE" && !group.toLoc.isWaypoint) {
-      this.exportCurrentArrivalId = group.toLoc.id;
-    } else if (progress.phase === "HOVER" && progress.groupIndex === 0 && !group.fromLoc.isWaypoint) {
-      this.exportCurrentArrivalId = group.fromLoc.id;
-    } else if (
-      (progress.phase === "ZOOM_OUT" || progress.phase === "FLY") &&
-      progress.groupIndex > 0
-    ) {
-      const prevGroup = groups[progress.groupIndex - 1];
-      if (prevGroup && !prevGroup.toLoc.isWaypoint) {
-        this.exportVisitedLocationIds.add(prevGroup.toLoc.id);
+    this.exportVisitedLocationIds.clear();
+    this.exportCurrentArrivalId = null;
+
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      const entry = tl[i];
+      if (!entry) continue;
+
+      // First location: arrival during HOVER of group 0, visited after
+      if (i === 0 && !group.fromLoc.isWaypoint) {
+        const hover = entry.phases.find((p) => p.phase === "HOVER");
+        if (hover) {
+          const hoverEnd = hover.startTime + hover.duration;
+          if (t >= hover.startTime && t < hoverEnd) {
+            this.exportCurrentArrivalId = group.fromLoc.id;
+          } else if (t >= hoverEnd) {
+            this.exportVisitedLocationIds.add(group.fromLoc.id);
+          }
+        }
       }
-      if (progress.groupIndex === 1 && !group.fromLoc.isWaypoint) {
-        this.exportVisitedLocationIds.add(group.fromLoc.id);
+
+      // toLoc: arriving during ARRIVE phase, visited after
+      if (!group.toLoc.isWaypoint) {
+        const arrive = entry.phases.find((p) => p.phase === "ARRIVE");
+        if (arrive) {
+          const arriveEnd = arrive.startTime + arrive.duration;
+          if (t >= arrive.startTime && t < arriveEnd) {
+            this.exportCurrentArrivalId = group.toLoc.id;
+          } else if (t >= arriveEnd) {
+            this.exportVisitedLocationIds.add(group.toLoc.id);
+          }
+        }
       }
-      this.exportCurrentArrivalId = null;
     }
   }
 
@@ -497,6 +514,14 @@ export class VideoExporter {
       ctx.fillText(emoji, photoCX, photoCY);
     }
     ctx.restore();
+
+    // Emoji stamp in bottom-right corner when photo exists (matching preview)
+    if (loc.chapterEmoji && preloaded) {
+      ctx.font = `${14 * scale}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(loc.chapterEmoji, photoCX + photoRadius * 0.6, photoCY + photoRadius * 0.6);
+    }
 
     // White border around photo
     ctx.beginPath();
@@ -2135,12 +2160,12 @@ export class VideoExporter {
     this.drawVehicleIcon(offCtx, scaleX, scaleY);
     this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
-    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
-    this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
-
-    // Chapter pins: update tracking and draw
+    // Chapter pins: update tracking and draw BEFORE photos (pins behind photos, matching preview z-order)
     this.updateChapterPinState(captured.progress);
     this.drawChapterPins(offCtx, scaleX, scaleY);
+
+    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
+    this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
 
     // Clear photo start tracking when photos stop showing so re-entry is tracked fresh
     const capturedProgress = captured.progress as AnimationEvent | null;

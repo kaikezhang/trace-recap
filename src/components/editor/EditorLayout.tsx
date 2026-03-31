@@ -139,7 +139,8 @@ function EditorContent() {
   );
   const setBloomOrigin = useAnimationStore((s) => s.setBloomOrigin);
   const setBloomElapsedTime = useAnimationStore((s) => s.setBloomElapsedTime);
-  const addVisitedLocationId = useAnimationStore((s) => s.addVisitedLocationId);
+
+  const setVisitedLocationIds = useAnimationStore((s) => s.setVisitedLocationIds);
   const setCurrentArrivalLocationId = useAnimationStore((s) => s.setCurrentArrivalLocationId);
   const reset = useAnimationStore((s) => s.reset);
 
@@ -370,34 +371,53 @@ function EditorContent() {
       setCurrentCityLabelZh(e.cityLabelZh);
       setShowPhotoOverlay(e.showPhotos);
       setPhotoOverlayOpacity(e.photoOpacity);
-      // Chapter pin tracking: mark current arrival and accumulate visited locations
+      // Chapter pin tracking: derive visited/arrival state from current time
+      // (recomputed from scratch so seek/scrub always produces correct state)
       {
         const groups = engine.getGroups();
-        const group = groups[e.groupIndex];
-        if (group) {
-          if (e.phase === "ARRIVE" && !group.toLoc.isWaypoint) {
-            setCurrentArrivalLocationId(group.toLoc.id);
-          } else if (e.phase === "HOVER" && !group.fromLoc.isWaypoint) {
-            // First location hover: mark as arrival
-            if (e.groupIndex === 0) {
-              setCurrentArrivalLocationId(group.fromLoc.id);
+        const tl = engine.getTimeline();
+        const t = e.time;
+        const newVisited: string[] = [];
+        let newArrival: string | null = null;
+
+        for (let i = 0; i < groups.length; i++) {
+          const group = groups[i];
+          const entry = tl[i];
+          if (!entry) continue;
+
+          // First location: shown as arrival during HOVER of group 0
+          if (i === 0 && !group.fromLoc.isWaypoint) {
+            const hover = entry.phases.find(
+              (p: { phase: string }) => p.phase === "HOVER",
+            );
+            if (hover) {
+              const hoverEnd = hover.startTime + hover.duration;
+              if (t >= hover.startTime && t < hoverEnd) {
+                newArrival = group.fromLoc.id;
+              } else if (t >= hoverEnd) {
+                newVisited.push(group.fromLoc.id);
+              }
             }
-          } else if (
-            (e.phase === "ZOOM_OUT" || e.phase === "FLY") &&
-            e.groupIndex > 0
-          ) {
-            // Previous location transitions to visited
-            const prevGroup = groups[e.groupIndex - 1];
-            if (prevGroup && !prevGroup.toLoc.isWaypoint) {
-              addVisitedLocationId(prevGroup.toLoc.id);
+          }
+
+          // toLoc: arriving during ARRIVE phase, visited after
+          if (!group.toLoc.isWaypoint) {
+            const arrive = entry.phases.find(
+              (p: { phase: string }) => p.phase === "ARRIVE",
+            );
+            if (arrive) {
+              const arriveEnd = arrive.startTime + arrive.duration;
+              if (t >= arrive.startTime && t < arriveEnd) {
+                newArrival = group.toLoc.id;
+              } else if (t >= arriveEnd) {
+                newVisited.push(group.toLoc.id);
+              }
             }
-            // Also mark the very first location as visited once we leave it
-            if (e.groupIndex === 1 && !group.fromLoc.isWaypoint) {
-              addVisitedLocationId(group.fromLoc.id);
-            }
-            setCurrentArrivalLocationId(null);
           }
         }
+
+        setVisitedLocationIds(newVisited);
+        setCurrentArrivalLocationId(newArrival);
       }
 
       // Drive bloom elapsed time from engine timeline (not wall-clock)
