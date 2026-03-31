@@ -534,9 +534,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     return { width: w, height: h };
   }, [expanded, panelSize, previewAspect, viewportRatio]);
 
-  // Compute fitted preview container style — always preserve aspect ratio for WYSIWYG
+  // Compute fitted preview container style
+  // Expanded mode: fill entire panel for maximum editing space (coords are 0-1 normalized)
+  // Normal mode: preserve viewport aspect ratio for WYSIWYG preview
   const previewContainerStyle = useMemo<React.CSSProperties>(() => {
-    if (viewportRatio === "free") {
+    if (expanded || viewportRatio === "free") {
       return { width: "100%", height: "100%" };
     }
 
@@ -546,7 +548,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       return { width: "100%", height: "100%" };
     }
 
-    // Fit the target aspect ratio within the available panel, whether expanded or not
     const targetRatio = previewAspect;
     const panelRatio = pw / ph;
 
@@ -559,7 +560,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       w = ph * targetRatio;
     }
     return { width: `${w}px`, height: `${h}px` };
-  }, [previewAspect, previewPixelSize.height, previewPixelSize.width, viewportRatio]);
+  }, [expanded, previewAspect, previewPixelSize.height, previewPixelSize.width, viewportRatio]);
 
   const orderedPhotos = useMemo(
     () => getOrderedPhotos(location.photos, photoOrder),
