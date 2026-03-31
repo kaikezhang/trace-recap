@@ -534,18 +534,32 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     return { width: w, height: h };
   }, [expanded, panelSize, previewAspect, viewportRatio]);
 
-  // Compute fitted preview container style
+  // Compute fitted preview container style — always preserve aspect ratio for WYSIWYG
   const previewContainerStyle = useMemo<React.CSSProperties>(() => {
-    if (expanded || viewportRatio === "free") {
+    if (viewportRatio === "free") {
       return { width: "100%", height: "100%" };
     }
 
-    if (!previewPixelSize.width || !previewPixelSize.height) {
+    const pw = previewPixelSize.width;
+    const ph = previewPixelSize.height;
+    if (!pw || !ph) {
       return { width: "100%", height: "100%" };
     }
 
-    return { width: `${previewPixelSize.width}px`, height: `${previewPixelSize.height}px` };
-  }, [expanded, previewPixelSize.height, previewPixelSize.width, viewportRatio]);
+    // Fit the target aspect ratio within the available panel, whether expanded or not
+    const targetRatio = previewAspect;
+    const panelRatio = pw / ph;
+
+    let w: number, h: number;
+    if (targetRatio > panelRatio) {
+      w = pw;
+      h = pw / targetRatio;
+    } else {
+      h = ph;
+      w = ph * targetRatio;
+    }
+    return { width: `${w}px`, height: `${h}px` };
+  }, [previewAspect, previewPixelSize.height, previewPixelSize.width, viewportRatio]);
 
   const orderedPhotos = useMemo(
     () => getOrderedPhotos(location.photos, photoOrder),
