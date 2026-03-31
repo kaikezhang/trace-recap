@@ -570,11 +570,22 @@ export class VideoExporter {
     const group = groups[progress.groupIndex];
     if (!group) return;
 
-    const toLoc = group.toLoc;
-    const photos: Photo[] = toLoc.photos;
+    // During ARRIVE: show current destination's photos
+    // During HOVER/ZOOM_OUT/FLY fade-out: show PREVIOUS destination's photos (they're fading out)
+    let photoLoc;
+    if (progress.phase === "ARRIVE") {
+      photoLoc = group.toLoc;
+    } else if (progress.groupIndex > 0) {
+      // Fading out previous group's photos
+      photoLoc = groups[progress.groupIndex - 1].toLoc;
+    } else {
+      photoLoc = group.toLoc;
+    }
+
+    const photos: Photo[] = photoLoc.photos;
     if (photos.length === 0) return;
 
-    const layout = toLoc.photoLayout;
+    const layout = photoLoc.photoLayout;
     const gapPx = layout?.gap ?? 8;
     const borderRadiusPx = layout?.borderRadius ?? 8;
 
