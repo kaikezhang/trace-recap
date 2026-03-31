@@ -864,29 +864,37 @@ export default function PhotoOverlay({
                   )}
                 </motion.div>
                 {displayIsFreeMode && hasCaption && (
-                  <motion.div
-                    key={`${photo.id}-caption`}
-                    initial={enter.initial}
-                    animate={exitProgress > 0
-                      ? { opacity: exit.exitOpacity, scale: exit.exitScale, x: exit.exitX, y: exit.exitY }
-                      : enter.animate
-                    }
-                    transition={exitProgress > 0 ? { duration: 0.5, ease: "easeOut" } : enter.transition}
-                    className="absolute whitespace-nowrap rounded-md px-2 py-1 text-center shadow-sm"
+                  <div
+                    key={`${photo.id}-caption-anchor`}
+                    className="absolute"
                     style={{
                       left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
                       top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
-                      transform: `translate(-50%, -50%) rotate(${captionDisplay.rotation}deg)`,
-                      backgroundColor: captionDisplay.bgColor,
-                      color: captionDisplay.color,
-                      fontFamily: captionDisplay.fontFamily,
-                      fontSize: `${captionDisplay.fontSizePx}px`,
-                      textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                      transform: `translate(-50%, -50%)`,
                       zIndex: (freeTransform?.zIndex ?? index) + 1,
                     }}
                   >
-                    {captionDisplay.text}
-                  </motion.div>
+                    <motion.div
+                      key={`${photo.id}-caption`}
+                      initial={enter.initial}
+                      animate={exitProgress > 0
+                        ? { opacity: exit.exitOpacity, scale: exit.exitScale, x: exit.exitX, y: exit.exitY }
+                        : enter.animate
+                      }
+                      transition={exitProgress > 0 ? { duration: 0.5, ease: "easeOut" } : enter.transition}
+                      className="whitespace-nowrap rounded-md px-2 py-1 text-center shadow-sm"
+                      style={{
+                        transform: `rotate(${captionDisplay.rotation}deg)`,
+                        backgroundColor: captionDisplay.bgColor,
+                        color: captionDisplay.color,
+                        fontFamily: captionDisplay.fontFamily,
+                        fontSize: `${captionDisplay.fontSizePx}px`,
+                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                      }}
+                    >
+                      {captionDisplay.text}
+                    </motion.div>
+                  </div>
                 )}
               </Fragment>
             );
