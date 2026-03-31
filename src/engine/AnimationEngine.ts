@@ -455,15 +455,37 @@ export class AnimationEngine {
       cityLabelZh = group.toLoc.nameZh ?? null;
     }
 
+    // Photos: show during ARRIVE at full opacity.
+    // Continue showing (fading out) during NEXT group's HOVER + ZOOM_OUT.
+    let showPhotos = false;
+    let photoOpacity = 0;
+
+    if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
+      showPhotos = true;
+      // Keep full opacity during ARRIVE — exit animation handled by PhotoOverlay on unmount
+      // For export: last 30% fades out via photoOpacity (export reads this directly)
+      photoOpacity = 1;
+    } else if (groupIndex > 0) {
+      const prevGroup = this.groups[groupIndex - 1];
+      if (prevGroup && prevGroup.toLoc.photos.length > 0) {
+        if (phase === "HOVER") {
+          // Fade out previous photos during HOVER
+          showPhotos = true;
+          photoOpacity = 1 - phaseProgress;
+        } else if (phase === "ZOOM_OUT") {
+          showPhotos = true;
+          photoOpacity = Math.max(0, 0.3 * (1 - phaseProgress));
+        }
+      }
+    }
+
     // Scene transition metadata: track the dissolve window between locations.
-    // Transition window spans: outgoing HOVER+ZOOM_OUT → incoming ZOOM_IN → ARRIVE (hold).
+    // Transition window spans: outgoing HOVER+ZOOM_OUT → incoming ZOOM_IN.
     // Progress goes 0 (fully outgoing) → 1 (fully incoming).
     let sceneTransitionProgress: number | undefined;
     let outgoingGroupIndex: number | undefined;
     let incomingGroupIndex: number | undefined;
     let transitionBearing: number | undefined;
-    // Whether this ARRIVE's photos were already introduced by a scene transition
-    let arrivedViaTransition = false;
 
     if (groupIndex > 0) {
       const prevGroup = this.groups[groupIndex - 1];
@@ -486,13 +508,6 @@ export class AnimationEngine {
           sceneTransitionProgress = 0.6 + phaseProgress * 0.4; // 0.6 → 1.0
           outgoingGroupIndex = groupIndex - 1;
           incomingGroupIndex = groupIndex;
-        } else if (phase === "ARRIVE" && nextHasPhotos && prevHasPhotos) {
-          // Hold: incoming photos fully visible during ARRIVE (no duplicate entry animation).
-          // Only when BOTH prev and next have photos — otherwise there was no transition to continue.
-          sceneTransitionProgress = 1.0;
-          outgoingGroupIndex = groupIndex - 1;
-          incomingGroupIndex = groupIndex;
-          arrivedViaTransition = true;
         }
 
         // Compute bearing between outgoing and incoming locations
@@ -505,30 +520,6 @@ export class AnimationEngine {
           if (dLng < -180) dLng += 360;
           const dLat = toCoords[1] - fromCoords[1];
           transitionBearing = (Math.atan2(dLng, dLat) * 180) / Math.PI;
-        }
-      }
-    }
-
-    // Photos: show during ARRIVE at full opacity.
-    // Continue showing (fading out) during NEXT group's HOVER + ZOOM_OUT.
-    // Skip if photos were already introduced via scene transition (arrivedViaTransition).
-    let showPhotos = false;
-    let photoOpacity = 0;
-
-    if (phase === "ARRIVE" && group.toLoc.photos.length > 0 && !arrivedViaTransition) {
-      // Only show via showPhotos if NOT already visible through scene transition
-      showPhotos = true;
-      photoOpacity = 1;
-    } else if (groupIndex > 0) {
-      const prevGroup = this.groups[groupIndex - 1];
-      if (prevGroup && prevGroup.toLoc.photos.length > 0) {
-        if (phase === "HOVER") {
-          // Fade out previous photos during HOVER
-          showPhotos = true;
-          photoOpacity = 1 - phaseProgress;
-        } else if (phase === "ZOOM_OUT") {
-          showPhotos = true;
-          photoOpacity = Math.max(0, 0.3 * (1 - phaseProgress));
         }
       }
     }
