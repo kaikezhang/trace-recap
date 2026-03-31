@@ -50,45 +50,70 @@ export default memo(function PlaybackControls({
     ? "bottom-0"
     : bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[132px]";
   const hideOnMobile = !isPlaying && bottomSheetState === "full";
+  const containerClassName = [
+    hideOnMobile ? "hidden md:flex" : "flex",
+    "fixed left-0 right-0 z-[60] items-center justify-center transition-all duration-300 ease-in-out",
+    controlsBottomClass,
+    isPlaying
+      ? "md:absolute md:bottom-2 md:left-1/2 md:right-auto md:w-[90%] md:max-w-2xl md:-translate-x-1/2"
+      : "md:absolute md:bottom-4 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2 md:z-10",
+  ].join(" ");
+  const barClassName = [
+    "flex items-center overflow-hidden rounded-none border border-white/50 shadow-xl transition-all duration-300 ease-in-out md:rounded-2xl",
+    isPlaying
+      ? "w-full gap-2 bg-white/30 px-3 py-1 backdrop-blur-sm md:gap-3 md:px-4"
+      : "w-full gap-2 bg-white/90 px-3 py-2 backdrop-blur-xl md:w-auto md:gap-3 md:px-4",
+  ].join(" ");
+  const resetContainerClassName = [
+    "overflow-hidden transition-all duration-300 ease-in-out",
+    isPlaying
+      ? "pointer-events-none w-0 -mr-2 opacity-0 md:-mr-3"
+      : "w-8 opacity-100",
+  ].join(" ");
+  const timeContainerClassName = [
+    "overflow-hidden whitespace-nowrap text-right transition-all duration-300 ease-in-out",
+    isPlaying
+      ? "pointer-events-none w-0 -ml-2 opacity-0 md:-ml-3"
+      : "w-[70px] opacity-100",
+  ].join(" ");
+  const playButtonClassName = [
+    "flex items-center justify-center rounded-full bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all duration-300 ease-in-out hover:scale-105 hover:bg-indigo-600 active:scale-95",
+    isPlaying ? "h-10 w-10 md:h-7 md:w-7" : "h-14 w-14 md:h-12 md:w-12",
+  ].join(" ");
+  const sliderContainerClassName = [
+    "min-w-0 transition-all duration-300 ease-in-out",
+    isPlaying ? "flex-1" : "flex-1 md:w-48 md:flex-none",
+  ].join(" ");
+  const sliderClassName = isPlaying
+    ? "h-4 [&>div:first-child]:h-1 md:[&>div:first-child]:h-1"
+    : "h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5";
 
   return (
-    <div
-      className={[
-        hideOnMobile ? "hidden md:flex" : "flex",
-        "flex flex-col items-center",
-        // Mobile: fixed full-width, z above BottomSheet (z-50)
-        "fixed left-0 right-0 z-[60] transition-[bottom] duration-300 ease-out",
-        controlsBottomClass,
-        // Desktop: override to absolute, centered floating pill
-        "md:absolute md:z-10 md:bottom-4 md:left-1/2 md:-translate-x-1/2 md:right-auto",
-      ].join(" ")}
-    >
+    <div className={containerClassName}>
       {/* Controls bar */}
-      <div
-        className={[
-          `flex items-center gap-2 md:gap-3 ${isPlaying ? "bg-white/40 backdrop-blur-sm" : "bg-white/90 backdrop-blur-xl"} border border-white/50 shadow-xl px-3 md:px-4 py-2`,
-          "rounded-none md:rounded-2xl w-full md:w-auto",
-        ].join(" ")}
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={onReset}
-          aria-label="Reset playback"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
+      <div className={barClassName}>
+        <div className={resetContainerClassName} aria-hidden={isPlaying}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={onReset}
+            aria-label="Reset playback"
+            disabled={isPlaying}
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="relative">
           <button
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 hover:bg-indigo-600 active:scale-95 md:h-12 md:w-12"
+            className={playButtonClassName}
             onClick={isPlaying ? onPause : onPlay}
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? (
-              <Pause className="h-5 w-5" />
+              <Pause className="h-3.5 w-3.5" />
             ) : (
-              <Play className="h-5 w-5 ml-0.5" />
+              <Play className="ml-0.5 h-5 w-5" />
             )}
           </button>
           {hintMessage && onHintDismiss && (
@@ -100,9 +125,9 @@ export default memo(function PlaybackControls({
             />
           )}
         </div>
-        <div className="flex-1 md:flex-none md:w-48">
+        <div className={sliderContainerClassName}>
           <Slider
-            className="h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5"
+            className={sliderClassName}
             value={[progress]}
             min={0}
             max={100}
@@ -113,9 +138,11 @@ export default memo(function PlaybackControls({
             }}
           />
         </div>
-        <span className="min-w-[70px] text-right text-sm text-muted-foreground md:text-xs">
-          {formatTime(currentTime)} / {formatTime(totalDuration)}
-        </span>
+        <div className={timeContainerClassName} aria-hidden={isPlaying}>
+          <span className="text-sm text-muted-foreground md:text-xs">
+            {formatTime(currentTime)} / {formatTime(totalDuration)}
+          </span>
+        </div>
       </div>
     </div>
   );
