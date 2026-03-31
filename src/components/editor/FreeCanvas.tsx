@@ -31,29 +31,47 @@ const ROTATION_SNAP_THRESHOLD = 5;
 const TOOLBAR_MARGIN_PX = 12;
 const TOOLBAR_WIDTH_PX = 260;
 const TOOLBAR_HEIGHT_PX = 124;
+const MARQUEE_DRAG_THRESHOLD_PX = 4;
 
-type Selection =
-  | { kind: "photo"; photoId: string }
-  | { kind: "caption"; photoId: string }
-  | null;
+type Selection = {
+  photoIds: string[];
+  captionIds: string[];
+} | null;
+
+type SelectionKind = "photo" | "caption";
+
+interface SelectionTarget {
+  kind: SelectionKind;
+  photoId: string;
+}
 
 type ResizeHandle = "nw" | "ne" | "se" | "sw";
 
 type GestureState =
   | {
-      type: "drag-photo";
-      photoId: string;
+      type: "drag-selection";
       startClientX: number;
       startClientY: number;
-      startTransform: FreePhotoTransform;
+      pointerTarget: SelectionTarget;
+      shouldNarrowSelectionOnClick: boolean;
+      photoStarts: Array<{
+        photoId: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>;
+      captionStarts: Array<{
+        photoId: string;
+        offsetX: number;
+        offsetY: number;
+      }>;
     }
   | {
-      type: "drag-caption";
-      photoId: string;
+      type: "marquee-select";
       startClientX: number;
       startClientY: number;
-      startOffsetX: number;
-      startOffsetY: number;
+      containerRect: DOMRect;
     }
   | {
       type: "rotate-photo";
@@ -89,6 +107,13 @@ interface FreeCanvasProps {
   defaultCaptionFontSize?: number;
   initialGesture?: FreeCanvasInitialGesture | null;
   onInitialGestureHandled?: () => void;
+}
+
+interface MarqueeRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -156,20 +181,16 @@ function getCaptionToolbarPosition(
 ) {
   const safeWidth = Math.max(containerSize.w - TOOLBAR_MARGIN_PX * 2, 180);
   const toolbarWidth = Math.min(TOOLBAR_WIDTH_PX, safeWidth);
-  const halfToolbarWidth = toolbarWidth / 2;
-  const minToolbarLeft = halfToolbarWidth + TOOLBAR_MARGIN_PX;
   const maxToolbarLeft = Math.max(
-    minToolbarLeft,
-    containerSize.w - halfToolbarWidth - TOOLBAR_MARGIN_PX,
+    TOOLBAR_MARGIN_PX,
+    containerSize.w - toolbarWidth - TOOLBAR_MARGIN_PX,
   );
-  const toolbarLeft = clamp(
-    captionCenterX * containerSize.w,
-    minToolbarLeft,
-    maxToolbarLeft,
-  );
-  const requestedTop = captionCenterY < 0.5
-    ? captionCenterY * containerSize.h + TOOLBAR_MARGIN_PX
-    : captionCenterY * containerSize.h - TOOLBAR_HEIGHT_PX - TOOLBAR_MARGIN_PX;
+  const requestedLeft = captionCenterX * containerSize.w - toolbarWidth / 2;
+  const toolbarLeft = clamp(requestedLeft, TOOLBAR_MARGIN_PX, maxToolbarLeft);
+  const belowTop = captionCenterY * containerSize.h + TOOLBAR_MARGIN_PX;
+  const aboveTop = captionCenterY * containerSize.h - TOOLBAR_HEIGHT_PX - TOOLBAR_MARGIN_PX;
+  const fitsBelow = belowTop + TOOLBAR_HEIGHT_PX <= containerSize.h - TOOLBAR_MARGIN_PX;
+  const requestedTop = fitsBelow ? belowTop : aboveTop;
   const toolbarTop = clamp(
     requestedTop,
     TOOLBAR_MARGIN_PX,
@@ -181,6 +202,113 @@ function getCaptionToolbarPosition(
     toolbarTop,
     toolbarWidth,
   };
+}
+
+function normalizeSelection(selection: { photoIds: string[]; captionIds: string[] }): Selection {
+  const photoIds = [...new Set(selection.photoIds)];
+  const captionIds = [...new Set(selection.captionIds)];
+  return photoIds.length > 0 || captionIds.length > 0 ? { photoIds, captionIds } : null;
+}
+
+function arraysEqualAsSets(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const leftSet = new Set(left);
+  if (leftSet.size !== right.length) {
+    return false;
+  }
+
+  return right.every((item) => leftSet.has(item));
+}
+
+function selectionsEqual(left: Selection, right: Selection): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return (
+    arraysEqualAsSets(left.photoIds, right.photoIds) &&
+    arraysEqualAsSets(left.captionIds, right.captionIds)
+  );
+}
+
+function createSingleSelection(target: SelectionTarget): Selection {
+  return target.kind === "photo"
+    ? { photoIds: [target.photoId], captionIds: [] }
+    : { photoIds: [], captionIds: [target.photoId] };
+}
+
+function isSelectionTargetSelected(selection: Selection, target: SelectionTarget): boolean {
+  if (!selection) {
+    return false;
+  }
+  return target.kind === "photo"
+    ? selection.photoIds.includes(target.photoId)
+    : selection.captionIds.includes(target.photoId);
+}
+
+function toggleSelectionTarget(selection: Selection, target: SelectionTarget): Selection {
+  if (!selection) {
+    return createSingleSelection(target);
+  }
+
+  const ids = target.kind === "photo" ? selection.photoIds : selection.captionIds;
+  const nextIds = ids.includes(target.photoId)
+    ? ids.filter((photoId) => photoId !== target.photoId)
+    : [...ids, target.photoId];
+
+  return normalizeSelection(
+    target.kind === "photo"
+      ? { photoIds: nextIds, captionIds: selection.captionIds }
+      : { photoIds: selection.photoIds, captionIds: nextIds },
+  );
+}
+
+function getSelectionTransformIds(selection: Selection): string[] {
+  if (!selection) {
+    return [];
+  }
+
+  return [...new Set([...selection.photoIds, ...selection.captionIds])];
+}
+
+function getSelectionItemCount(selection: Selection): number {
+  if (!selection) {
+    return 0;
+  }
+
+  return selection.photoIds.length + selection.captionIds.length;
+}
+
+function createMarqueeRect(
+  startClientX: number,
+  startClientY: number,
+  currentClientX: number,
+  currentClientY: number,
+  containerRect: DOMRect,
+): MarqueeRect {
+  const startX = clamp(startClientX - containerRect.left, 0, containerRect.width);
+  const startY = clamp(startClientY - containerRect.top, 0, containerRect.height);
+  const currentX = clamp(currentClientX - containerRect.left, 0, containerRect.width);
+  const currentY = clamp(currentClientY - containerRect.top, 0, containerRect.height);
+  return {
+    left: Math.min(startX, currentX),
+    top: Math.min(startY, currentY),
+    width: Math.abs(currentX - startX),
+    height: Math.abs(currentY - startY),
+  };
+}
+
+function rectContains(outer: MarqueeRect, inner: MarqueeRect): boolean {
+  return inner.left >= outer.left &&
+    inner.top >= outer.top &&
+    inner.left + inner.width <= outer.left + outer.width &&
+    inner.top + inner.height <= outer.top + outer.height;
 }
 
 export default function FreeCanvas({
@@ -200,8 +328,11 @@ export default function FreeCanvas({
   const [editingCaptionId, setEditingCaptionId] = useState<string | null>(null);
   const [draftCaptionText, setDraftCaptionText] = useState("");
   const [customColorInput, setCustomColorInput] = useState("");
+  const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
   const transformsRef = useRef(transforms);
   const captionElementRefs = useRef(new Map<string, HTMLElement>());
+  const marqueeRectRef = useRef<MarqueeRect | null>(null);
+  const didDragRef = useRef(false);
 
   useEffect(() => {
     transformsRef.current = transforms;
@@ -220,33 +351,64 @@ export default function FreeCanvas({
         .map((transform) => ({ transform, photo: photoMap.get(transform.photoId)! })),
     [photoMap, transforms],
   );
-
-  const selectedTransform = selection
-    ? transforms.find((transform) => transform.photoId === selection.photoId) ?? null
-    : null;
-  const selectedCaptionColor = selectedTransform?.caption?.color;
-
-  useEffect(() => {
-    if (!selection || selection.kind !== "caption") {
-      return;
+  const transformMap = useMemo(
+    () => new Map(transforms.map((transform) => [transform.photoId, transform])),
+    [transforms],
+  );
+  const selectedPhotoIds = selection?.photoIds ?? [];
+  const selectedCaptionIds = selection?.captionIds ?? [];
+  const selectedPhotoIdSet = useMemo(() => new Set(selectedPhotoIds), [selectedPhotoIds]);
+  const selectedCaptionIdSet = useMemo(() => new Set(selectedCaptionIds), [selectedCaptionIds]);
+  const singleSelectedPhotoId =
+    selectedPhotoIds.length === 1 && selectedCaptionIds.length === 0
+      ? selectedPhotoIds[0]
+      : null;
+  const selectedCaptionToolbarState = useMemo(() => {
+    if (selectedCaptionIds.length === 0) {
+      return null;
     }
 
-    setCustomColorInput(
-      selectedCaptionColor?.startsWith("#") ? selectedCaptionColor : "",
-    );
-  }, [selectedCaptionColor, selection]);
+    const selectedCaptionEntries = selectedCaptionIds
+      .map((photoId) => transformMap.get(photoId))
+      .filter((transform): transform is FreePhotoTransform => Boolean(transform))
+      .map((transform) => {
+        const caption = getCaptionTransform(transform);
+        return {
+          photoId: transform.photoId,
+          caption,
+          centerX: transform.x + transform.width / 2 + caption.offsetX,
+          centerY: transform.y + transform.height / 2 + caption.offsetY,
+          fontFamily: caption.fontFamily ?? defaultCaptionFontFamily,
+          fontSize: caption.fontSize ?? defaultCaptionFontSize,
+          color: caption.color ?? "#ffffff",
+          bgColor: caption.bgColor ?? DEFAULT_CAPTION_BG_COLOR,
+        };
+      });
 
-  useEffect(() => {
-    if (!selection) {
-      return;
+    if (selectedCaptionEntries.length === 0) {
+      return null;
     }
 
-    const hasSelectedPhoto = photos.some((photo) => photo.id === selection.photoId);
-    if (!hasSelectedPhoto) {
-      setSelection(null);
-      setEditingCaptionId(null);
-    }
-  }, [photos, selection]);
+    const [firstCaption] = selectedCaptionEntries;
+    return {
+      photoIds: selectedCaptionEntries.map((entry) => entry.photoId),
+      fontFamily: firstCaption.fontFamily,
+      fontFamilyMixed: selectedCaptionEntries.some((entry) => entry.fontFamily !== firstCaption.fontFamily),
+      fontSize: firstCaption.fontSize,
+      fontSizeMixed: selectedCaptionEntries.some((entry) => entry.fontSize !== firstCaption.fontSize),
+      color: firstCaption.color,
+      colorMixed: selectedCaptionEntries.some((entry) => entry.color !== firstCaption.color),
+      bgColor: firstCaption.bgColor,
+      bgColorMixed: selectedCaptionEntries.some((entry) => entry.bgColor !== firstCaption.bgColor),
+      toolbarPosition: getCaptionToolbarPosition(firstCaption.centerX, firstCaption.centerY, containerSize),
+    };
+  }, [
+    containerSize,
+    defaultCaptionFontFamily,
+    defaultCaptionFontSize,
+    selectedCaptionIds,
+    transformMap,
+  ]);
 
   const updateTransforms = useCallback(
     (
@@ -271,13 +433,56 @@ export default function FreeCanvas({
     return { width, height };
   }, []);
 
-  const bringToFront = useCallback(
-    (photoId: string) => {
+  useEffect(() => {
+    const validPhotoIds = new Set(photos.map((photo) => photo.id));
+    const nextSelection = selection
+      ? normalizeSelection({
+          photoIds: selection.photoIds.filter((photoId) => validPhotoIds.has(photoId)),
+          captionIds: selection.captionIds.filter((photoId) => validPhotoIds.has(photoId)),
+        })
+      : null;
+
+    if (!selectionsEqual(selection, nextSelection)) {
+      setSelection(nextSelection);
+    }
+
+    if (editingCaptionId && !validPhotoIds.has(editingCaptionId)) {
+      setEditingCaptionId(null);
+    }
+  }, [editingCaptionId, photos, selection]);
+
+  useEffect(() => {
+    if (!selectedCaptionToolbarState) {
+      setCustomColorInput("");
+      return;
+    }
+
+    setCustomColorInput(
+      !selectedCaptionToolbarState.colorMixed && selectedCaptionToolbarState.color.startsWith("#")
+        ? selectedCaptionToolbarState.color
+        : "",
+    );
+  }, [selectedCaptionToolbarState]);
+
+  const bringSelectionToFront = useCallback(
+    (photoIds: string[]) => {
+      const uniquePhotoIds = [...new Set(photoIds)];
+      if (uniquePhotoIds.length === 0) {
+        return;
+      }
+
       updateTransforms((current) => {
         const maxZ = current.reduce((highest, transform) => Math.max(highest, transform.zIndex), 0);
+        const selectedTransforms = current
+          .filter((transform) => uniquePhotoIds.includes(transform.photoId))
+          .sort((a, b) => a.zIndex - b.zIndex);
+        const nextZIndexByPhotoId = new Map(
+          selectedTransforms.map((transform, index) => [transform.photoId, maxZ + index + 1]),
+        );
+
         return current.map((transform) =>
-          transform.photoId === photoId
-            ? { ...transform, zIndex: maxZ + 1 }
+          nextZIndexByPhotoId.has(transform.photoId)
+            ? { ...transform, zIndex: nextZIndexByPhotoId.get(transform.photoId)! }
             : transform,
         );
       });
@@ -285,57 +490,139 @@ export default function FreeCanvas({
     [updateTransforms],
   );
 
-  const beginPhotoDrag = useCallback(
-    (photoId: string, clientX: number, clientY: number) => {
-      const transform = transformsRef.current.find((item) => item.photoId === photoId);
-      if (!transform) return;
+  const getSelectionFromMarquee = useCallback(
+    (nextMarqueeRect: MarqueeRect): Selection => {
+      const photoIds: string[] = [];
+      const captionIds: string[] = [];
 
-      setEditingCaptionId(null);
-      setSelection({ kind: "photo", photoId });
-      bringToFront(photoId);
-      setActiveGesture({
-        type: "drag-photo",
-        photoId,
-        startClientX: clientX,
-        startClientY: clientY,
-        startTransform: transform,
-      });
+      for (const transform of transformsRef.current) {
+        const photoBounds = {
+          left: transform.x * containerSize.w,
+          top: transform.y * containerSize.h,
+          width: transform.width * containerSize.w,
+          height: transform.height * containerSize.h,
+        };
+        if (rectContains(nextMarqueeRect, photoBounds)) {
+          photoIds.push(transform.photoId);
+        }
+
+        const captionElement = captionElementRefs.current.get(transform.photoId);
+        if (captionElement) {
+          const caption = getCaptionTransform(transform);
+          const { width, height } = captionElement.getBoundingClientRect();
+          const captionCenterX = (transform.x + transform.width / 2 + caption.offsetX) * containerSize.w;
+          const captionCenterY = (transform.y + transform.height / 2 + caption.offsetY) * containerSize.h;
+          const captionBounds = {
+            left: captionCenterX - width / 2,
+            top: captionCenterY - height / 2,
+            width,
+            height,
+          };
+          if (rectContains(nextMarqueeRect, captionBounds)) {
+            captionIds.push(transform.photoId);
+          }
+        }
+      }
+
+      return normalizeSelection({ photoIds, captionIds });
     },
-    [bringToFront],
+    [containerSize.h, containerSize.w, getCaptionBounds],
   );
 
-  const beginCaptionDrag = useCallback((photoId: string, clientX: number, clientY: number) => {
-    const transform = transformsRef.current.find((item) => item.photoId === photoId);
-    if (!transform) return;
+  const startSelectionDrag = useCallback(
+    (
+      nextSelection: Selection,
+      clientX: number,
+      clientY: number,
+      pointerTarget: SelectionTarget,
+      shouldNarrowSelectionOnClick: boolean,
+    ) => {
+      if (!nextSelection) {
+        return;
+      }
 
-    const caption = getCaptionTransform(transform);
-    setEditingCaptionId(null);
-    setSelection({ kind: "caption", photoId });
-    bringToFront(photoId);
-    setActiveGesture({
-      type: "drag-caption",
-      photoId,
-      startClientX: clientX,
-      startClientY: clientY,
-      startOffsetX: caption.offsetX,
-      startOffsetY: caption.offsetY,
-    });
-  }, [bringToFront]);
+      const selectedPhotoIdSet = new Set(nextSelection.photoIds);
+      const selectedCaptionIdSet = new Set(nextSelection.captionIds);
+      const photoStarts = transformsRef.current
+        .filter((transform) => selectedPhotoIdSet.has(transform.photoId))
+        .map((transform) => ({
+          photoId: transform.photoId,
+          x: transform.x,
+          y: transform.y,
+          width: transform.width,
+          height: transform.height,
+        }));
+      const captionStarts = transformsRef.current
+        .filter(
+          (transform) =>
+            selectedCaptionIdSet.has(transform.photoId) && !selectedPhotoIdSet.has(transform.photoId),
+        )
+        .map((transform) => {
+          const caption = getCaptionTransform(transform);
+          return {
+            photoId: transform.photoId,
+            offsetX: caption.offsetX,
+            offsetY: caption.offsetY,
+          };
+        });
+
+      didDragRef.current = false;
+      setActiveGesture({
+        type: "drag-selection",
+        startClientX: clientX,
+        startClientY: clientY,
+        pointerTarget,
+        shouldNarrowSelectionOnClick,
+        photoStarts,
+        captionStarts,
+      });
+    },
+    [],
+  );
+
+  const handleSelectablePointerDown = useCallback(
+    (target: SelectionTarget, clientX: number, clientY: number, extendSelection: boolean) => {
+      setEditingCaptionId(null);
+
+      if (extendSelection) {
+        setSelection((current) => toggleSelectionTarget(current, target));
+        return;
+      }
+
+      const targetAlreadySelected = isSelectionTargetSelected(selection, target);
+      const shouldNarrowSelectionOnClick =
+        targetAlreadySelected && getSelectionItemCount(selection) > 1;
+      const nextSelection = targetAlreadySelected
+        ? selection ?? createSingleSelection(target)
+        : createSingleSelection(target);
+      setSelection(nextSelection);
+      bringSelectionToFront(getSelectionTransformIds(nextSelection));
+      startSelectionDrag(
+        nextSelection,
+        clientX,
+        clientY,
+        target,
+        shouldNarrowSelectionOnClick,
+      );
+    },
+    [bringSelectionToFront, selection, startSelectionDrag],
+  );
 
   const beginRotate = useCallback((photoId: string) => {
     const transform = transformsRef.current.find((item) => item.photoId === photoId);
     if (!transform || containerSize.w <= 0 || containerSize.h <= 0) return;
 
     setEditingCaptionId(null);
-    setSelection({ kind: "photo", photoId });
-    bringToFront(photoId);
+    const nextSelection = createSingleSelection({ kind: "photo", photoId });
+    setSelection(nextSelection);
+    bringSelectionToFront(getSelectionTransformIds(nextSelection));
     setActiveGesture({
       type: "rotate-photo",
       photoId,
       centerX: (transform.x + transform.width / 2) * containerSize.w,
       centerY: (transform.y + transform.height / 2) * containerSize.h,
     });
-  }, [bringToFront, containerSize.h, containerSize.w]);
+  }, [bringSelectionToFront, containerSize.h, containerSize.w]);
 
   const beginResize = useCallback((photoId: string, handle: ResizeHandle) => {
     const transform = transformsRef.current.find((item) => item.photoId === photoId);
@@ -359,8 +646,9 @@ export default function FreeCanvas({
     const anchorY = centerY + anchorOffset.y;
 
     setEditingCaptionId(null);
-    setSelection({ kind: "photo", photoId });
-    bringToFront(photoId);
+    const nextSelection = createSingleSelection({ kind: "photo", photoId });
+    setSelection(nextSelection);
+    bringSelectionToFront(getSelectionTransformIds(nextSelection));
     setActiveGesture({
       type: "resize-photo",
       photoId,
@@ -370,24 +658,24 @@ export default function FreeCanvas({
       aspect,
       rotation,
     });
-  }, [bringToFront, containerSize.h, containerSize.w]);
+  }, [bringSelectionToFront, containerSize.h, containerSize.w]);
 
   useEffect(() => {
     if (!initialGesture || containerSize.w <= 0 || containerSize.h <= 0) {
       return;
     }
 
-    if (initialGesture.target === "caption") {
-      beginCaptionDrag(initialGesture.photoId, initialGesture.clientX, initialGesture.clientY);
-    } else {
-      beginPhotoDrag(initialGesture.photoId, initialGesture.clientX, initialGesture.clientY);
-    }
+    handleSelectablePointerDown(
+      { kind: initialGesture.target, photoId: initialGesture.photoId },
+      initialGesture.clientX,
+      initialGesture.clientY,
+      false,
+    );
     onInitialGestureHandled?.();
   }, [
-    beginCaptionDrag,
-    beginPhotoDrag,
     containerSize.h,
     containerSize.w,
+    handleSelectablePointerDown,
     initialGesture,
     onInitialGestureHandled,
   ]);
@@ -400,70 +688,110 @@ export default function FreeCanvas({
     const handlePointerMove = (event: PointerEvent) => {
       event.preventDefault();
 
-      if (activeGesture.type === "drag-photo") {
-        const dx = (event.clientX - activeGesture.startClientX) / containerSize.w;
-        const dy = (event.clientY - activeGesture.startClientY) / containerSize.h;
-
-        updateTransforms((current) =>
-          current.map((transform) => {
-            if (transform.photoId !== activeGesture.photoId) {
-              return transform;
-            }
-
-            const nextX = clamp(
-              activeGesture.startTransform.x + dx,
-              -activeGesture.startTransform.width / 2,
-              1 - activeGesture.startTransform.width / 2,
-            );
-            const nextY = clamp(
-              activeGesture.startTransform.y + dy,
-              -activeGesture.startTransform.height / 2,
-              1 - activeGesture.startTransform.height / 2,
-            );
-
-            return {
-              ...transform,
-              x: nextX,
-              y: nextY,
-            };
-          }),
+      if (activeGesture.type === "marquee-select") {
+        const nextMarqueeRect = createMarqueeRect(
+          activeGesture.startClientX,
+          activeGesture.startClientY,
+          event.clientX,
+          event.clientY,
+          activeGesture.containerRect,
         );
+        marqueeRectRef.current = nextMarqueeRect;
+        setMarqueeRect(nextMarqueeRect);
+        if (
+          nextMarqueeRect.width >= MARQUEE_DRAG_THRESHOLD_PX ||
+          nextMarqueeRect.height >= MARQUEE_DRAG_THRESHOLD_PX
+        ) {
+          setSelection(getSelectionFromMarquee(nextMarqueeRect));
+        }
         return;
       }
 
-      if (activeGesture.type === "drag-caption") {
+      if (activeGesture.type === "drag-selection") {
+        if (
+          !didDragRef.current &&
+          Math.abs(event.clientX - activeGesture.startClientX) < MARQUEE_DRAG_THRESHOLD_PX &&
+          Math.abs(event.clientY - activeGesture.startClientY) < MARQUEE_DRAG_THRESHOLD_PX
+        ) {
+          return;
+        }
+
+        didDragRef.current = true;
         const dx = (event.clientX - activeGesture.startClientX) / containerSize.w;
         const dy = (event.clientY - activeGesture.startClientY) / containerSize.h;
 
+        const clampedDx = activeGesture.photoStarts.reduce(
+          (nextDx, transform) =>
+            clamp(
+              nextDx,
+              -transform.x - transform.width / 2,
+              1 - transform.x - transform.width / 2,
+            ),
+          dx,
+        );
+        const clampedDy = activeGesture.photoStarts.reduce(
+          (nextDy, transform) =>
+            clamp(
+              nextDy,
+              -transform.y - transform.height / 2,
+              1 - transform.y - transform.height / 2,
+            ),
+          dy,
+        );
+        const captionStartMap = new Map(
+          activeGesture.captionStarts.map((captionStart) => [captionStart.photoId, captionStart]),
+        );
+        let limitedDx = clampedDx;
+        let limitedDy = clampedDy;
+
+        for (const captionStart of activeGesture.captionStarts) {
+          const transform = transformsRef.current.find((item) => item.photoId === captionStart.photoId);
+          if (!transform) {
+            continue;
+          }
+
+          const { width, height } = getCaptionBounds(transform.photoId);
+          const visibleWidth = Math.min(MIN_CAPTION_VISIBLE_PX, width / 2);
+          const visibleHeight = Math.min(MIN_CAPTION_VISIBLE_PX, height / 2);
+          const photoCenterX = transform.x + transform.width / 2;
+          const photoCenterY = transform.y + transform.height / 2;
+          limitedDx = clamp(
+            limitedDx,
+            (visibleWidth - width / 2) / containerSize.w - photoCenterX - captionStart.offsetX,
+            (containerSize.w + width / 2 - visibleWidth) / containerSize.w - photoCenterX - captionStart.offsetX,
+          );
+          limitedDy = clamp(
+            limitedDy,
+            (visibleHeight - height / 2) / containerSize.h - photoCenterY - captionStart.offsetY,
+            (containerSize.h + height / 2 - visibleHeight) / containerSize.h - photoCenterY - captionStart.offsetY,
+          );
+        }
+
         updateTransforms((current) =>
           current.map((transform) => {
-            if (transform.photoId !== activeGesture.photoId) {
+            const photoStart = activeGesture.photoStarts.find(
+              (photoTransform) => photoTransform.photoId === transform.photoId,
+            );
+            const captionStart = captionStartMap.get(transform.photoId);
+            if (!photoStart && !captionStart) {
               return transform;
             }
 
-            const caption = getCaptionTransform(transform);
-            const { width, height } = getCaptionBounds(transform.photoId);
-            const visibleWidth = Math.min(MIN_CAPTION_VISIBLE_PX, width / 2);
-            const visibleHeight = Math.min(MIN_CAPTION_VISIBLE_PX, height / 2);
-            const photoCenterX = transform.x + transform.width / 2;
-            const photoCenterY = transform.y + transform.height / 2;
-            const nextCenterX = clamp(
-              photoCenterX + activeGesture.startOffsetX + dx,
-              (visibleWidth - width / 2) / containerSize.w,
-              (containerSize.w + width / 2 - visibleWidth) / containerSize.w,
-            );
-            const nextCenterY = clamp(
-              photoCenterY + activeGesture.startOffsetY + dy,
-              (visibleHeight - height / 2) / containerSize.h,
-              (containerSize.h + height / 2 - visibleHeight) / containerSize.h,
-            );
+            if (photoStart) {
+              return {
+                ...transform,
+                x: photoStart.x + limitedDx,
+                y: photoStart.y + limitedDy,
+              };
+            }
 
+            const caption = getCaptionTransform(transform);
             return {
               ...transform,
               caption: {
                 ...caption,
-                offsetX: nextCenterX - photoCenterX,
-                offsetY: nextCenterY - photoCenterY,
+                offsetX: captionStart!.offsetX + limitedDx,
+                offsetY: captionStart!.offsetY + limitedDy,
               },
             };
           }),
@@ -554,14 +882,36 @@ export default function FreeCanvas({
     };
 
     const handlePointerUp = () => {
+      if (activeGesture.type === "marquee-select") {
+        const nextMarqueeRect = marqueeRectRef.current;
+        if (
+          !nextMarqueeRect ||
+          (nextMarqueeRect.width < MARQUEE_DRAG_THRESHOLD_PX &&
+            nextMarqueeRect.height < MARQUEE_DRAG_THRESHOLD_PX)
+        ) {
+          setSelection(null);
+        }
+        marqueeRectRef.current = null;
+        setMarqueeRect(null);
+      } else if (
+        activeGesture.type === "drag-selection" &&
+        !didDragRef.current &&
+        activeGesture.shouldNarrowSelectionOnClick
+      ) {
+        setSelection(createSingleSelection(activeGesture.pointerTarget));
+      }
+
+      didDragRef.current = false;
       setActiveGesture(null);
     };
 
     const previousCursor = document.body.style.cursor;
     const previousUserSelect = document.body.style.userSelect;
     document.body.style.cursor =
-      activeGesture.type === "drag-photo" || activeGesture.type === "drag-caption"
+      activeGesture.type === "drag-selection"
         ? "grabbing"
+        : activeGesture.type === "marquee-select"
+          ? "crosshair"
         : activeGesture.type === "rotate-photo"
           ? "crosshair"
           : getHandleCursor(activeGesture.handle);
@@ -578,20 +928,32 @@ export default function FreeCanvas({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [activeGesture, containerSize.h, containerSize.w, getCaptionBounds, updateTransforms]);
+  }, [
+    activeGesture,
+    containerSize.h,
+    containerSize.w,
+    getCaptionBounds,
+    getSelectionFromMarquee,
+    updateTransforms,
+  ]);
 
   useEffect(() => {
-    if (!editingCaptionId) {
-      return;
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
         return;
       }
 
       event.preventDefault();
-      setEditingCaptionId(null);
+      setActiveGesture(null);
+      didDragRef.current = false;
+      marqueeRectRef.current = null;
+      setMarqueeRect(null);
+      if (editingCaptionId) {
+        setEditingCaptionId(null);
+        return;
+      }
+
+      setSelection(null);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -618,13 +980,11 @@ export default function FreeCanvas({
   }, [updateTransforms]);
 
   const applyCaptionStyle = useCallback(
-    (
-      photoId: string,
-      updates: Partial<NonNullable<FreePhotoTransform["caption"]>>,
-    ) => {
+    (photoIds: string[], updates: Partial<NonNullable<FreePhotoTransform["caption"]>>) => {
+      const selectedIds = new Set(photoIds);
       updateTransforms((current) =>
         current.map((transform) => {
-          if (transform.photoId !== photoId) {
+          if (!selectedIds.has(transform.photoId)) {
             return transform;
           }
 
@@ -662,16 +1022,40 @@ export default function FreeCanvas({
   }, []);
   const effectiveW = measuredSize.w > 0 ? measuredSize.w : containerSize.w;
   const captionScale = effectiveW > 0 ? effectiveW / 1000 : 1;
+  const maxZIndex = transforms.reduce((highest, transform) => Math.max(highest, transform.zIndex), 0);
+  const showCaptionToolbar = Boolean(selectedCaptionToolbarState) && !editingCaptionId;
 
   return (
     <div
       ref={canvasRef}
       className="absolute inset-0 z-20"
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) {
-          setSelection(null);
-          setEditingCaptionId(null);
+        if (
+          event.target !== event.currentTarget ||
+          !canvasRef.current ||
+          containerSize.w <= 0 ||
+          containerSize.h <= 0
+        ) {
+          return;
         }
+
+        setEditingCaptionId(null);
+        const containerRect = canvasRef.current.getBoundingClientRect();
+        const nextMarqueeRect = createMarqueeRect(
+          event.clientX,
+          event.clientY,
+          event.clientX,
+          event.clientY,
+          containerRect,
+        );
+        marqueeRectRef.current = nextMarqueeRect;
+        setMarqueeRect(nextMarqueeRect);
+        setActiveGesture({
+          type: "marquee-select",
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          containerRect,
+        });
       }}
       style={mapSnapshot ? { backgroundImage: `url(${mapSnapshot})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
     >
@@ -681,17 +1065,14 @@ export default function FreeCanvas({
         const captionText = caption.text ?? photo.caption ?? "";
         const captionShouldRender =
           Boolean(captionText) ||
-          selection?.photoId === photo.id ||
+          selectedPhotoIdSet.has(photo.id) ||
+          selectedCaptionIdSet.has(photo.id) ||
           editingCaptionId === photo.id;
-        const photoSelected = selection?.kind === "photo" && selection.photoId === photo.id;
-        const captionSelected = selection?.kind === "caption" && selection.photoId === photo.id;
+        const photoSelected = selectedPhotoIdSet.has(photo.id);
+        const captionSelected = selectedCaptionIdSet.has(photo.id);
+        const showPhotoControls = singleSelectedPhotoId === photo.id;
         const captionCenterX = transform.x + transform.width / 2 + caption.offsetX;
         const captionCenterY = transform.y + transform.height / 2 + caption.offsetY;
-        const toolbarPosition = getCaptionToolbarPosition(
-          captionCenterX,
-          captionCenterY,
-          containerSize,
-        );
 
         return (
           <Fragment key={photo.id}>
@@ -699,7 +1080,12 @@ export default function FreeCanvas({
               className="absolute cursor-grab touch-none active:cursor-grabbing"
               onPointerDown={(event) => {
                 event.stopPropagation();
-                beginPhotoDrag(photo.id, event.clientX, event.clientY);
+                handleSelectablePointerDown(
+                  { kind: "photo", photoId: photo.id },
+                  event.clientX,
+                  event.clientY,
+                  event.shiftKey || event.metaKey || event.ctrlKey,
+                );
               }}
               style={{
                 left: `${transform.x * 100}%`,
@@ -724,37 +1110,41 @@ export default function FreeCanvas({
               {photoSelected ? (
                 <>
                   <div
-                    className="pointer-events-none absolute inset-0 rounded-[inherit] border border-dashed border-indigo-500"
+                    className="pointer-events-none absolute inset-0 rounded-[inherit] ring-2 ring-indigo-500 ring-offset-2 ring-offset-white/30"
                     style={{ borderRadius: `${borderRadius}px` }}
                   />
-                  <div className="pointer-events-none absolute left-1/2 top-0 h-7 -translate-x-1/2 -translate-y-full border-l border-indigo-500" />
-                  <button
-                    type="button"
-                    className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-[150%] rounded-full border-2 border-white bg-indigo-500 shadow-sm"
-                    onPointerDown={(event) => {
-                      event.stopPropagation();
-                      beginRotate(photo.id);
-                    }}
-                    aria-label="Rotate photo"
-                  />
-                  {([
-                    ["nw", "left-0 top-0 -translate-x-1/2 -translate-y-1/2"],
-                    ["ne", "right-0 top-0 translate-x-1/2 -translate-y-1/2"],
-                    ["se", "right-0 bottom-0 translate-x-1/2 translate-y-1/2"],
-                    ["sw", "left-0 bottom-0 -translate-x-1/2 translate-y-1/2"],
-                  ] as Array<[ResizeHandle, string]>).map(([handle, className]) => (
-                    <button
-                      key={`${photo.id}-${handle}`}
-                      type="button"
-                      className={`absolute h-4 w-4 rounded-full border-2 border-white bg-indigo-500 shadow-sm ${className}`}
-                      style={{ cursor: getHandleCursor(handle) }}
-                      onPointerDown={(event) => {
-                        event.stopPropagation();
-                        beginResize(photo.id, handle);
-                      }}
-                      aria-label={`Resize photo from ${handle} corner`}
-                    />
-                  ))}
+                  {showPhotoControls ? (
+                    <>
+                      <div className="pointer-events-none absolute left-1/2 top-0 h-7 -translate-x-1/2 -translate-y-full border-l border-indigo-500" />
+                      <button
+                        type="button"
+                        className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-[150%] rounded-full border-2 border-white bg-indigo-500 shadow-sm"
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          beginRotate(photo.id);
+                        }}
+                        aria-label="Rotate photo"
+                      />
+                      {([
+                        ["nw", "left-0 top-0 -translate-x-1/2 -translate-y-1/2"],
+                        ["ne", "right-0 top-0 translate-x-1/2 -translate-y-1/2"],
+                        ["se", "right-0 bottom-0 translate-x-1/2 translate-y-1/2"],
+                        ["sw", "left-0 bottom-0 -translate-x-1/2 translate-y-1/2"],
+                      ] as Array<[ResizeHandle, string]>).map(([handle, className]) => (
+                        <button
+                          key={`${photo.id}-${handle}`}
+                          type="button"
+                          className={`absolute h-4 w-4 rounded-full border-2 border-white bg-indigo-500 shadow-sm ${className}`}
+                          style={{ cursor: getHandleCursor(handle) }}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            beginResize(photo.id, handle);
+                          }}
+                          aria-label={`Resize photo from ${handle} corner`}
+                        />
+                      ))}
+                    </>
+                  ) : null}
                 </>
               ) : null}
             </div>
@@ -769,11 +1159,16 @@ export default function FreeCanvas({
                     }
 
                     event.stopPropagation();
-                    beginCaptionDrag(photo.id, event.clientX, event.clientY);
+                    handleSelectablePointerDown(
+                      { kind: "caption", photoId: photo.id },
+                      event.clientX,
+                      event.clientY,
+                      event.shiftKey || event.metaKey || event.ctrlKey,
+                    );
                   }}
                   onDoubleClick={(event) => {
                     event.stopPropagation();
-                    setSelection({ kind: "caption", photoId: photo.id });
+                    setSelection(createSingleSelection({ kind: "caption", photoId: photo.id }));
                     setEditingCaptionId(photo.id);
                     setDraftCaptionText(captionText);
                   }}
@@ -826,10 +1221,6 @@ export default function FreeCanvas({
                       className={`rounded-md px-2 py-1 text-center shadow-sm ${
                         captionSelected ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-white/20" : ""
                       }`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setSelection({ kind: "caption", photoId: photo.id });
-                      }}
                       style={{
                         backgroundColor: caption.bgColor,
                         color: caption.color ?? "#ffffff",
@@ -842,114 +1233,154 @@ export default function FreeCanvas({
                     </div>
                   )}
                 </div>
-
-                {captionSelected && editingCaptionId !== photo.id ? (
-                  <div
-                    className="absolute z-10 flex flex-col gap-2 rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
-                    onPointerDown={(event) => event.stopPropagation()}
-                    style={{
-                      left: `${toolbarPosition.toolbarLeft}px`,
-                      top: `${toolbarPosition.toolbarTop}px`,
-                      width: `${toolbarPosition.toolbarWidth}px`,
-                      transform: "translateX(-50%)",
-                      zIndex: transform.zIndex + 2,
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <select
-                        className="h-8 flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
-                        style={{ fontFamily: caption.fontFamily ?? defaultCaptionFontFamily }}
-                        value={caption.fontFamily ?? defaultCaptionFontFamily}
-                        onChange={(event) => applyCaptionStyle(photo.id, { fontFamily: event.target.value })}
-                      >
-                        {CAPTION_FONT_OPTIONS.map((option) => (
-                          <option
-                            key={option.value}
-                            value={option.value}
-                            style={{ fontFamily: option.value }}
-                          >
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="range"
-                        min={10}
-                        max={64}
-                        step={1}
-                        value={caption.fontSize ?? defaultCaptionFontSize}
-                        onChange={(event) => applyCaptionStyle(photo.id, { fontSize: Number(event.target.value) })}
-                        className="h-1 w-24 accent-indigo-500"
-                      />
-                      <span className="w-10 text-right text-[10px] text-gray-500">
-                        {caption.fontSize ?? defaultCaptionFontSize}px
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
-                        Text
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {CAPTION_COLOR_PRESETS.map((color) => (
-                          <button
-                            key={`${photo.id}-${color}`}
-                            type="button"
-                            className={`h-5 w-5 rounded-full border ${
-                              (caption.color ?? "#ffffff") === color ? "border-indigo-500 ring-2 ring-indigo-200" : "border-gray-200"
-                            }`}
-                            style={{ backgroundColor: color }}
-                            onClick={() => applyCaptionStyle(photo.id, { color })}
-                            aria-label={`Set caption color ${color}`}
-                          />
-                        ))}
-                      </div>
-                      <input
-                        type="text"
-                        value={customColorInput}
-                        onChange={(event) => setCustomColorInput(event.target.value)}
-                        onBlur={() => {
-                          if (customColorInput.trim()) {
-                            applyCaptionStyle(photo.id, { color: customColorInput.trim() });
-                          }
-                        }}
-                        placeholder="#6366f1"
-                        className="h-8 w-20 rounded-md border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
-                        Fill
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {CAPTION_BG_PRESETS.map((color) => (
-                          <button
-                            key={`${photo.id}-bg-${color}`}
-                            type="button"
-                            className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${
-                              caption.bgColor === color ? "border-indigo-500 ring-2 ring-indigo-200" : "border-gray-200"
-                            }`}
-                            style={{
-                              backgroundColor: color === "transparent" ? "#ffffff" : color,
-                              color: color === "transparent" ? "#6b7280" : "transparent",
-                              backgroundImage: color === "transparent"
-                                ? "linear-gradient(135deg, transparent 45%, #ef4444 45%, #ef4444 55%, transparent 55%)"
-                                : undefined,
-                            }}
-                            onClick={() => applyCaptionStyle(photo.id, { bgColor: color })}
-                            aria-label={`Set caption background ${color}`}
-                          >
-                            {color === "transparent" ? "T" : ""}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
               </>
             ) : null}
           </Fragment>
         );
       })}
+      {marqueeRect ? (
+        <div
+          className="pointer-events-none absolute border border-indigo-500/70 bg-indigo-500/10"
+          style={{
+            left: `${marqueeRect.left}px`,
+            top: `${marqueeRect.top}px`,
+            width: `${marqueeRect.width}px`,
+            height: `${marqueeRect.height}px`,
+            zIndex: maxZIndex + 3,
+          }}
+        />
+      ) : null}
+      {showCaptionToolbar && selectedCaptionToolbarState ? (
+        <div
+          className="absolute z-10 flex flex-col gap-2 rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
+          onPointerDown={(event) => event.stopPropagation()}
+          style={{
+            left: `${selectedCaptionToolbarState.toolbarPosition.toolbarLeft}px`,
+            top: `${selectedCaptionToolbarState.toolbarPosition.toolbarTop}px`,
+            width: `${selectedCaptionToolbarState.toolbarPosition.toolbarWidth}px`,
+            zIndex: maxZIndex + 4,
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <select
+              className="h-8 flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
+              style={{ fontFamily: selectedCaptionToolbarState.fontFamily }}
+              value={selectedCaptionToolbarState.fontFamilyMixed ? "__mixed" : selectedCaptionToolbarState.fontFamily}
+              onChange={(event) => {
+                if (event.target.value === "__mixed") {
+                  return;
+                }
+                applyCaptionStyle(selectedCaptionToolbarState.photoIds, { fontFamily: event.target.value });
+              }}
+            >
+              {selectedCaptionToolbarState.fontFamilyMixed ? (
+                <option value="__mixed">Mixed</option>
+              ) : null}
+              {CAPTION_FONT_OPTIONS.map((option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                  style={{ fontFamily: option.value }}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="range"
+              min={10}
+              max={64}
+              step={1}
+              value={selectedCaptionToolbarState.fontSize}
+              onChange={(event) =>
+                applyCaptionStyle(selectedCaptionToolbarState.photoIds, {
+                  fontSize: Number(event.target.value),
+                })
+              }
+              className="h-1 w-24 accent-indigo-500"
+            />
+            <span className="w-10 text-right text-[10px] text-gray-500">
+              {selectedCaptionToolbarState.fontSizeMixed
+                ? "Mixed"
+                : `${selectedCaptionToolbarState.fontSize}px`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
+              Text
+            </span>
+            <div className="flex items-center gap-1">
+              {CAPTION_COLOR_PRESETS.map((color) => (
+                <button
+                  key={`toolbar-${color}`}
+                  type="button"
+                  className={`h-5 w-5 rounded-full border ${
+                    !selectedCaptionToolbarState.colorMixed && selectedCaptionToolbarState.color === color
+                      ? "border-indigo-500 ring-2 ring-indigo-200"
+                      : "border-gray-200"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  onClick={() => applyCaptionStyle(selectedCaptionToolbarState.photoIds, { color })}
+                  aria-label={`Set caption color ${color}`}
+                />
+              ))}
+            </div>
+            <input
+              type="text"
+              value={customColorInput}
+              onChange={(event) => setCustomColorInput(event.target.value)}
+              onBlur={() => {
+                if (customColorInput.trim()) {
+                  applyCaptionStyle(selectedCaptionToolbarState.photoIds, {
+                    color: customColorInput.trim(),
+                  });
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && customColorInput.trim()) {
+                  applyCaptionStyle(selectedCaptionToolbarState.photoIds, {
+                    color: customColorInput.trim(),
+                  });
+                }
+              }}
+              placeholder={selectedCaptionToolbarState.colorMixed ? "Mixed" : "#6366f1"}
+              className="h-8 w-20 rounded-md border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
+              Fill
+            </span>
+            <div className="flex items-center gap-1">
+              {CAPTION_BG_PRESETS.map((color) => (
+                <button
+                  key={`toolbar-bg-${color}`}
+                  type="button"
+                  className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${
+                    !selectedCaptionToolbarState.bgColorMixed && selectedCaptionToolbarState.bgColor === color
+                      ? "border-indigo-500 ring-2 ring-indigo-200"
+                      : "border-gray-200"
+                  }`}
+                  style={{
+                    backgroundColor: color === "transparent" ? "#ffffff" : color,
+                    color: color === "transparent" ? "#6b7280" : "transparent",
+                    backgroundImage: color === "transparent"
+                      ? "linear-gradient(135deg, transparent 45%, #ef4444 45%, #ef4444 55%, transparent 55%)"
+                      : undefined,
+                  }}
+                  onClick={() => applyCaptionStyle(selectedCaptionToolbarState.photoIds, { bgColor: color })}
+                  aria-label={`Set caption background ${color}`}
+                >
+                  {color === "transparent" ? "T" : ""}
+                </button>
+              ))}
+            </div>
+            <span className="text-[10px] text-gray-400">
+              {selectedCaptionToolbarState.bgColorMixed ? "Mixed" : " "}
+            </span>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
