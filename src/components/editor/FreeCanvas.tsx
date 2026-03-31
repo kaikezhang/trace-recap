@@ -17,12 +17,41 @@ const CAPTION_COLOR_PRESETS = [
   "#f59e0b",
 ] as const;
 
-const CAPTION_BG_PRESETS = [
-  DEFAULT_CAPTION_BG_COLOR,
-  "rgba(0,0,0,0.6)",
+const CAPTION_BG_PRIMARY = [
+  "rgba(0,0,0,0.5)",
+  "rgba(255,255,255,0.8)",
   "rgba(99,102,241,0.7)",
+  "rgba(239,68,68,0.6)",
+  "rgba(245,158,11,0.6)",
   "transparent",
 ] as const;
+
+const CAPTION_BG_EXTENDED = [
+  "rgba(16,185,129,0.6)",
+  "rgba(59,130,246,0.6)",
+  "rgba(168,85,247,0.6)",
+  "rgba(236,72,153,0.6)",
+  "rgba(20,184,166,0.6)",
+  "rgba(251,146,60,0.6)",
+  "rgba(34,197,94,0.6)",
+  "rgba(100,116,139,0.6)",
+  "rgba(30,41,59,0.7)",
+  "rgba(120,53,15,0.6)",
+  "rgba(157,23,77,0.6)",
+  "rgba(21,94,117,0.6)",
+  "rgba(63,63,70,0.7)",
+  "rgba(185,28,28,0.6)",
+] as const;
+
+/** Convert rgba(...) or hex to a short display label */
+function bgColorDisplayHex(color: string): string {
+  if (color === "transparent") return "";
+  if (color.startsWith("#")) return color;
+  const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) return color;
+  const hex = `#${[m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, "0")).join("")}`;
+  return hex;
+}
 
 const MIN_PHOTO_SIZE = 0.05;
 const MIN_CAPTION_VISIBLE_PX = 24;
@@ -328,6 +357,7 @@ export default function FreeCanvas({
   const [editingCaptionId, setEditingCaptionId] = useState<string | null>(null);
   const [draftCaptionText, setDraftCaptionText] = useState("");
   const [customColorInput, setCustomColorInput] = useState("");
+  const [bgExpanded, setBgExpanded] = useState(false);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
   const transformsRef = useRef(transforms);
   const captionElementRefs = useRef(new Map<string, HTMLElement>());
@@ -1347,44 +1377,71 @@ export default function FreeCanvas({
               className="h-8 w-20 rounded-md border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
-              Fill
-            </span>
-            <div className="flex items-center gap-1">
-              {CAPTION_BG_PRESETS.map((color) => (
-                <button
-                  key={`toolbar-bg-${color}`}
-                  type="button"
-                  className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${
-                    !selectedCaptionToolbarState.bgColorMixed && selectedCaptionToolbarState.bgColor === color
-                      ? "border-indigo-500 ring-2 ring-indigo-200"
-                      : "border-gray-200"
-                  }`}
-                  style={{
-                    backgroundColor: color === "transparent" ? "#ffffff" : color,
-                    color: color === "transparent" ? "#6b7280" : "transparent",
-                    backgroundImage: color === "transparent"
-                      ? "linear-gradient(135deg, transparent 45%, #ef4444 45%, #ef4444 55%, transparent 55%)"
-                      : undefined,
-                  }}
-                  onClick={() => applyCaptionStyle(selectedCaptionToolbarState.photoIds, { bgColor: color })}
-                  aria-label={`Set caption background ${color}`}
-                >
-                  {color === "transparent" ? "T" : ""}
-                </button>
-              ))}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
+                Fill
+              </span>
+              <div className="flex items-center gap-1">
+                {CAPTION_BG_PRIMARY.map((color) => (
+                  <button
+                    key={`toolbar-bg-${color}`}
+                    type="button"
+                    className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${
+                      !selectedCaptionToolbarState.bgColorMixed && selectedCaptionToolbarState.bgColor === color
+                        ? "border-indigo-500 ring-2 ring-indigo-200"
+                        : "border-gray-200"
+                    }`}
+                    style={{
+                      backgroundColor: color === "transparent" ? "#ffffff" : color,
+                      color: color === "transparent" ? "#6b7280" : "transparent",
+                      backgroundImage: color === "transparent"
+                        ? "linear-gradient(135deg, transparent 45%, #ef4444 45%, #ef4444 55%, transparent 55%)"
+                        : undefined,
+                    }}
+                    onClick={() => applyCaptionStyle(selectedCaptionToolbarState.photoIds, { bgColor: color })}
+                    aria-label={`Set caption background ${color}`}
+                  >
+                    {color === "transparent" ? "T" : ""}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="h-5 rounded border border-gray-200 px-1.5 text-[9px] text-gray-500 hover:bg-gray-100"
+                onClick={() => setBgExpanded((prev) => !prev)}
+              >
+                {bgExpanded ? "Less" : "More"}
+              </button>
             </div>
-            <input
-              type="text"
-              value={selectedCaptionToolbarState.bgColorMixed ? "" : (selectedCaptionToolbarState.bgColor === "transparent" ? "" : selectedCaptionToolbarState.bgColor)}
-              onChange={(event) => {
-                const val = event.target.value.trim();
-                if (val) applyCaptionStyle(selectedCaptionToolbarState.photoIds, { bgColor: val });
-              }}
-              placeholder={selectedCaptionToolbarState.bgColorMixed ? "Mixed" : "custom"}
-              className="h-8 w-20 rounded-md border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
-            />
+            {bgExpanded && (
+              <div className="flex flex-wrap items-center gap-1 pl-11">
+                {CAPTION_BG_EXTENDED.map((color) => (
+                  <button
+                    key={`toolbar-bg-ext-${color}`}
+                    type="button"
+                    className={`flex h-5 w-5 items-center justify-center rounded-full border ${
+                      !selectedCaptionToolbarState.bgColorMixed && selectedCaptionToolbarState.bgColor === color
+                        ? "border-indigo-500 ring-2 ring-indigo-200"
+                        : "border-gray-200"
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => applyCaptionStyle(selectedCaptionToolbarState.photoIds, { bgColor: color })}
+                    aria-label={`Set caption background ${color}`}
+                  />
+                ))}
+                <input
+                  type="text"
+                  value={selectedCaptionToolbarState.bgColorMixed ? "" : bgColorDisplayHex(selectedCaptionToolbarState.bgColor)}
+                  onChange={(event) => {
+                    const val = event.target.value.trim();
+                    if (val) applyCaptionStyle(selectedCaptionToolbarState.photoIds, { bgColor: val });
+                  }}
+                  placeholder={selectedCaptionToolbarState.bgColorMixed ? "Mixed" : "#000000"}
+                  className="h-8 w-20 rounded-md border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
+                />
+              </div>
+            )}
           </div>
         </div>
       ) : null}
