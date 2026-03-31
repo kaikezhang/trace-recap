@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState, useRef, useEffect } from "react";
-import { X, GripVertical, ChevronRight, Image as ImageIcon } from "lucide-react";
+import { X, GripVertical, ChevronRight, Image as ImageIcon, Smile } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -79,6 +79,95 @@ function EditableName({
     >
       {value || <span className="text-muted-foreground italic">{placeholder}</span>}
     </span>
+  );
+}
+
+/* ── Travel emoji palette ── */
+const TRAVEL_EMOJIS = [
+  // Cities & landmarks
+  "🏯", "⛩️", "🗼", "🗽", "🏰", "⛪", "🕌", "🛕", "🏛️", "🎡",
+  // Nature & scenery
+  "🏔️", "🌋", "🏖️", "🌊", "🌅", "🌄", "🏜️", "🌲", "🌸", "🍁",
+  // Food & drink
+  "🍣", "🍜", "🍕", "🥐", "🍷", "☕", "🧋", "🍦", "🥘", "🍱",
+  // Activities & culture
+  "🎭", "🎪", "🎶", "🛍️", "📸", "🎿", "🏄", "🚴", "⛷️", "🧗",
+  // Transport
+  "✈️", "🚅", "🚗", "⛵", "🚠", "🛶", "🚲", "🛺", "🚢", "🚁",
+  // Misc travel
+  "🗺️", "🧭", "🏕️", "🌃", "🌉", "🎑", "🏞️", "🌺", "🐚", "⭐",
+];
+
+function EmojiPicker({
+  value,
+  onSelect,
+}: {
+  value: string;
+  onSelect: (emoji: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative" data-no-seek>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-7 w-10 items-center justify-center rounded-md border bg-background text-sm hover:bg-accent transition-colors"
+        title="Pick emoji"
+      >
+        {value || <Smile className="h-3.5 w-3.5 text-muted-foreground" />}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="absolute bottom-full right-0 mb-1 z-50 w-[220px] rounded-lg border bg-popover p-2 shadow-lg"
+          >
+            <div className="grid grid-cols-10 gap-0.5">
+              {TRAVEL_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => {
+                    onSelect(emoji);
+                    setOpen(false);
+                  }}
+                  className={`flex h-6 w-6 items-center justify-center rounded text-sm hover:bg-accent transition-colors ${
+                    value === emoji ? "bg-accent ring-1 ring-primary" : ""
+                  }`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            {value && (
+              <button
+                onClick={() => {
+                  onSelect("");
+                  setOpen(false);
+                }}
+                className="mt-1.5 w-full rounded-md py-1 text-[10px] text-muted-foreground hover:bg-accent transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -259,18 +348,18 @@ export default memo(function LocationCard({
           >
             <div className="px-3 pb-3 space-y-3 border-t pt-3">
               {/* Editable names */}
-              <div className="space-y-1.5">
+              <div className="flex flex-col gap-1">
                 <EditableName
                   value={location.name}
                   placeholder="English name"
                   onSave={(val) => updateLocation(locationId, { name: val })}
-                  className="text-sm font-medium"
+                  className="text-sm font-medium block"
                 />
                 <EditableName
                   value={location.nameZh ?? ""}
                   placeholder="中文名"
                   onSave={(val) => updateLocation(locationId, { nameZh: val || undefined })}
-                  className="text-xs text-muted-foreground"
+                  className="text-xs text-muted-foreground block"
                 />
               </div>
 
@@ -287,35 +376,40 @@ export default memo(function LocationCard({
 
               {/* Chapter metadata */}
               {!isWaypoint && (
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Chapter</span>
-                  <EditableName
-                    value={location.chapterTitle ?? ""}
-                    placeholder="Chapter title"
-                    onSave={(val) => updateLocation(locationId, { chapterTitle: val || undefined })}
-                    className="text-xs"
-                  />
-                  <EditableName
-                    value={location.chapterNote ?? ""}
-                    placeholder="Note (e.g. Temples & gardens)"
-                    onSave={(val) => updateLocation(locationId, { chapterNote: val || undefined })}
-                    className="text-xs text-muted-foreground"
-                  />
-                  <div className="flex gap-2">
-                    <div className="flex-1">
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground block">Chapter</span>
+                    <EditableName
+                      value={location.chapterTitle ?? ""}
+                      placeholder="Chapter title"
+                      onSave={(val) => updateLocation(locationId, { chapterTitle: val || undefined })}
+                      className="text-xs block"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground block">Note</span>
+                    <EditableName
+                      value={location.chapterNote ?? ""}
+                      placeholder="e.g. Temples & gardens"
+                      onSave={(val) => updateLocation(locationId, { chapterNote: val || undefined })}
+                      className="text-xs text-muted-foreground block"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground block">Date</span>
                       <EditableName
                         value={location.chapterDate ?? ""}
-                        placeholder="Date (e.g. Mar 15-17)"
+                        placeholder="e.g. Mar 15-17"
                         onSave={(val) => updateLocation(locationId, { chapterDate: val || undefined })}
-                        className="text-xs text-muted-foreground"
+                        className="text-xs text-muted-foreground block"
                       />
                     </div>
-                    <div className="w-12">
-                      <EditableName
+                    <div className="flex flex-col gap-1 items-center">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Icon</span>
+                      <EmojiPicker
                         value={location.chapterEmoji ?? ""}
-                        placeholder="🏯"
-                        onSave={(val) => updateLocation(locationId, { chapterEmoji: val || undefined })}
-                        className="text-xs text-center"
+                        onSelect={(val) => updateLocation(locationId, { chapterEmoji: val || undefined })}
                       />
                     </div>
                   </div>
