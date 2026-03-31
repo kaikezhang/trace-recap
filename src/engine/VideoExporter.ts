@@ -55,6 +55,10 @@ export class VideoExporter {
   private photoImages: Map<string, PreloadedPhoto> = new Map();
   /** Track when photos first appeared (frame index) per group, for enter animation timing */
   private photoShowStartFrame: Map<number, number> = new Map();
+  /** Track visited location IDs during export for chapter pin rendering */
+  private exportVisitedLocationIds: Set<string> = new Set();
+  /** Current arrival location ID during export */
+  private exportCurrentArrivalId: string | null = null;
 
   constructor(
     engine: AnimationEngine,
@@ -345,6 +349,286 @@ export class VideoExporter {
     ctx.fillStyle = "#1e293b";
     ctx.textBaseline = "middle";
     ctx.fillText(label, dotX + dotRadius + dotGap, dotY);
+  }
+
+  /** Update chapter pin tracking state — derived from current time so seek is correct */
+  private updateChapterPinState(progress: AnimationEvent | null): void {
+    if (!progress) return;
+    const groups = this.engine.getGroups();
+    const tl = this.engine.getTimeline();
+    const t = progress.time;
+
+    this.exportVisitedLocationIds.clear();
+    this.exportCurrentArrivalId = null;
+
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      const entry = tl[i];
+      if (!entry) continue;
+
+      // First location: arrival during HOVER of group 0, visited after
+      if (i === 0 && !group.fromLoc.isWaypoint) {
+        const hover = entry.phases.find((p) => p.phase === "HOVER");
+        if (hover) {
+          const hoverEnd = hover.startTime + hover.duration;
+          if (t >= hover.startTime && t < hoverEnd) {
+            this.exportCurrentArrivalId = group.fromLoc.id;
+          } else if (t >= hoverEnd) {
+            this.exportVisitedLocationIds.add(group.fromLoc.id);
+          }
+        }
+      }
+
+      // toLoc: arriving during ARRIVE phase, visited after
+      if (!group.toLoc.isWaypoint) {
+        const arrive = entry.phases.find((p) => p.phase === "ARRIVE");
+        if (arrive) {
+          const arriveEnd = arrive.startTime + arrive.duration;
+          if (t >= arrive.startTime && t < arriveEnd) {
+            this.exportCurrentArrivalId = group.toLoc.id;
+          } else if (t >= arriveEnd) {
+            this.exportVisitedLocationIds.add(group.toLoc.id);
+          }
+        }
+      }
+    }
+  }
+
+  /** Draw chapter pins on the export canvas */
+  private drawChapterPins(
+    ctx: CanvasRenderingContext2D,
+    scaleX: number,
+    scaleY: number,
+  ): void {
+    if (!useUIStore.getState().chapterPinsEnabled) return;
+
+    const locations = this.engine.getLocations();
+
+    for (const loc of locations) {
+      if (loc.isWaypoint) continue;
+      const isActive = loc.id === this.exportCurrentArrivalId;
+      const isVisited = this.exportVisitedLocationIds.has(loc.id);
+      if (!isActive && !isVisited) continue;
+
+      const point = this.map.project(loc.coordinates as [number, number]);
+      const px = point.x * scaleX;
+      const py = point.y * scaleY;
+
+      if (isActive) {
+        this.drawActiveChapterPin(ctx, loc, px, py, scaleX);
+      } else {
+        this.drawVisitedChapterPin(ctx, loc, px, py, scaleX);
+      }
+    }
+  }
+
+  /** Draw an active (current arrival) chapter pin card on canvas */
+  private drawActiveChapterPin(
+    ctx: CanvasRenderingContext2D,
+    loc: { name: string; chapterTitle?: string; chapterDate?: string; chapterNote?: string; chapterEmoji?: string; photos: { url: string }[] },
+    cx: number,
+    cy: number,
+    scale: number,
+  ): void {
+    const title = loc.chapterTitle || loc.name;
+    const photoSize = 48 * scale;
+    const padH = 8 * scale;
+    const padV = 8 * scale;
+    const gap = 8 * scale;
+    const maxTextWidth = 120 * scale;
+
+    const titleFont = `700 ${14 * scale}px system-ui, -apple-system, sans-serif`;
+    const subFont = `400 ${12 * scale}px system-ui, -apple-system, sans-serif`;
+
+    ctx.font = titleFont;
+    const titleWidth = Math.min(ctx.measureText(title).width, maxTextWidth);
+    let textBlockHeight = 14 * scale * 1.2;
+
+    if (loc.chapterDate) {
+      textBlockHeight += 12 * scale * 1.3;
+    }
+    if (loc.chapterNote) {
+      textBlockHeight += 12 * scale * 1.3;
+    }
+
+    const cardWidth = padH + photoSize + gap + Math.max(titleWidth, 40 * scale) + padH;
+    const cardHeight = Math.max(padV + textBlockHeight + padV, photoSize + padV * 2);
+    const cardX = cx - cardWidth / 2;
+    const cardY = cy - cardHeight - 8 * scale; // above the pin point
+    const radius = 8 * scale;
+
+    // Card background
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.15)";
+    ctx.shadowBlur = 8 * scale;
+    ctx.shadowOffsetY = 2 * scale;
+    ctx.beginPath();
+    ctx.roundRect(cardX, cardY, cardWidth, cardHeight, radius);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fill();
+    ctx.restore();
+
+    // Border
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 1 * scale;
+    ctx.beginPath();
+    ctx.roundRect(cardX, cardY, cardWidth, cardHeight, radius);
+    ctx.stroke();
+
+    // Photo circle
+    const photoCX = cardX + padH + photoSize / 2;
+    const photoCY = cardY + cardHeight / 2;
+    const photoRadius = photoSize / 2;
+
+    const coverUrl = loc.photos[0]?.url;
+    const preloaded = coverUrl ? this.photoImages.get(coverUrl) : undefined;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(photoCX, photoCY, photoRadius, 0, Math.PI * 2);
+    ctx.clip();
+    if (preloaded) {
+      const img = preloaded.img;
+      const aspect = preloaded.aspect;
+      let sw = img.naturalWidth;
+      let sh = img.naturalHeight;
+      let sx = 0;
+      let sy = 0;
+      if (aspect > 1) {
+        sw = sh;
+        sx = (img.naturalWidth - sw) / 2;
+      } else {
+        sh = sw;
+        sy = (img.naturalHeight - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, photoCX - photoRadius, photoCY - photoRadius, photoSize, photoSize);
+    } else {
+      ctx.fillStyle = "#e0e7ff";
+      ctx.fill();
+      // Emoji fallback
+      const emoji = loc.chapterEmoji || "📍";
+      ctx.font = `${20 * scale}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#000";
+      ctx.fillText(emoji, photoCX, photoCY);
+    }
+    ctx.restore();
+
+    // Emoji stamp in bottom-right corner when photo exists (matching preview)
+    if (loc.chapterEmoji && preloaded) {
+      ctx.font = `${14 * scale}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(loc.chapterEmoji, photoCX + photoRadius * 0.6, photoCY + photoRadius * 0.6);
+    }
+
+    // White border around photo
+    ctx.beginPath();
+    ctx.arc(photoCX, photoCY, photoRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2 * scale;
+    ctx.stroke();
+
+    // Text
+    const textX = cardX + padH + photoSize + gap;
+    let textY = cardY + padV + 14 * scale;
+
+    ctx.font = titleFont;
+    ctx.fillStyle = "#111827";
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left";
+    ctx.fillText(title, textX, textY, maxTextWidth);
+
+    if (loc.chapterDate) {
+      textY += 12 * scale * 1.4;
+      ctx.font = subFont;
+      ctx.fillStyle = "#6b7280";
+      ctx.fillText(loc.chapterDate, textX, textY, maxTextWidth);
+    }
+
+    if (loc.chapterNote) {
+      textY += 12 * scale * 1.4;
+      ctx.font = subFont;
+      ctx.fillStyle = "#4b5563";
+      ctx.fillText(loc.chapterNote, textX, textY, maxTextWidth);
+    }
+
+    // Pin tail
+    ctx.beginPath();
+    ctx.moveTo(cx, cardY + cardHeight);
+    ctx.lineTo(cx, cardY + cardHeight + 8 * scale);
+    ctx.strokeStyle = "#d1d5db";
+    ctx.lineWidth = 1 * scale;
+    ctx.stroke();
+  }
+
+  /** Draw a visited (small) chapter pin on canvas */
+  private drawVisitedChapterPin(
+    ctx: CanvasRenderingContext2D,
+    loc: { name: string; chapterTitle?: string; chapterEmoji?: string; photos: { url: string }[] },
+    cx: number,
+    cy: number,
+    scale: number,
+  ): void {
+    const title = loc.chapterTitle || loc.name;
+    const photoSize = 32 * scale;
+    const photoRadius = photoSize / 2;
+
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+
+    // Photo circle
+    const coverUrl = loc.photos[0]?.url;
+    const preloaded = coverUrl ? this.photoImages.get(coverUrl) : undefined;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy - photoRadius - 4 * scale, photoRadius, 0, Math.PI * 2);
+    ctx.clip();
+    if (preloaded) {
+      const img = preloaded.img;
+      const aspect = preloaded.aspect;
+      let sw = img.naturalWidth;
+      let sh = img.naturalHeight;
+      let sx = 0;
+      let sy = 0;
+      if (aspect > 1) {
+        sw = sh;
+        sx = (img.naturalWidth - sw) / 2;
+      } else {
+        sh = sw;
+        sy = (img.naturalHeight - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, cx - photoRadius, cy - photoSize - 4 * scale, photoSize, photoSize);
+    } else {
+      ctx.fillStyle = "#e0e7ff";
+      ctx.fill();
+      const emoji = loc.chapterEmoji || "📍";
+      ctx.font = `${14 * scale}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#000";
+      ctx.fillText(emoji, cx, cy - photoRadius - 4 * scale);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 0.5;
+
+    // White border
+    ctx.beginPath();
+    ctx.arc(cx, cy - photoRadius - 4 * scale, photoRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2 * scale;
+    ctx.stroke();
+
+    // Title
+    ctx.font = `500 ${10 * scale}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = "#374151";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(title, cx, cy + 2 * scale, 80 * scale);
+
+    ctx.restore();
   }
 
   /** Draw "CityA → CityB" route label at bottom of canvas during FLY phase */
@@ -1751,6 +2035,8 @@ export class VideoExporter {
     this.cancelled = false;
     this.abortController = new AbortController();
     this.photoShowStartFrame.clear();
+    this.exportVisitedLocationIds.clear();
+    this.exportCurrentArrivalId = null;
     const { signal } = this.abortController;
 
     const totalDuration = this.engine.getTotalDuration();
@@ -1874,6 +2160,10 @@ export class VideoExporter {
     this.drawVehicleIcon(offCtx, scaleX, scaleY);
     this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
+    // Chapter pins: update tracking and draw BEFORE photos (pins behind photos, matching preview z-order)
+    this.updateChapterPinState(captured.progress);
+    this.drawChapterPins(offCtx, scaleX, scaleY);
+
     this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
     this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
 
