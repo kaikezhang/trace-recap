@@ -409,6 +409,20 @@ export class VideoExporter {
     }
   }
 
+  /** Per-photo stagger delay in seconds, matching PhotoOverlay's getEnterAnimation */
+  private getStaggerDelay(style: PhotoAnimation, index: number): number {
+    switch (style) {
+      case "none": return 0;
+      case "fade": return index * 0.1;
+      case "flip": return index * 0.1;
+      case "scatter": return index * 0.06;
+      case "typewriter": return index * 0.2;
+      case "slide":
+      case "scale":
+      default: return index * 0.08;
+    }
+  }
+
   /** Cubic ease-out: matches framer-motion's default easeOut */
   private easeOut(t: number): number {
     return 1 - Math.pow(1 - t, 3);
@@ -745,7 +759,7 @@ export class VideoExporter {
         animTransform = this.getExitTransform(exitAnimStyle, exitProgress, photoExitT, i, count);
       } else if (enterAnimStyle !== "none") {
         // Enter animation with per-photo stagger
-        const staggerDelaySec = enterAnimStyle === "typewriter" ? i * 0.2 : i * 0.08;
+        const staggerDelaySec = this.getStaggerDelay(enterAnimStyle, i);
         const staggerDelayFrames = staggerDelaySec * fps;
         const elapsed = frameIndex - enterStartFrame - staggerDelayFrames;
         const rawProgress = Math.max(0, Math.min(1, elapsed / enterDurationFrames));
@@ -836,7 +850,7 @@ export class VideoExporter {
         ctx.rect(imgAreaX, imgAreaY, imgAreaW, imgAreaH);
         ctx.clip();
         if (photoStyle === "kenburns") {
-          const kbStagger = enterAnimStyle === "none" ? 0 : enterAnimStyle === "typewriter" ? i * 0.2 : i * 0.08;
+          const kbStagger = this.getStaggerDelay(enterAnimStyle, i);
           const kbProgress = Math.max(0, Math.min(1, (kenBurnsElapsed - kbStagger) / KEN_BURNS_DURATION_SEC));
           const kb = getKenBurnsTransform(kbProgress, i, fp);
           const areaCX = imgAreaX + imgAreaW / 2;
@@ -912,7 +926,7 @@ export class VideoExporter {
 
         if (photoStyle === "kenburns") {
           // Apply Ken Burns zoom+pan transform (per-photo progress with stagger)
-          const kbStagger = enterAnimStyle === "none" ? 0 : enterAnimStyle === "typewriter" ? i * 0.2 : i * 0.08;
+          const kbStagger = this.getStaggerDelay(enterAnimStyle, i);
           const kbProgress = Math.max(0, Math.min(1, (kenBurnsElapsed - kbStagger) / KEN_BURNS_DURATION_SEC));
           const kb = getKenBurnsTransform(kbProgress, i, fp);
           ctx.translate(kb.translateX * frameW / 100, kb.translateY * frameH / 100);
