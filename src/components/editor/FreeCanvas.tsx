@@ -20,6 +20,9 @@ const CAPTION_COLOR_PRESETS = [
 ] as const;
 
 const MIN_PHOTO_SIZE = 0.05;
+const MIN_CAPTION_VISIBLE_PX = 24;
+const ROTATION_SNAP_TARGETS = [0, 90, -90, 180] as const;
+const ROTATION_SNAP_THRESHOLD = 5;
 
 type Selection =
   | { kind: "photo"; photoId: string }
@@ -57,6 +60,7 @@ type GestureState =
       anchorX: number;
       anchorY: number;
       aspect: number;
+      rotation: number;
     };
 
 export interface FreeCanvasInitialGesture {
@@ -88,6 +92,29 @@ function normalizeRotation(rotation: number): number {
   if (next <= -180) next += 360;
   if (next > 180) next -= 360;
   return next;
+}
+
+function rotateVector(x: number, y: number, angleRadians: number) {
+  const cos = Math.cos(angleRadians);
+  const sin = Math.sin(angleRadians);
+  return {
+    x: x * cos - y * sin,
+    y: x * sin + y * cos,
+  };
+}
+
+function getHandleDirections(handle: ResizeHandle) {
+  return {
+    horizontal: handle === "nw" || handle === "sw" ? -1 : 1,
+    vertical: handle === "nw" || handle === "ne" ? -1 : 1,
+  };
+}
+
+function getRotationSnapTarget(rotation: number): number | undefined {
+  return ROTATION_SNAP_TARGETS.find(
+    (target) =>
+      Math.abs(normalizeRotation(rotation - target)) <= ROTATION_SNAP_THRESHOLD,
+  );
 }
 
 function getCaptionTransform(transform: FreePhotoTransform) {
@@ -131,6 +158,7 @@ export default function FreeCanvas({
   const [draftCaptionText, setDraftCaptionText] = useState("");
   const [customColorInput, setCustomColorInput] = useState("");
   const transformsRef = useRef(transforms);
+  const captionElementRefs = useRef(new Map<string, HTMLElement>());
 
   useEffect(() => {
     transformsRef.current = transforms;
@@ -153,16 +181,17 @@ export default function FreeCanvas({
   const selectedTransform = selection
     ? transforms.find((transform) => transform.photoId === selection.photoId) ?? null
     : null;
-
-  const selectedCaption = selectedTransform ? getCaptionTransform(selectedTransform) : null;
+  const selectedCaptionColor = selectedTransform?.caption?.color;
 
   useEffect(() => {
-    if (!selection || selection.kind !== "caption" || !selectedCaption) {
+    if (!selection || selection.kind !== "caption") {
       return;
     }
 
-    setCustomColorInput(selectedCaption.color?.startsWith("#") ? selectedCaption.color : "");
-  }, [selectedCaption, selection]);
+    setCustomColorInput(
+      selectedCaptionColor?.startsWith("#") ? selectedCaptionColor : "",
+    );
+  }, [selectedCaptionColor, selection]);
 
   useEffect(() => {
     if (!selection) {
@@ -188,6 +217,16 @@ export default function FreeCanvas({
     },
     [onTransformsChange],
   );
+
+  const getCaptionBounds = useCallback((photoId: string) => {
+    const element = captionElementRefs.current.get(photoId);
+    if (!element) {
+      return { width: 180, height: 40 };
+    }
+
+    const { width, height } = element.getBoundingClientRect();
+    return { width, height };
+  }, []);
 
   const bringToFront = useCallback(
     (photoId: string) => {
@@ -261,20 +300,17 @@ export default function FreeCanvas({
     const width = transform.width * containerSize.w;
     const height = transform.height * containerSize.h;
     const aspect = width / Math.max(height, 1);
-
-    let anchorX = left;
-    let anchorY = top;
-
-    if (handle === "nw") {
-      anchorX = left + width;
-      anchorY = top + height;
-    } else if (handle === "ne") {
-      anchorX = left;
-      anchorY = top + height;
-    } else if (handle === "sw") {
-      anchorX = left + width;
-      anchorY = top;
-    }
+    const { horizontal, vertical } = getHandleDirections(handle);
+    const rotation = (transform.rotation * Math.PI) / 180;
+    const centerX = left + width / 2;
+    const centerY = top + height / 2;
+    const anchorOffset = rotateVector(
+      (-horizontal * width) / 2,
+      (-vertical * height) / 2,
+      rotation,
+    );
+    const anchorX = centerX + anchorOffset.x;
+    const anchorY = centerY + anchorOffset.y;
 
     setSelection({ kind: "photo", photoId });
     bringToFront(photoId);
@@ -285,6 +321,7 @@ export default function FreeCanvas({
       anchorX,
       anchorY,
       aspect,
+      rotation,
     });
   }, [bringToFront, containerSize.h, containerSize.w]);
 
@@ -358,12 +395,28 @@ export default function FreeCanvas({
             }
 
             const caption = getCaptionTransform(transform);
+            const { width, height } = getCaptionBounds(transform.photoId);
+            const visibleWidth = Math.min(MIN_CAPTION_VISIBLE_PX, width / 2);
+            const visibleHeight = Math.min(MIN_CAPTION_VISIBLE_PX, height / 2);
+            const photoCenterX = transform.x + transform.width / 2;
+            const photoCenterY = transform.y + transform.height / 2;
+            const nextCenterX = clamp(
+              photoCenterX + activeGesture.startOffsetX + dx,
+              (visibleWidth - width / 2) / containerSize.w,
+              (containerSize.w + width / 2 - visibleWidth) / containerSize.w,
+            );
+            const nextCenterY = clamp(
+              photoCenterY + activeGesture.startOffsetY + dy,
+              (visibleHeight - height / 2) / containerSize.h,
+              (containerSize.h + height / 2 - visibleHeight) / containerSize.h,
+            );
+
             return {
               ...transform,
               caption: {
                 ...caption,
-                offsetX: activeGesture.startOffsetX + dx,
-                offsetY: activeGesture.startOffsetY + dy,
+                offsetX: nextCenterX - photoCenterX,
+                offsetY: nextCenterY - photoCenterY,
               },
             };
           }),
@@ -378,9 +431,8 @@ export default function FreeCanvas({
           90;
         let nextAngle = normalizeRotation(rawAngle);
         if (!event.shiftKey) {
-          const snapTargets = [0, 90, 180, 270, -90, -180];
-          const snapTarget = snapTargets.find((target) => Math.abs(target - nextAngle) <= 5);
-          if (typeof snapTarget === "number") {
+          const snapTarget = getRotationSnapTarget(nextAngle);
+          if (snapTarget !== undefined) {
             nextAngle = normalizeRotation(snapTarget);
           }
         }
@@ -395,17 +447,22 @@ export default function FreeCanvas({
         return;
       }
 
-      const horizontalDirection = activeGesture.handle === "nw" || activeGesture.handle === "sw" ? -1 : 1;
-      const verticalDirection = activeGesture.handle === "nw" || activeGesture.handle === "ne" ? -1 : 1;
+      const { horizontal: horizontalDirection, vertical: verticalDirection } =
+        getHandleDirections(activeGesture.handle);
       const minWidth = containerSize.w * MIN_PHOTO_SIZE;
       const minHeight = containerSize.h * MIN_PHOTO_SIZE;
+      const localPointerDelta = rotateVector(
+        event.clientX - activeGesture.anchorX,
+        event.clientY - activeGesture.anchorY,
+        -activeGesture.rotation,
+      );
       const desiredWidth = Math.max(
         minWidth,
-        (event.clientX - activeGesture.anchorX) * horizontalDirection,
+        localPointerDelta.x * horizontalDirection,
       );
       const desiredHeight = Math.max(
         minHeight,
-        (event.clientY - activeGesture.anchorY) * verticalDirection,
+        localPointerDelta.y * verticalDirection,
       );
 
       let nextWidth = desiredWidth;
@@ -416,12 +473,23 @@ export default function FreeCanvas({
         nextWidth = nextHeight * activeGesture.aspect;
       }
 
-      const nextLeft =
-        horizontalDirection > 0 ? activeGesture.anchorX : activeGesture.anchorX - nextWidth;
-      const nextTop =
-        verticalDirection > 0 ? activeGesture.anchorY : activeGesture.anchorY - nextHeight;
-      const nextX = clamp(nextLeft / containerSize.w, -(nextWidth / containerSize.w) / 2, 1 - (nextWidth / containerSize.w) / 2);
-      const nextY = clamp(nextTop / containerSize.h, -(nextHeight / containerSize.h) / 2, 1 - (nextHeight / containerSize.h) / 2);
+      const draggedCornerOffset = rotateVector(
+        horizontalDirection * nextWidth,
+        verticalDirection * nextHeight,
+        activeGesture.rotation,
+      );
+      const nextCenterX = clamp(
+        activeGesture.anchorX + draggedCornerOffset.x / 2,
+        0,
+        containerSize.w,
+      );
+      const nextCenterY = clamp(
+        activeGesture.anchorY + draggedCornerOffset.y / 2,
+        0,
+        containerSize.h,
+      );
+      const nextX = nextCenterX / containerSize.w - nextWidth / (2 * containerSize.w);
+      const nextY = nextCenterY / containerSize.h - nextHeight / (2 * containerSize.h);
 
       updateTransforms((current) =>
         current.map((transform) =>
@@ -463,7 +531,7 @@ export default function FreeCanvas({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [activeGesture, containerSize.h, containerSize.w, updateTransforms]);
+  }, [activeGesture, containerSize.h, containerSize.w, getCaptionBounds, updateTransforms]);
 
   const commitCaptionText = useCallback((photoId: string, text: string) => {
     updateTransforms((current) =>
@@ -622,6 +690,13 @@ export default function FreeCanvas({
               >
                 {editingCaptionId === photo.id ? (
                   <input
+                    ref={(node) => {
+                      if (node) {
+                        captionElementRefs.current.set(photo.id, node);
+                      } else {
+                        captionElementRefs.current.delete(photo.id);
+                      }
+                    }}
                     autoFocus
                     value={draftCaptionText}
                     onChange={(event) => setDraftCaptionText(event.target.value)}
@@ -645,6 +720,13 @@ export default function FreeCanvas({
                   />
                 ) : (
                   <div
+                    ref={(node) => {
+                      if (node) {
+                        captionElementRefs.current.set(photo.id, node);
+                      } else {
+                        captionElementRefs.current.delete(photo.id);
+                      }
+                    }}
                     className={`rounded-md px-2 py-1 text-center shadow-sm ${
                       captionSelected ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-white/20" : ""
                     }`}
