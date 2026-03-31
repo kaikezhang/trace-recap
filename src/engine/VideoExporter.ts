@@ -1395,15 +1395,15 @@ export class VideoExporter {
     const radius = borderRadiusPx * scaleX;
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
-    const captionScale = canvasWidth / 1000;
-    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * captionScale;
-    const captionH = captionFontSizeVal * 2;
-    const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
-
     const insetW = canvasWidth * 0.95;
     const insetH = canvasHeight * 0.88;
     const insetX = (canvasWidth - insetW) / 2;
     const insetY = (canvasHeight - insetH) / 2;
+
+    const captionScale = insetW / 1000;
+    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * captionScale;
+    const captionH = captionFontSizeVal * 2;
+    const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
 
     const containerAspect = insetW / insetH;
     const layoutMetas = loaded.map(({ photo, preloaded }) => ({
@@ -2065,15 +2065,15 @@ export class VideoExporter {
     const radius = borderRadiusPx * scaleX;
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
-    const captionScale = canvasWidth / 1000;
-    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * captionScale;
-    const captionH = captionFontSizeVal * 2;
-    const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
-
     const insetW = canvasWidth * 0.95;
     const insetH = canvasHeight * 0.88;
     const insetX = (canvasWidth - insetW) / 2;
     const insetY = (canvasHeight - insetH) / 2;
+
+    const captionScale = insetW / 1000;
+    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * captionScale;
+    const captionH = captionFontSizeVal * 2;
+    const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
 
     const containerAspect = insetW / insetH;
     const layoutMetas = loaded.map(({ photo, preloaded }) => ({
