@@ -1395,8 +1395,9 @@ export class VideoExporter {
     const radius = borderRadiusPx * scaleX;
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
-    const captionFontSize = 14 * scaleX;
-    const captionH = 28 * scaleX;
+    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * scaleX;
+    const captionH = captionFontSizeVal * 2;
+    const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
 
     const insetW = canvasWidth * 0.95;
     const insetH = canvasHeight * 0.88;
@@ -1853,7 +1854,7 @@ export class VideoExporter {
         ctx.restore();
 
         if (hasCaption) {
-          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.font = `${captionFontSizeVal}px ${captionFontFamilyVal}, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -1931,7 +1932,7 @@ export class VideoExporter {
         ctx.shadowOffsetY = 0;
 
         if (hasCaption) {
-          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.font = `${captionFontSizeVal}px ${captionFontFamilyVal}, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -2062,8 +2063,9 @@ export class VideoExporter {
     const radius = borderRadiusPx * scaleX;
     const shadowOffX = 2 * scaleX;
     const shadowOffY = 2 * scaleX;
-    const captionFontSize = 14 * scaleX;
-    const captionH = 28 * scaleX;
+    const captionFontSizeVal = (layout?.captionFontSize ?? 14) * scaleX;
+    const captionH = captionFontSizeVal * 2;
+    const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
 
     const insetW = canvasWidth * 0.95;
     const insetH = canvasHeight * 0.88;
@@ -2207,7 +2209,7 @@ export class VideoExporter {
         ctx.restore();
 
         if (hasCaption) {
-          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.font = `${captionFontSizeVal}px ${captionFontFamilyVal}, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -2250,7 +2252,7 @@ export class VideoExporter {
         ctx.shadowOffsetY = 0;
 
         if (hasCaption) {
-          ctx.font = `${captionFontSize}px system-ui, -apple-system, sans-serif`;
+          ctx.font = `${captionFontSizeVal}px ${captionFontFamilyVal}, -apple-system, sans-serif`;
           ctx.fillStyle = "#374151";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";

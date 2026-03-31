@@ -118,6 +118,11 @@ interface ProjectState {
     photoId: string,
     point: { x: number; y: number },
   ) => void;
+  setPhotoCaption: (
+    locationId: string,
+    photoId: string,
+    caption: string,
+  ) => void;
 
   // Project operations
   setMapStyle: (style: MapStyle) => void;
@@ -924,6 +929,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
               ...l,
               photos: l.photos.map((p) =>
                 p.id === photoId ? { ...p, focalPoint: point } : p,
+              ),
+            }
+          : l,
+      ),
+    }));
+  },
+
+  setPhotoCaption: (locationId, photoId, caption) => {
+    markLocationDirty(locationId);
+    return set((state) => ({
+      locations: state.locations.map((l) =>
+        l.id === locationId
+          ? {
+              ...l,
+              photos: l.photos.map((p) =>
+                p.id === photoId ? { ...p, caption: caption || undefined } : p,
               ),
             }
           : l,
