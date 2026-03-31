@@ -86,16 +86,24 @@ function EditableName({
 const TRAVEL_EMOJIS = [
   // Cities & landmarks
   "🏯", "⛩️", "🗼", "🗽", "🏰", "⛪", "🕌", "🛕", "🏛️", "🎡",
+  "🎢", "🏟️", "🕍", "⛲", "🗿", "🧱", "🏗️", "🌁", "🌆", "🏙️",
   // Nature & scenery
   "🏔️", "🌋", "🏖️", "🌊", "🌅", "🌄", "🏜️", "🌲", "🌸", "🍁",
+  "🌴", "🌵", "🍀", "🌾", "🪵", "🌿", "🦋", "🐠", "🐬", "🦩",
   // Food & drink
   "🍣", "🍜", "🍕", "🥐", "🍷", "☕", "🧋", "🍦", "🥘", "🍱",
+  "🌮", "🥟", "🍔", "🥖", "🍰", "🫕", "🍤", "🥗", "🍻", "🫖",
   // Activities & culture
   "🎭", "🎪", "🎶", "🛍️", "📸", "🎿", "🏄", "🚴", "⛷️", "🧗",
+  "🎨", "🎵", "💃", "🏊", "⛳", "🎣", "🧘", "🤿", "🛹", "🏇",
   // Transport
   "✈️", "🚅", "🚗", "⛵", "🚠", "🛶", "🚲", "🛺", "🚢", "🚁",
+  "🚂", "🛩️", "🚌", "🛵", "🚤", "🚡", "🛻", "🏍️", "⛴️", "🚀",
+  // Weather & time
+  "☀️", "🌙", "⛅", "🌈", "❄️", "🌧️", "⛈️", "🌤️", "🔥", "💨",
   // Misc travel
   "🗺️", "🧭", "🏕️", "🌃", "🌉", "🎑", "🏞️", "🌺", "🐚", "⭐",
+  "❤️", "🎒", "🛎️", "📍", "🎫", "🔔", "💎", "🪷", "🎆", "🎇",
 ];
 
 function EmojiPicker({
@@ -107,6 +115,7 @@ function EmojiPicker({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const customInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -135,9 +144,9 @@ function EmojiPicker({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -4 }}
             transition={{ duration: 0.15 }}
-            className="absolute bottom-full right-0 mb-1 z-50 w-[220px] rounded-lg border bg-popover p-2 shadow-lg"
+            className="absolute bottom-full right-0 mb-1 z-50 w-[240px] rounded-lg border bg-popover p-2 shadow-lg"
           >
-            <div className="grid grid-cols-10 gap-0.5">
+            <div className="grid grid-cols-10 gap-0.5 max-h-[180px] overflow-y-auto">
               {TRAVEL_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
@@ -153,17 +162,41 @@ function EmojiPicker({
                 </button>
               ))}
             </div>
-            {value && (
-              <button
-                onClick={() => {
-                  onSelect("");
-                  setOpen(false);
+            <div className="mt-1.5 pt-1.5 border-t flex items-center gap-1.5">
+              <Input
+                ref={customInputRef}
+                placeholder="Type or paste emoji"
+                className="h-6 flex-1 text-center text-sm px-1 py-0"
+                maxLength={2}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const val = customInputRef.current?.value.trim();
+                    if (val) {
+                      onSelect(val);
+                      setOpen(false);
+                    }
+                  }
                 }}
-                className="mt-1.5 w-full rounded-md py-1 text-[10px] text-muted-foreground hover:bg-accent transition-colors"
-              >
-                Clear
-              </button>
-            )}
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  if (val && /\p{Emoji}/u.test(val)) {
+                    onSelect(val);
+                    setOpen(false);
+                  }
+                }}
+              />
+              {value && (
+                <button
+                  onClick={() => {
+                    onSelect("");
+                    setOpen(false);
+                  }}
+                  className="shrink-0 rounded-md px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
