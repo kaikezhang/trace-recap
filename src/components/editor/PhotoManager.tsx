@@ -3,51 +3,10 @@
 import { useRef, useState, useCallback } from "react";
 import { Upload, X, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { compressImage } from "@/lib/imageUtils";
 import { useProjectStore } from "@/stores/projectStore";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_DIMENSION = 1920; // max width or height after compression
-const JPEG_QUALITY = 0.8; // 80% JPEG quality
-
-/** Compress image: resize to max 1920px + JPEG 80% quality */
-async function compressImage(file: File): Promise<Blob> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      let { width, height } = img;
-
-      // Scale down if larger than MAX_DIMENSION
-      if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-        if (width > height) {
-          height = Math.round(height * (MAX_DIMENSION / width));
-          width = MAX_DIMENSION;
-        } else {
-          width = Math.round(width * (MAX_DIMENSION / height));
-          height = MAX_DIMENSION;
-        }
-      }
-
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob(
-        (blob) => resolve(blob ?? file),
-        "image/jpeg",
-        JPEG_QUALITY,
-      );
-      URL.revokeObjectURL(img.src);
-    };
-    img.onerror = () => resolve(file); // fallback to original
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-function createPhotoURL(blob: Blob): string {
-  return URL.createObjectURL(blob);
-}
 
 async function processImageFiles(
   files: FileList | null,
@@ -66,7 +25,7 @@ async function processImageFiles(
     }
     // Compress: resize to max 1920px + JPEG 80% → typically 100-300KB per photo
     const compressed = await compressImage(file);
-    const url = createPhotoURL(compressed);
+    const url = URL.createObjectURL(compressed);
     addPhoto(locationId, { url });
   }
 }
