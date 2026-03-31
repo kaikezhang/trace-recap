@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { Fragment, useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -583,8 +583,12 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     previewPixelSize.width,
   ]);
   const fallbackFreeTransforms = useMemo(
-    () => computedRectsToFreeTransforms(orderedPhotos, computedRects),
-    [computedRects, orderedPhotos],
+    () => computedRectsToFreeTransforms(orderedPhotos, computedRects, {
+      containerWidthPx: previewPixelSize.width,
+      containerHeightPx: previewPixelSize.height,
+      captionFontSizePx: layout.captionFontSize ?? 14,
+    }),
+    [computedRects, layout.captionFontSize, orderedPhotos, previewPixelSize.height, previewPixelSize.width],
   );
   const effectiveFreeTransforms = useMemo(
     () => reconcileFreeTransforms(orderedPhotos, fallbackFreeTransforms, layout.freeTransforms),
@@ -901,7 +905,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             const captionCenterY = transform.y + transform.height / 2 + (transform.caption?.offsetY ?? transform.height / 2 + 0.04);
 
             return (
-              <div key={`free-hit-${photo.id}`} className="absolute inset-0">
+              <Fragment key={`free-hit-${photo.id}`}>
                 <button
                   type="button"
                   className="absolute touch-none cursor-grab rounded-[inherit] bg-transparent active:cursor-grabbing"
@@ -943,7 +947,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                     aria-label={`Move caption for ${photo.caption || "photo"} into free mode`}
                   />
                 ) : null}
-              </div>
+              </Fragment>
             );
           })}
         </div>
@@ -1158,27 +1162,28 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           }`}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900">{location.name}</h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {location.photos.length} photo{location.photos.length !== 1 ? "s" : ""}
-              </p>
+          {!expanded ? (
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">{location.name}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {location.photos.length} photo{location.photos.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setExpanded(true)}
+                  aria-label="Expand editor"
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <Maximize2 className="h-5 w-5 text-gray-500" />
+                </button>
+                <button onClick={onClose} aria-label="Close photo layout editor" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setExpanded((v) => !v)}
-                aria-label={expanded ? "Collapse editor" : "Expand editor"}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                {expanded ? <Minimize2 className="h-5 w-5 text-gray-500" /> : <Maximize2 className="h-5 w-5 text-gray-500" />}
-              </button>
-              <button onClick={onClose} aria-label="Close photo layout editor" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-          </div>
+          ) : null}
 
           {/* 3-column body */}
           <div className="flex flex-1 min-h-0">
@@ -1321,7 +1326,17 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             </div>
 
             {/* CENTER — Live preview with map background */}
-            <div ref={desktopPreviewRef} className="flex-1 bg-gray-100 flex items-center justify-center p-6">
+            <div ref={desktopPreviewRef} className={`relative flex-1 bg-gray-100 flex items-center justify-center ${expanded ? "p-2" : "p-6"}`}>
+              {expanded ? (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(false)}
+                  aria-label="Minimize editor"
+                  className="absolute right-4 top-4 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/70 text-gray-700 shadow-lg backdrop-blur-sm transition hover:bg-white/85"
+                >
+                  <Minimize2 className="h-5 w-5" />
+                </button>
+              ) : null}
               <PreviewWithMapBackground mapSnapshot={mapSnapshot} previewContainerStyle={previewContainerStyle}>
                 {layoutPreviewNode}
               </PreviewWithMapBackground>
@@ -1372,16 +1387,17 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
-            <p className="text-xs text-gray-400">Changes are applied automatically</p>
-            <button
-              onClick={onClose}
-              className="px-5 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg hover:bg-indigo-600 transition-colors"
-            >
-              Done
-            </button>
-          </div>
+          {!expanded ? (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+              <p className="text-xs text-gray-400">Changes are applied automatically</p>
+              <button
+                onClick={onClose}
+                className="px-5 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg hover:bg-indigo-600 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          ) : null}
         </motion.div>
       </div>
     </AnimatePresence>,

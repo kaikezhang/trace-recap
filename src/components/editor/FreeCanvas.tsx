@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_CAPTION_BG_COLOR } from "@/lib/constants";
 import type { FreePhotoTransform, Photo } from "@/types";
 
 const CAPTION_FONT_OPTIONS = [
@@ -17,6 +18,13 @@ const CAPTION_COLOR_PRESETS = [
   "#6366f1",
   "#ef4444",
   "#f59e0b",
+] as const;
+
+const CAPTION_BG_PRESETS = [
+  DEFAULT_CAPTION_BG_COLOR,
+  "rgba(0,0,0,0.6)",
+  "rgba(99,102,241,0.7)",
+  "transparent",
 ] as const;
 
 const MIN_PHOTO_SIZE = 0.05;
@@ -124,6 +132,7 @@ function getCaptionTransform(transform: FreePhotoTransform) {
     fontFamily: transform.caption?.fontFamily,
     fontSize: transform.caption?.fontSize,
     color: transform.caption?.color,
+    bgColor: transform.caption?.bgColor ?? DEFAULT_CAPTION_BG_COLOR,
     text: transform.caption?.text,
     rotation: transform.caption?.rotation ?? 0,
   };
@@ -247,6 +256,7 @@ export default function FreeCanvas({
       const transform = transformsRef.current.find((item) => item.photoId === photoId);
       if (!transform) return;
 
+      setEditingCaptionId(null);
       setSelection({ kind: "photo", photoId });
       bringToFront(photoId);
       setActiveGesture({
@@ -265,6 +275,7 @@ export default function FreeCanvas({
     if (!transform) return;
 
     const caption = getCaptionTransform(transform);
+    setEditingCaptionId(null);
     setSelection({ kind: "caption", photoId });
     bringToFront(photoId);
     setActiveGesture({
@@ -281,6 +292,7 @@ export default function FreeCanvas({
     const transform = transformsRef.current.find((item) => item.photoId === photoId);
     if (!transform || containerSize.w <= 0 || containerSize.h <= 0) return;
 
+    setEditingCaptionId(null);
     setSelection({ kind: "photo", photoId });
     bringToFront(photoId);
     setActiveGesture({
@@ -312,6 +324,7 @@ export default function FreeCanvas({
     const anchorX = centerX + anchorOffset.x;
     const anchorY = centerY + anchorOffset.y;
 
+    setEditingCaptionId(null);
     setSelection({ kind: "photo", photoId });
     bringToFront(photoId);
     setActiveGesture({
@@ -533,6 +546,24 @@ export default function FreeCanvas({
     };
   }, [activeGesture, containerSize.h, containerSize.w, getCaptionBounds, updateTransforms]);
 
+  useEffect(() => {
+    if (!editingCaptionId) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      setEditingCaptionId(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingCaptionId]);
+
   const commitCaptionText = useCallback((photoId: string, text: string) => {
     updateTransforms((current) =>
       current.map((transform) => {
@@ -605,7 +636,7 @@ export default function FreeCanvas({
         const captionCenterY = transform.y + transform.height / 2 + caption.offsetY;
 
         return (
-          <div key={photo.id} className="absolute inset-0" style={{ zIndex: transform.zIndex }}>
+          <Fragment key={photo.id}>
             <div
               className="absolute cursor-grab touch-none active:cursor-grabbing"
               onPointerDown={(event) => {
@@ -619,6 +650,7 @@ export default function FreeCanvas({
                 height: `${transform.height * 100}%`,
                 transform: `rotate(${transform.rotation}deg)`,
                 transformOrigin: "center",
+                zIndex: transform.zIndex,
               }}
             >
               <img
@@ -690,6 +722,7 @@ export default function FreeCanvas({
                   left: `${captionCenterX * 100}%`,
                   top: `${captionCenterY * 100}%`,
                   transform: `translate(-50%, -50%) rotate(${caption.rotation}deg)`,
+                  zIndex: transform.zIndex + 1,
                 }}
               >
                 {editingCaptionId === photo.id ? (
@@ -739,7 +772,7 @@ export default function FreeCanvas({
                       setSelection({ kind: "caption", photoId: photo.id });
                     }}
                     style={{
-                      backgroundColor: captionSelected ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.74)",
+                      backgroundColor: caption.bgColor,
                       color: caption.color ?? "#ffffff",
                       fontFamily: caption.fontFamily ?? defaultCaptionFontFamily,
                       fontSize: `${scaledCaptionFontSize}px`,
@@ -752,60 +785,94 @@ export default function FreeCanvas({
 
                 {captionSelected && editingCaptionId !== photo.id ? (
                   <div
-                    className="absolute left-1/2 top-0 z-10 flex -translate-x-1/2 -translate-y-[calc(100%+12px)] items-center gap-2 rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
+                    className="absolute left-1/2 top-0 z-10 flex min-w-[240px] -translate-x-1/2 -translate-y-[calc(100%+12px)] flex-col gap-2 rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
                     onPointerDown={(event) => event.stopPropagation()}
                   >
-                    <select
-                      className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
-                      value={caption.fontFamily ?? defaultCaptionFontFamily}
-                      onChange={(event) => applyCaptionStyle(photo.id, { fontFamily: event.target.value })}
-                    >
-                      {CAPTION_FONT_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="range"
-                      min={10}
-                      max={32}
-                      step={1}
-                      value={caption.fontSize ?? defaultCaptionFontSize}
-                      onChange={(event) => applyCaptionStyle(photo.id, { fontSize: Number(event.target.value) })}
-                      className="h-1 w-24 accent-indigo-500"
-                    />
-                    <div className="flex items-center gap-1">
-                      {CAPTION_COLOR_PRESETS.map((color) => (
-                        <button
-                          key={`${photo.id}-${color}`}
-                          type="button"
-                          className={`h-5 w-5 rounded-full border ${
-                            (caption.color ?? "#ffffff") === color ? "border-indigo-500 ring-2 ring-indigo-200" : "border-gray-200"
-                          }`}
-                          style={{ backgroundColor: color }}
-                          onClick={() => applyCaptionStyle(photo.id, { color })}
-                          aria-label={`Set caption color ${color}`}
-                        />
-                      ))}
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="h-8 flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
+                        value={caption.fontFamily ?? defaultCaptionFontFamily}
+                        onChange={(event) => applyCaptionStyle(photo.id, { fontFamily: event.target.value })}
+                      >
+                        {CAPTION_FONT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="range"
+                        min={10}
+                        max={64}
+                        step={1}
+                        value={caption.fontSize ?? defaultCaptionFontSize}
+                        onChange={(event) => applyCaptionStyle(photo.id, { fontSize: Number(event.target.value) })}
+                        className="h-1 w-24 accent-indigo-500"
+                      />
                     </div>
-                    <input
-                      type="text"
-                      value={customColorInput}
-                      onChange={(event) => setCustomColorInput(event.target.value)}
-                      onBlur={() => {
-                        if (customColorInput.trim()) {
-                          applyCaptionStyle(photo.id, { color: customColorInput.trim() });
-                        }
-                      }}
-                      placeholder="#6366f1"
-                      className="h-8 w-20 rounded-md border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
-                    />
+                    <div className="flex items-center gap-2">
+                      <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
+                        Text
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {CAPTION_COLOR_PRESETS.map((color) => (
+                          <button
+                            key={`${photo.id}-${color}`}
+                            type="button"
+                            className={`h-5 w-5 rounded-full border ${
+                              (caption.color ?? "#ffffff") === color ? "border-indigo-500 ring-2 ring-indigo-200" : "border-gray-200"
+                            }`}
+                            style={{ backgroundColor: color }}
+                            onClick={() => applyCaptionStyle(photo.id, { color })}
+                            aria-label={`Set caption color ${color}`}
+                          />
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        value={customColorInput}
+                        onChange={(event) => setCustomColorInput(event.target.value)}
+                        onBlur={() => {
+                          if (customColorInput.trim()) {
+                            applyCaptionStyle(photo.id, { color: customColorInput.trim() });
+                          }
+                        }}
+                        placeholder="#6366f1"
+                        className="h-8 w-20 rounded-md border border-gray-200 px-2 text-xs text-gray-700 outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-9 text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
+                        Fill
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {CAPTION_BG_PRESETS.map((color) => (
+                          <button
+                            key={`${photo.id}-bg-${color}`}
+                            type="button"
+                            className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${
+                              caption.bgColor === color ? "border-indigo-500 ring-2 ring-indigo-200" : "border-gray-200"
+                            }`}
+                            style={{
+                              backgroundColor: color === "transparent" ? "#ffffff" : color,
+                              color: color === "transparent" ? "#6b7280" : "transparent",
+                              backgroundImage: color === "transparent"
+                                ? "linear-gradient(135deg, transparent 45%, #ef4444 45%, #ef4444 55%, transparent 55%)"
+                                : undefined,
+                            }}
+                            onClick={() => applyCaptionStyle(photo.id, { bgColor: color })}
+                            aria-label={`Set caption background ${color}`}
+                          >
+                            {color === "transparent" ? "T" : ""}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : null}
               </div>
             ) : null}
-          </div>
+          </Fragment>
         );
       })}
     </div>

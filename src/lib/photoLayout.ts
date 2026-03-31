@@ -782,26 +782,46 @@ export function computeTemplateLayout(
 }
 
 export function computedRectsToFreeTransforms(
-  photos: Array<{ id: string }>,
+  photos: Array<{ id: string; caption?: string }>,
   rects: PhotoRect[],
+  options?: {
+    containerWidthPx?: number;
+    containerHeightPx?: number;
+    captionFontSizePx?: number;
+  },
 ): FreePhotoTransform[] {
+  const containerWidthPx = options?.containerWidthPx ?? 0;
+  const containerHeightPx = options?.containerHeightPx ?? 0;
+  const captionFontSizePx = options?.captionFontSizePx ?? 14;
+  const captionScale = containerWidthPx > 0 ? containerWidthPx / 1000 : 1;
+  const captionHeight =
+    containerHeightPx > 0
+      ? (captionFontSizePx * captionScale * 2) / containerHeightPx
+      : 0;
+
   return photos.reduce<FreePhotoTransform[]>((acc, photo, index) => {
       const rect = rects[index];
       if (!rect) {
         return acc;
       }
 
+      const hasCaption = Boolean(photo.caption?.trim());
+      const photoHeight = hasCaption
+        ? Math.max(rect.height - captionHeight, rect.height * 0.2)
+        : rect.height;
+
       acc.push({
         photoId: photo.id,
         x: rect.x,
         y: rect.y,
         width: rect.width,
-        height: rect.height,
+        height: photoHeight,
         rotation: rect.rotation ?? 0,
         zIndex: index,
         caption: {
+          text: photo.caption,
           offsetX: 0,
-          offsetY: rect.height / 2 + 0.04,
+          offsetY: hasCaption ? rect.height / 2 : rect.height / 2 + 0.04,
           rotation: 0,
         },
       });
