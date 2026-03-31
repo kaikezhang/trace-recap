@@ -453,23 +453,6 @@ export class AnimationEngine {
     if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
       showPhotos = true;
       photoOpacity = 1;
-    } else if (groupIndex > 0) {
-      const prevGroup = this.groups[groupIndex - 1];
-      if (prevGroup && prevGroup.toLoc.photos.length > 0) {
-        if (phase === "HOVER") {
-          // HOVER: start fading out previous photos
-          showPhotos = true;
-          photoOpacity = 1 - phaseProgress * 0.5; // fade from 1 → 0.5 during HOVER
-        } else if (phase === "ZOOM_OUT") {
-          // ZOOM_OUT: continue fade from 0.5 → 0
-          showPhotos = true;
-          photoOpacity = 0.5 * (1 - phaseProgress);
-        } else if (phase === "FLY" && phaseProgress < 0.3) {
-          // Continue fading through first 30% of FLY for smoother exit
-          showPhotos = true;
-          photoOpacity = 0.3 * (1 - phaseProgress / 0.3);
-        }
-      }
     }
 
     const progress = clamped / this.totalDuration;
