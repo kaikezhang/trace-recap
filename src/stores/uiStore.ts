@@ -54,7 +54,7 @@ interface UIState {
   routeLabelSize: number; // Route label font size in px (default 14)
   viewportRatio: AspectRatio; // WYSIWYG viewport aspect ratio
   photoAnimation: PhotoAnimation; // Photo enter/exit animation style
-  photoStyle: PhotoStyle; // Photo display style (classic or kenburns)
+  photoStyle: PhotoStyle; // Photo display style
   sceneTransition: SceneTransition; // Scene transition style between locations
   moodColorsEnabled: boolean; // Use photo-extracted colors for route lines
 

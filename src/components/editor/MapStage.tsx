@@ -21,6 +21,7 @@ interface MapStageProps {
   bloomElapsedTime: number;
   photos: Photo[];
   photoLayout?: PhotoLayout;
+  photoLocationId?: string | null;
   photoOverlayOpacity: number;
   playHintMessage?: string;
   showPhotoOverlay: boolean;
@@ -107,6 +108,7 @@ export default function MapStage({
   hasSegments,
   photos,
   photoLayout,
+  photoLocationId,
   photoOverlayOpacity,
   playHintMessage,
   showPhotoOverlay,
@@ -128,19 +130,28 @@ export default function MapStage({
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
+  const segmentColors = useProjectStore((s) => s.segmentColors);
   const cityLabelTopPercent = useUIStore((s) => s.cityLabelTopPercent);
   const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
   const routeLabelSize = useUIStore((s) => s.routeLabelSize);
   const globalSceneTransition = useUIStore((s) => s.sceneTransition);
+  const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
 
   // Scene transition state
   const sceneTransitionProgress = useAnimationStore((s) => s.sceneTransitionProgress);
   const incomingPhotos = useAnimationStore((s) => s.incomingPhotos);
   const incomingPhotoLocationId = useAnimationStore((s) => s.incomingPhotoLocationId);
   const transitionBearing = useAnimationStore((s) => s.transitionBearing);
-  const incomingLocation = locations.find((l) => l.id === incomingPhotoLocationId);
+  const visiblePhotoLocation = locations.find((location) => location.id === photoLocationId);
+  const incomingLocation = locations.find((location) => location.id === incomingPhotoLocationId);
   const effectiveTransition = resolveSceneTransition(photoLayout, globalSceneTransition);
   const isTransitioning = effectiveTransition !== "cut" && sceneTransitionProgress !== undefined;
+
+  const getPortalAccentColor = (locationId: string | null | undefined): string => {
+    if (!locationId || !moodColorsEnabled) return "#ffffff";
+    const segmentIndex = segments.findIndex((segment) => segment.toId === locationId);
+    return segmentIndex >= 0 ? segmentColors[segmentIndex] ?? "#ffffff" : "#ffffff";
+  };
 
   const isPlaying = playbackState === "playing";
   const currentSegment = segments[currentSegmentIndex];
@@ -195,6 +206,10 @@ export default function MapStage({
         incomingPhotos={isTransitioning ? incomingPhotos : undefined}
         incomingPhotoLayout={isTransitioning ? incomingLocation?.photoLayout : undefined}
         transitionBearing={isTransitioning ? transitionBearing : undefined}
+        originCoordinates={visiblePhotoLocation?.coordinates}
+        incomingOriginCoordinates={isTransitioning ? incomingLocation?.coordinates : undefined}
+        portalAccentColor={getPortalAccentColor(photoLocationId)}
+        incomingPortalAccentColor={isTransitioning ? getPortalAccentColor(incomingPhotoLocationId) : undefined}
       />
       {showPhotoLayoutEditor && editingLocation && (
         <PhotoLayoutEditor

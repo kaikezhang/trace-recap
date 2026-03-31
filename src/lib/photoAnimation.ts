@@ -20,6 +20,13 @@ export const PHOTO_EXIT_ANIMATION_LABELS: Record<PhotoAnimation, string> = {
   none: "None",
 };
 
+export const PHOTO_STYLE_LABELS: Record<PhotoStyle, string> = {
+  classic: "Classic",
+  kenburns: "Ken Burns",
+  portal: "Portal",
+  bloom: "Bloom",
+};
+
 export function resolvePhotoAnimations(
   layout: PhotoLayout | undefined,
   fallback: PhotoAnimation,

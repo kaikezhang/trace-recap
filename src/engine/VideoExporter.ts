@@ -29,6 +29,7 @@ import { isMediaRecorderSupported, MediaRecorderExporter } from "./MediaRecorder
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { resolveSceneTransition, computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from "@/lib/sceneTransition";
+import { computePortalLayout, computePortalPhaseProgress } from "@/lib/portalLayout";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -450,6 +451,16 @@ export class VideoExporter {
     return "#6366f1";
   }
 
+  /** Portal glow follows mood colors when available, otherwise falls back to white. */
+  private getPortalAccentColor(segmentIndex: number): string {
+    const moodEnabled = useUIStore.getState().moodColorsEnabled;
+    const segColors = useProjectStore.getState().segmentColors;
+    if (moodEnabled && segColors[segmentIndex]) {
+      return segColors[segmentIndex];
+    }
+    return "#ffffff";
+  }
+
   /** Cubic ease-out: matches framer-motion's default easeOut */
   private easeOut(t: number): number {
     return 1 - Math.pow(1 - t, 3);
@@ -595,12 +606,199 @@ export class VideoExporter {
     }
   }
 
+  private withAlpha(color: string, alpha: number): string {
+    if (!color.startsWith("#")) return color;
+    const raw = color.slice(1);
+    const value = raw.length === 3 ? raw.split("").map((part) => part + part).join("") : raw;
+    if (value.length !== 6) return color;
+    const red = Number.parseInt(value.slice(0, 2), 16);
+    const green = Number.parseInt(value.slice(2, 4), 16);
+    const blue = Number.parseInt(value.slice(4, 6), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  private drawCircularPhoto(
+    ctx: CanvasRenderingContext2D,
+    photo: Photo,
+    preloaded: PreloadedPhoto,
+    x: number,
+    y: number,
+    size: number,
+    kenBurnsProgress: number,
+    index: number,
+  ): void {
+    const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
+    const imgAspect = preloaded.aspect;
+    let drawW: number;
+    let drawH: number;
+    let drawX: number;
+    let drawY: number;
+
+    if (imgAspect > 1) {
+      drawH = size;
+      drawW = size * imgAspect;
+      drawX = x + (size - drawW) * fp.x;
+      drawY = y;
+    } else {
+      drawW = size;
+      drawH = size / imgAspect;
+      drawX = x;
+      drawY = y + (size - drawH) * fp.y;
+    }
+
+    const kb = getKenBurnsTransform(kenBurnsProgress, index, fp);
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.translate((kb.translateX * size) / 100, (kb.translateY * size) / 100);
+    ctx.scale(kb.scale, kb.scale);
+    ctx.translate(-centerX, -centerY);
+    ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
+    ctx.restore();
+  }
+
+  private drawPortalPhotos(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    scaleX: number,
+    scaleY: number,
+    loaded: { photo: Photo; preloaded: PreloadedPhoto }[],
+    coordinates: [number, number],
+    portalProgress: number,
+    kenBurnsProgress: number,
+    accentColor: string,
+    options?: {
+      alpha?: number;
+      blur?: number;
+      clip?: { direction: string; position: number } | null;
+    },
+  ): void {
+    if (loaded.length === 0 || portalProgress <= 0) return;
+
+    const projected = this.map.project(coordinates);
+    const originX = projected.x * scaleX;
+    const originY = projected.y * scaleY;
+    const layout = computePortalLayout(loaded, canvasWidth, canvasHeight, originX, originY, portalProgress);
+    if (layout.radius <= 0.5) return;
+
+    if (options?.clip) {
+      ctx.save();
+      ctx.beginPath();
+      const pos = options.clip.position;
+      switch (options.clip.direction) {
+        case "north":
+          ctx.rect(0, 0, canvasWidth, pos * canvasHeight);
+          break;
+        case "south":
+          ctx.rect(0, (1 - pos) * canvasHeight, canvasWidth, pos * canvasHeight);
+          break;
+        case "east":
+          ctx.rect(0, 0, pos * canvasWidth, canvasHeight);
+          break;
+        case "west":
+          ctx.rect((1 - pos) * canvasWidth, 0, pos * canvasWidth, canvasHeight);
+          break;
+      }
+      ctx.clip();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = options?.alpha ?? 1;
+    if ((options?.blur ?? 0) > 0) {
+      ctx.filter = `blur(${(options?.blur ?? 0) * scaleX}px)`;
+    }
+
+    const hero = loaded[0];
+    if (hero) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(originX, originY, layout.radius, 0, Math.PI * 2);
+      ctx.clip();
+      this.drawCircularPhoto(
+        ctx,
+        hero.photo,
+        hero.preloaded,
+        layout.heroRect.x,
+        layout.heroRect.y,
+        layout.heroRect.size,
+        kenBurnsProgress,
+        0,
+      );
+      ctx.restore();
+    }
+
+    const glowOuter = layout.ringRadius + 8 * scaleX;
+    const glowInner = Math.max(layout.ringRadius - 4 * scaleX, 0);
+    const glowGradient = ctx.createRadialGradient(originX, originY, glowInner, originX, originY, glowOuter);
+    glowGradient.addColorStop(0, this.withAlpha(accentColor, 0));
+    glowGradient.addColorStop(0.72, this.withAlpha(accentColor, layout.glowOpacity * 0.42));
+    glowGradient.addColorStop(1, this.withAlpha(accentColor, 0));
+
+    ctx.fillStyle = glowGradient;
+    ctx.beginPath();
+    ctx.arc(originX, originY, glowOuter, 0, Math.PI * 2);
+    ctx.arc(originX, originY, glowInner, 0, Math.PI * 2, true);
+    ctx.fill("evenodd");
+
+    ctx.strokeStyle = this.withAlpha(accentColor, Math.min(layout.glowOpacity * 0.95, 0.95));
+    ctx.lineWidth = layout.ringWidth * scaleX;
+    ctx.beginPath();
+    ctx.arc(originX, originY, layout.ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (const satellite of layout.satellites) {
+      const item = loaded[satellite.index + 1];
+      if (!item || satellite.opacity <= 0 || satellite.scale <= 0) continue;
+
+      const size = satellite.size * satellite.scale;
+      const halfSize = size / 2;
+      const drawX = satellite.x - halfSize;
+      const drawY = satellite.y - halfSize;
+
+      ctx.save();
+      ctx.globalAlpha *= satellite.opacity;
+      ctx.beginPath();
+      ctx.arc(satellite.x, satellite.y, halfSize, 0, Math.PI * 2);
+      ctx.clip();
+      this.drawCircularPhoto(
+        ctx,
+        item.photo,
+        item.preloaded,
+        drawX,
+        drawY,
+        size,
+        0.35,
+        satellite.index + 1,
+      );
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha *= satellite.opacity;
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 2 * scaleX;
+      ctx.beginPath();
+      ctx.arc(satellite.x, satellite.y, Math.max(halfSize - scaleX, 1), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore();
+
+    if (options?.clip) {
+      ctx.restore();
+    }
+  }
+
   /** Draw photo overlays onto the offscreen canvas during ARRIVE phases */
   private drawPhotos(
     ctx: CanvasRenderingContext2D,
     canvasWidth: number,
     canvasHeight: number,
     scaleX: number,
+    scaleY: number,
     captured: { progress: AnimationEvent | null },
     frameIndex: number,
     fps: number,
@@ -695,6 +893,80 @@ export class VideoExporter {
       exitAnimation: exitAnimStyle,
     } = resolvePhotoAnimations(layout, this.settings.photoAnimation ?? "scale");
     const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
+
+    if (photoStyle === "portal") {
+      let transitionOutgoingAlpha = 1;
+      let transitionOutgoingBlur = 0;
+      let outgoingClip: { direction: string; position: number } | null = null;
+
+      if (isInSceneTransition) {
+        const uiState = useUIStore.getState();
+        const globalTransition = uiState.sceneTransition ?? "dissolve";
+        const outgoingLayout = group.toLoc.photoLayout;
+        const effectiveTransition: SceneTransition = resolveSceneTransition(outgoingLayout, globalTransition);
+
+        if (effectiveTransition === "cut") return;
+
+        const tp = progress.sceneTransitionProgress!;
+        switch (effectiveTransition) {
+          case "dissolve": {
+            const { outgoing } = computeDissolveOpacity(tp);
+            transitionOutgoingAlpha = outgoing;
+            break;
+          }
+          case "blur-dissolve": {
+            const { outgoing, blur } = computeBlurDissolve(tp);
+            transitionOutgoingAlpha = outgoing;
+            transitionOutgoingBlur = blur;
+            break;
+          }
+          case "wipe": {
+            const bearing = progress.transitionBearing ?? 0;
+            const { wipePosition } = computeWipeProgress(tp, bearing);
+            const normBearing = ((bearing % 360) + 360) % 360;
+            let direction: string;
+            if (normBearing >= 315 || normBearing < 45) direction = "north";
+            else if (normBearing >= 45 && normBearing < 135) direction = "east";
+            else if (normBearing >= 135 && normBearing < 225) direction = "south";
+            else direction = "west";
+            outgoingClip = { direction, position: 1 - wipePosition };
+            break;
+          }
+        }
+        if (transitionOutgoingAlpha <= 0) return;
+      }
+
+      const timeline = this.engine.getTimeline();
+      const entry = timeline[groupIndex];
+      const arrivePhase = entry?.phases.find((phase) => phase.phase === "ARRIVE");
+      if (!arrivePhase || arrivePhase.duration <= 0) return;
+
+      const arriveProgress = Math.max(0, Math.min(1, (progress.time - arrivePhase.startTime) / arrivePhase.duration));
+      const portalProgress = isInSceneTransition
+        ? Math.max(0, Math.min(1, 1 - progress.sceneTransitionProgress!))
+        : computePortalPhaseProgress(arriveProgress);
+      if (portalProgress <= 0) return;
+
+      const kenBurnsProgress = Math.max(0, Math.min(1, (progress.time - arrivePhase.startTime) / KEN_BURNS_DURATION_SEC));
+      this.drawPortalPhotos(
+        ctx,
+        canvasWidth,
+        canvasHeight,
+        scaleX,
+        scaleY,
+        loaded,
+        photoLoc.coordinates,
+        portalProgress,
+        kenBurnsProgress,
+        this.getPortalAccentColor(groupIndex),
+        {
+          alpha: transitionOutgoingAlpha,
+          blur: transitionOutgoingBlur,
+          clip: outgoingClip,
+        },
+      );
+      return;
+    }
 
     // --- Scene transition outgoing opacity/blur/clip ---
     let transitionOutgoingAlpha = 1;
@@ -1153,9 +1425,10 @@ export class VideoExporter {
     canvasWidth: number,
     canvasHeight: number,
     scaleX: number,
+    scaleY: number,
     captured: { progress: AnimationEvent | null },
-    frameIndex: number,
-    fps: number,
+    _frameIndex: number,
+    _fps: number,
   ): void {
     const progress = captured.progress;
     if (!progress) return;
@@ -1272,6 +1545,29 @@ export class VideoExporter {
     const count = loaded.length;
     const isPolaroid = layout?.template === "polaroid";
     const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
+    if (photoStyle === "portal") {
+      const portalProgress = computePortalPhaseProgress(transitionProgress);
+      if (portalProgress <= 0 || incomingOpacity <= 0) return;
+
+      this.drawPortalPhotos(
+        ctx,
+        canvasWidth,
+        canvasHeight,
+        scaleX,
+        scaleY,
+        loaded,
+        incomingGroup.toLoc.coordinates,
+        portalProgress,
+        portalProgress,
+        this.getPortalAccentColor(progress.incomingGroupIndex),
+        {
+          alpha: incomingOpacity,
+          blur: incomingBlur,
+          clip: clipPath,
+        },
+      );
+      return;
+    }
 
     // Apply canvas clip for wipe transition
     if (clipPath) {
@@ -1578,8 +1874,8 @@ export class VideoExporter {
     this.drawVehicleIcon(offCtx, scaleX, scaleY);
     this.drawCityLabelFromCapture(offCtx, offscreen.width, scaleX, captured, this.settings.cityLabelSize ?? 18, this.settings.cityLabelLang ?? "en");
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
-    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured, frameIndex, fps);
-    this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, captured, frameIndex, fps);
+    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
+    this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
 
     // Clear photo start tracking when photos stop showing so re-entry is tracked fresh
     const capturedProgress = captured.progress as AnimationEvent | null;

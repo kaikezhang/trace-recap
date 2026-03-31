@@ -771,6 +771,7 @@ function EditorContent() {
                   hasSegments={hasSegments}
                   photos={visiblePhotos}
                   photoLayout={visiblePhotoLocation?.photoLayout}
+                  photoLocationId={visiblePhotoLocation?.id ?? null}
                   bloomOrigin={bloomOrigin}
                   bloomElapsedTime={bloomElapsedTime}
                   photoOverlayOpacity={photoOverlayOpacity}
@@ -809,9 +810,10 @@ function EditorContent() {
                     hasSegments={hasSegments}
                     photos={visiblePhotos}
                     photoLayout={visiblePhotoLocation?.photoLayout}
+                    photoLocationId={visiblePhotoLocation?.id ?? null}
                     bloomOrigin={bloomOrigin}
-                  bloomElapsedTime={bloomElapsedTime}
-                  photoOverlayOpacity={photoOverlayOpacity}
+                    bloomElapsedTime={bloomElapsedTime}
+                    photoOverlayOpacity={photoOverlayOpacity}
                     playHintMessage={playHintMessage}
                     showPhotoOverlay={showPhotoOverlay}
                     showEmptyState={locations.length === 0}
