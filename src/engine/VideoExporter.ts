@@ -17,6 +17,7 @@ import {
   getBloomTransform,
   getBloomExitTransform,
   BLOOM_ENTER_DURATION_SEC,
+  computeBloomFanLayout,
   BLOOM_EXIT_DURATION_SEC,
 } from "@/lib/photoAnimation";
 import { isSolidStyle, resolveIconVariant } from "@/lib/transportIcons";
@@ -684,6 +685,7 @@ export class VideoExporter {
           layout.layoutSeed
         )
       : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
+
     const count = loaded.length;
     const isPolaroid = layout?.template === "polaroid";
 
@@ -796,6 +798,20 @@ export class VideoExporter {
       }
     }
 
+    // Fix #3: Override with radial fan layout for bloom style
+    const effectiveRects = (() => {
+      if (photoStyle !== "bloom" || !bloomOriginCanvas) return rects;
+      const originFracX = (bloomOriginCanvas.x - insetX) / insetW;
+      const originFracY = (bloomOriginCanvas.y - insetY) / insetH;
+      return computeBloomFanLayout(
+        originFracX,
+        originFracY,
+        layoutMetas.map((m) => ({ aspect: m.aspect })),
+        insetW / scaleX,
+        insetH / scaleX,
+      );
+    })();
+
     // Use the photo source group index for tracking (prev group during fade-out)
     const photoGroupIdx = isInSceneTransition
       ? groupIndex
@@ -844,8 +860,34 @@ export class VideoExporter {
       exitProgress = 1 - (progress.photoOpacity ?? 1);
     }
 
-    for (let i = 0; i < rects.length; i++) {
-      const rect = rects[i];
+    // Bloom tether lines: drawn before photos so they appear behind
+    if (photoStyle === "bloom" && bloomOriginCanvas && exitProgress <= 0) {
+      const bloomEnterProgress = Math.min(1, bloomElapsed / BLOOM_ENTER_DURATION_SEC);
+      // Tether lines visible only when photos are settled (progress >= 1)
+      const tetherAlpha = bloomEnterProgress >= 1 ? 0.3 * transitionOutgoingAlpha : 0;
+      if (tetherAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = tetherAlpha;
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 1.5 * scaleX;
+        ctx.lineCap = "round";
+        for (let i = 0; i < effectiveRects.length; i++) {
+          const rect = effectiveRects[i];
+          const targetCX = insetX + (rect.x + rect.width / 2) * insetW;
+          const targetCY = insetY + (rect.y + rect.height / 2) * insetH;
+          const cpX = (bloomOriginCanvas.x + targetCX) / 2;
+          const cpY = (bloomOriginCanvas.y + targetCY) / 2 - 20 * scaleX;
+          ctx.beginPath();
+          ctx.moveTo(bloomOriginCanvas.x, bloomOriginCanvas.y);
+          ctx.quadraticCurveTo(cpX, cpY, targetCX, targetCY);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    for (let i = 0; i < effectiveRects.length; i++) {
+      const rect = effectiveRects[i];
       const { photo, preloaded } = loaded[i];
       const hasCaption = !!photo.caption;
       const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
@@ -1094,32 +1136,6 @@ export class VideoExporter {
       }
 
       ctx.restore();
-    }
-
-    // Bloom tether lines: draw after all photos so they layer behind
-    if (photoStyle === "bloom" && bloomOriginCanvas && exitProgress <= 0) {
-      const bloomEnterProgress = Math.min(1, bloomElapsed / BLOOM_ENTER_DURATION_SEC);
-      // Tether lines visible only when photos are settled (progress >= 1)
-      const tetherAlpha = bloomEnterProgress >= 1 ? 0.3 * transitionOutgoingAlpha : 0;
-      if (tetherAlpha > 0) {
-        ctx.save();
-        ctx.globalAlpha = tetherAlpha;
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 1.5 * scaleX;
-        ctx.lineCap = "round";
-        for (let i = 0; i < rects.length; i++) {
-          const rect = rects[i];
-          const targetCX = insetX + (rect.x + rect.width / 2) * insetW;
-          const targetCY = insetY + (rect.y + rect.height / 2) * insetH;
-          const cpX = (bloomOriginCanvas.x + targetCX) / 2;
-          const cpY = (bloomOriginCanvas.y + targetCY) / 2 - 20 * scaleX;
-          ctx.beginPath();
-          ctx.moveTo(bloomOriginCanvas.x, bloomOriginCanvas.y);
-          ctx.quadraticCurveTo(cpX, cpY, targetCX, targetCY);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
     }
 
     // Restore clip if outgoing wipe was applied

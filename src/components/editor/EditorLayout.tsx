@@ -138,6 +138,7 @@ function EditorContent() {
     (s) => s.setTransitionBearing,
   );
   const setBloomOrigin = useAnimationStore((s) => s.setBloomOrigin);
+  const setBloomElapsedTime = useAnimationStore((s) => s.setBloomElapsedTime);
   const reset = useAnimationStore((s) => s.reset);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
@@ -251,6 +252,7 @@ function EditorContent() {
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
   const photoOverlayOpacity = useAnimationStore((s) => s.photoOverlayOpacity);
   const bloomOrigin = useAnimationStore((s) => s.bloomOrigin);
+  const bloomElapsedTime = useAnimationStore((s) => s.bloomElapsedTime);
 
   const searchRef = useRef<CitySearchHandle>(null);
 
@@ -279,9 +281,9 @@ function EditorContent() {
         return;
       }
       const point = map.project(loc.coordinates as [number, number]);
-      const container = map.getContainer();
-      const containerRect = container.getBoundingClientRect();
-      setBloomOrigin({ x: point.x / containerRect.width, y: point.y / containerRect.height });
+      
+      // Pass raw pixel coordinates; PhotoOverlay converts to its own local space
+      setBloomOrigin({ x: point.x, y: point.y });
     };
 
     updateBloomOrigin();
@@ -366,6 +368,18 @@ function EditorContent() {
       setCurrentCityLabelZh(e.cityLabelZh);
       setShowPhotoOverlay(e.showPhotos);
       setPhotoOverlayOpacity(e.photoOpacity);
+      // Drive bloom elapsed time from engine timeline (not wall-clock)
+      if (e.showPhotos && e.phase === "ARRIVE") {
+        const tl = engine.getTimeline();
+        const entry = tl[e.segmentIndex];
+        const arrivePhase = entry?.phases.find(
+          (p: { phase: string }) => p.phase === "ARRIVE",
+        );
+        if (arrivePhase) {
+          setBloomElapsedTime(Math.max(0, e.time - arrivePhase.startTime));
+        }
+      }
+
       if (e.showPhotos) {
         if (e.phase === "ARRIVE") {
           // During ARRIVE: set current destination's photos
@@ -398,6 +412,21 @@ function EditorContent() {
         setIncomingPhotos([]);
         setIncomingPhotoLocationId(null);
       }
+
+      // Bloom elapsed time: compute from timeline so preview matches export
+      if (e.showPhotos && e.phase === "ARRIVE") {
+        const tl = engine.getTimeline();
+        const entry = tl[e.groupIndex];
+        if (entry) {
+          const arrivePhase = entry.phases.find((p) => p.phase === "ARRIVE");
+          if (arrivePhase) {
+            setBloomElapsedTime(Math.max(0, e.time - arrivePhase.startTime));
+          }
+        }
+      } else if (!e.showPhotos) {
+        setBloomElapsedTime(0);
+      }
+      // During HOVER/ZOOM_OUT fade-out: keep last ARRIVE value (bloom fully expanded)
     });
 
     // Progressive route drawing updates each segment's own source directly.
@@ -743,6 +772,7 @@ function EditorContent() {
                   photos={visiblePhotos}
                   photoLayout={visiblePhotoLocation?.photoLayout}
                   bloomOrigin={bloomOrigin}
+                  bloomElapsedTime={bloomElapsedTime}
                   photoOverlayOpacity={photoOverlayOpacity}
                   playHintMessage={playHintMessage}
                   showPhotoOverlay={showPhotoOverlay}
@@ -780,6 +810,7 @@ function EditorContent() {
                     photos={visiblePhotos}
                     photoLayout={visiblePhotoLocation?.photoLayout}
                     bloomOrigin={bloomOrigin}
+                  bloomElapsedTime={bloomElapsedTime}
                   photoOverlayOpacity={photoOverlayOpacity}
                     playHintMessage={playHintMessage}
                     showPhotoOverlay={showPhotoOverlay}

@@ -11,7 +11,7 @@ import {
   getBloomTransform,
   getBloomExitTransform,
   BLOOM_ENTER_DURATION_SEC,
-  BLOOM_EXIT_DURATION_SEC,
+  computeBloomFanLayout,
 } from "@/lib/photoAnimation";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout, PhotoAnimation, SceneTransition } from "@/types";
@@ -151,8 +151,10 @@ interface PhotoOverlayProps {
   photoLayout?: PhotoLayout;
   opacity?: number; // 0-1, for fade-out transition
   containerMode?: "viewport" | "parent"; // 'parent' uses 100% sizing instead of vw/vh
-  /** Bloom origin in container-relative fractions (0-1) for geo-anchored bloom */
+  /** Bloom origin in raw pixels from map.project() (relative to map container top-left) */
   bloomOrigin?: { x: number; y: number } | null;
+  /** Timeline-driven elapsed time (seconds) since bloom enter started */
+  bloomElapsedTime?: number;
   /** Active scene transition type */
   sceneTransition?: SceneTransition;
   /** Scene transition progress (0-1): 0 = fully outgoing, 1 = fully incoming */
@@ -221,6 +223,7 @@ export default function PhotoOverlay({
   opacity = 1,
   containerMode = "viewport",
   bloomOrigin,
+  bloomElapsedTime = 0,
   sceneTransition,
   sceneTransitionProgress,
   incomingPhotos,
@@ -270,43 +273,9 @@ export default function PhotoOverlay({
     return () => observer.disconnect();
   }, []);
 
-  // ── Bloom animation progress tracking ──
+  // ── Bloom animation progress (timeline-driven, not wall-clock) ──
   const isBloom = photoStyle === "bloom";
-  const bloomStartRef = useRef<number | null>(null);
-  const [bloomProgress, setBloomProgress] = useState(0);
-  const bloomAnimFrameRef = useRef<number | null>(null);
-
-  // Reset bloom animation when photos appear/change
-  useEffect(() => {
-    if (!isBloom) {
-      bloomStartRef.current = null;
-      setBloomProgress(0);
-      return;
-    }
-
-    if (visible && hasDisplayPhotos) {
-      bloomStartRef.current = performance.now();
-      setBloomProgress(0);
-
-      const animate = () => {
-        const start = bloomStartRef.current;
-        if (start === null) return;
-        const elapsed = (performance.now() - start) / 1000;
-        const p = Math.min(1, elapsed / BLOOM_ENTER_DURATION_SEC);
-        setBloomProgress(p);
-        if (p < 1) {
-          bloomAnimFrameRef.current = requestAnimationFrame(animate);
-        }
-      };
-      bloomAnimFrameRef.current = requestAnimationFrame(animate);
-
-      return () => {
-        if (bloomAnimFrameRef.current !== null) {
-          cancelAnimationFrame(bloomAnimFrameRef.current);
-        }
-      };
-    }
-  }, [isBloom, visible, hasDisplayPhotos]);
+  const bloomProgress = isBloom ? Math.min(1, bloomElapsedTime / BLOOM_ENTER_DURATION_SEC) : 0;
 
   // Use actual container dimensions for layout calculation
   const containerAspect = containerSize.h > 0 ? containerSize.w / containerSize.h : 16 / 9;
@@ -350,6 +319,24 @@ export default function PhotoOverlay({
     }
     return computeAutoLayout(layoutMetas, containerAspect, gapPx, w);
   })();
+
+  // Fix #3: Override with radial fan layout for bloom style
+  const bloomFanRects = (() => {
+    if (!isBloom || !bloomOrigin || !hasDisplayPhotos || containerSize.w <= 0) return null;
+    const overlayOffX = containerRef.current?.offsetLeft ?? 0;
+    const overlayOffY = containerRef.current?.offsetTop ?? 0;
+    const originFracX = (bloomOrigin.x - overlayOffX) / containerSize.w;
+    const originFracY = (bloomOrigin.y - overlayOffY) / containerSize.h;
+    return computeBloomFanLayout(
+      originFracX,
+      originFracY,
+      orderedMetas.map((m) => ({ aspect: m.aspect })),
+      containerSize.w,
+      containerSize.h,
+    );
+  })();
+  // Use fan layout for bloom, standard layout for everything else
+  const effectiveRects = bloomFanRects ?? rects;
 
   // Caption sizing: match export constants (captionFontSize ~14px at 1000px width, plus gap)
   const captionH = 28; // space for caption text + gap below image
@@ -486,7 +473,41 @@ export default function PhotoOverlay({
     >
       {/* Outgoing photos */}
       <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionOutgoingStyle }}>
-        {hasDisplayPhotos && rects.map((rect, i) => {
+        {/* Bloom tether lines */}
+        {isBloom && bloomOrigin && hasDisplayPhotos && containerSize.w > 0 && (
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{
+              opacity: bloomProgress >= 1 && opacity >= 1 ? 0.3 : 0,
+              transition: "opacity 0.4s ease",
+            }}
+          >
+            {effectiveRects.map((rect, i) => {
+              const photo = orderedMetas[i];
+              if (!photo) return null;
+              const overlayOffX = containerRef.current?.offsetLeft ?? 0;
+              const overlayOffY = containerRef.current?.offsetTop ?? 0;
+              const originPx = { x: bloomOrigin.x - overlayOffX, y: bloomOrigin.y - overlayOffY };
+              const targetCX = (rect.x + rect.width / 2) * containerSize.w;
+              const targetCY = (rect.y + rect.height / 2) * containerSize.h;
+              // Quadratic bezier control point: midpoint shifted toward origin
+              const cpX = (originPx.x + targetCX) / 2;
+              const cpY = (originPx.y + targetCY) / 2 - 20;
+              return (
+                <path
+                  key={`tether-${photo.id}`}
+                  d={`M ${originPx.x} ${originPx.y} Q ${cpX} ${cpY} ${targetCX} ${targetCY}`}
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              );
+            })}
+          </svg>
+        )}
+
+        {hasDisplayPhotos && effectiveRects.map((rect, i) => {
             const photo = orderedMetas[i];
             if (!photo) return null;
             const n = orderedMetas.length;
@@ -510,7 +531,10 @@ export default function PhotoOverlay({
 
             // ── Bloom style: geo-anchored animation ──
             if (isBloom && bloomOrigin && containerSize.w > 0) {
-              const originPx = { x: bloomOrigin.x * containerSize.w, y: bloomOrigin.y * containerSize.h };
+              // Convert raw map.project() pixels to overlay-local pixels
+              const overlayOffsetX = containerRef.current?.offsetLeft ?? 0;
+              const overlayOffsetY = containerRef.current?.offsetTop ?? 0;
+              const originPx = { x: bloomOrigin.x - overlayOffsetX, y: bloomOrigin.y - overlayOffsetY };
               const targetPx = {
                 x: rect.x * containerSize.w,
                 y: rect.y * containerSize.h,
@@ -675,38 +699,6 @@ export default function PhotoOverlay({
               </motion.div>
             );
           })}
-
-        {/* Bloom tether lines */}
-        {isBloom && bloomOrigin && hasDisplayPhotos && containerSize.w > 0 && (
-          <svg
-            className="absolute inset-0 w-full h-full pointer-events-none"
-            style={{
-              opacity: bloomProgress >= 1 && opacity >= 1 ? 0.3 : 0,
-              transition: "opacity 0.4s ease",
-            }}
-          >
-            {rects.map((rect, i) => {
-              const photo = orderedMetas[i];
-              if (!photo) return null;
-              const originPx = { x: bloomOrigin.x * containerSize.w, y: bloomOrigin.y * containerSize.h };
-              const targetCX = (rect.x + rect.width / 2) * containerSize.w;
-              const targetCY = (rect.y + rect.height / 2) * containerSize.h;
-              // Quadratic bezier control point: midpoint shifted toward origin
-              const cpX = (originPx.x + targetCX) / 2;
-              const cpY = (originPx.y + targetCY) / 2 - 20;
-              return (
-                <path
-                  key={`tether-${photo.id}`}
-                  d={`M ${originPx.x} ${originPx.y} Q ${cpX} ${cpY} ${targetCX} ${targetCY}`}
-                  fill="none"
-                  stroke="white"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              );
-            })}
-          </svg>
-        )}
       </div>
 
       {/* Incoming photos — scene transition overlay */}
