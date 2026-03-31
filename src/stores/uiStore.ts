@@ -3,6 +3,40 @@ import type { AspectRatio, PhotoAnimation } from "@/types";
 
 export type BottomSheetState = "collapsed" | "half" | "full";
 
+const UI_SETTINGS_KEY = "trace-recap-ui-settings";
+
+interface PersistedUISettings {
+  cityLabelSize: number;
+  cityLabelLang: "en" | "zh";
+  cityLabelTopPercent: number;
+  routeLabelBottomPercent: number;
+  routeLabelSize: number;
+  viewportRatio: AspectRatio;
+  photoAnimation: PhotoAnimation;
+}
+
+function loadPersistedSettings(): Partial<PersistedUISettings> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(UI_SETTINGS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Partial<PersistedUISettings>;
+  } catch {
+    return {};
+  }
+}
+
+function persistSettings(state: PersistedUISettings): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(state));
+  } catch {
+    // quota exceeded — ignore
+  }
+}
+
+const saved = loadPersistedSettings();
+
 interface UIState {
   leftPanelOpen: boolean;
   exportDialogOpen: boolean;
@@ -40,13 +74,13 @@ export const useUIStore = create<UIState>((set) => ({
   projectListOpen: false,
   searchQuery: "",
   bottomSheetState: "collapsed",
-  cityLabelSize: 18,
-  cityLabelLang: "en",
-  cityLabelTopPercent: 5,
-  routeLabelBottomPercent: 15,
-  routeLabelSize: 14,
-  viewportRatio: "free",
-  photoAnimation: "scale",
+  cityLabelSize: saved.cityLabelSize ?? 18,
+  cityLabelLang: saved.cityLabelLang ?? "en",
+  cityLabelTopPercent: saved.cityLabelTopPercent ?? 5,
+  routeLabelBottomPercent: saved.routeLabelBottomPercent ?? 15,
+  routeLabelSize: saved.routeLabelSize ?? 14,
+  viewportRatio: saved.viewportRatio ?? "free",
+  photoAnimation: saved.photoAnimation ?? "scale",
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
@@ -62,3 +96,20 @@ export const useUIStore = create<UIState>((set) => ({
   setViewportRatio: (viewportRatio) => set({ viewportRatio }),
   setPhotoAnimation: (photoAnimation) => set({ photoAnimation }),
 }));
+
+// Persist user settings on change (debounced)
+let uiPersistTimeout: ReturnType<typeof setTimeout> | null = null;
+useUIStore.subscribe((state) => {
+  if (uiPersistTimeout) clearTimeout(uiPersistTimeout);
+  uiPersistTimeout = setTimeout(() => {
+    persistSettings({
+      cityLabelSize: state.cityLabelSize,
+      cityLabelLang: state.cityLabelLang,
+      cityLabelTopPercent: state.cityLabelTopPercent,
+      routeLabelBottomPercent: state.routeLabelBottomPercent,
+      routeLabelSize: state.routeLabelSize,
+      viewportRatio: state.viewportRatio,
+      photoAnimation: state.photoAnimation,
+    });
+  }, 500);
+});
