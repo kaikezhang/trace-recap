@@ -889,22 +889,18 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const layoutPreviewNode = (
     layout.mode === "free" ? (
-      <div className="absolute inset-0 flex items-center justify-center" style={mapSnapshot ? { backgroundImage: `url(${mapSnapshot})`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundColor: "rgba(0,0,0,0.3)" }}>
-        <div className="relative" style={{ width: "95%", height: "88%" }}>
-          <FreeCanvas
-            photos={orderedPhotos}
-            transforms={effectiveFreeTransforms}
-            containerSize={{ w: previewPixelSize.width * 0.95, h: previewPixelSize.height * 0.88 }}
-            mapSnapshot={null}
-            borderRadius={borderRadius}
-            defaultCaptionFontFamily={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
-            defaultCaptionFontSize={layout.captionFontSize ?? 14}
-            onTransformsChange={handleFreeTransformsChange}
-            initialGesture={initialFreeGesture}
-            onInitialGestureHandled={() => setInitialFreeGesture(null)}
-          />
-        </div>
-      </div>
+      <FreeCanvas
+        photos={orderedPhotos}
+        transforms={effectiveFreeTransforms}
+        containerSize={{ w: previewPixelSize.width, h: previewPixelSize.height }}
+        mapSnapshot={mapSnapshot}
+        borderRadius={borderRadius}
+        defaultCaptionFontFamily={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
+        defaultCaptionFontSize={layout.captionFontSize ?? 14}
+        onTransformsChange={handleFreeTransformsChange}
+        initialGesture={initialFreeGesture}
+        onInitialGestureHandled={() => setInitialFreeGesture(null)}
+      />
     ) : (
       <>
         <PhotoOverlay
