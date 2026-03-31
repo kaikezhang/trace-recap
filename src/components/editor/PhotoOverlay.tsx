@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, type Transition, type TargetAndTransition } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
-import { resolvePhotoAnimations, resolvePhotoStyle, getKenBurnsTransform } from "@/lib/photoAnimation";
+import { resolvePhotoAnimations, resolvePhotoStyle, getKenBurnsTransform, KEN_BURNS_DURATION_SEC } from "@/lib/photoAnimation";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout, PhotoAnimation } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -324,6 +324,9 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
             const kbEnd = isKenBurns ? getKenBurnsTransform(1, i, fp) : null;
 
             const enter = getEnterAnimation(enterAnimation, i, n);
+            const enterDelay = typeof (enter.transition as { delay?: number }).delay === "number"
+              ? (enter.transition as { delay?: number }).delay!
+              : 0;
             const exit = getExitValues(exitAnimation, exitProgress, photoExitT, i);
 
             const enterRotate = typeof (enter.animate as { rotate?: number }).rotate === "number"
@@ -387,7 +390,8 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
                         y: `${kbEnd.translateY}%`,
                       }}
                       transition={{
-                        duration: 3,
+                        duration: KEN_BURNS_DURATION_SEC,
+                        delay: enterDelay,
                         ease: "linear",
                         repeat: 0,
                       }}

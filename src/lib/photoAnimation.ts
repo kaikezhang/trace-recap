@@ -37,6 +37,9 @@ export function resolvePhotoStyle(
   return layout?.photoStyle ?? fallback;
 }
 
+/** Duration of the Ken Burns zoom+pan effect in seconds (shared between preview & export). */
+export const KEN_BURNS_DURATION_SEC = 3;
+
 /**
  * Compute Ken Burns transform for a photo at a given progress (0-1).
  * Each photo gets a unique direction based on its index and focal point.
