@@ -15,12 +15,13 @@ import type { IconDirection } from "@/lib/transportIcons";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import { getExportViewportSize } from "@/lib/viewportRatio";
 import { isWebCodecsSupported, WebCodecsExporter } from "./WebCodecsExporter";
+import { isMediaRecorderSupported, MediaRecorderExporter } from "./MediaRecorderExporter";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
   current: number;
   total: number;
-  encodingMethod?: "webcodecs" | "server";
+  encodingMethod?: "webcodecs" | "mediarecorder" | "server";
 };
 
 type ProgressCallback = (progress: ExportProgress) => void;
@@ -909,6 +910,7 @@ export class VideoExporter {
     const totalFrames = Math.ceil(totalDuration * fps);
     const canvas = this.map.getCanvas();
     const useWebCodecs = isWebCodecsSupported();
+    const useMediaRecorder = !useWebCodecs && isMediaRecorderSupported();
 
     const { width: targetW, height: targetH } = getExportViewportSize(
       this.settings.viewportRatio ?? "free",
@@ -944,10 +946,39 @@ export class VideoExporter {
             targetW, targetH, totalFrames, totalDuration, fps, onProgress, captured
           );
         } catch (webCodecsError) {
-          console.warn("WebCodecs export failed, falling back to server:", webCodecsError);
-          // Fallback will report "server" encoding method via progress callbacks
-          // Reset state for server fallback
+          console.warn("WebCodecs export failed, falling back:", webCodecsError);
           this.engine.seekTo(0);
+          this.photoShowStartFrame.clear();
+          this.hideAllSegments();
+          // Try MediaRecorder before server
+          if (isMediaRecorderSupported()) {
+            try {
+              return await this.exportWithMediaRecorder(
+                offscreen, offCtx, canvas, scaleX, scaleY,
+                totalFrames, totalDuration, fps, onProgress, captured
+              );
+            } catch (mrError) {
+              console.warn("MediaRecorder export failed, falling back to server:", mrError);
+              this.engine.seekTo(0);
+              this.photoShowStartFrame.clear();
+              this.hideAllSegments();
+            }
+          }
+          return await this.exportWithServer(
+            offscreen, offCtx, canvas, scaleX, scaleY,
+            totalFrames, totalDuration, fps, signal, onProgress, captured
+          );
+        }
+      } else if (useMediaRecorder) {
+        try {
+          return await this.exportWithMediaRecorder(
+            offscreen, offCtx, canvas, scaleX, scaleY,
+            totalFrames, totalDuration, fps, onProgress, captured
+          );
+        } catch (mrError) {
+          console.warn("MediaRecorder export failed, falling back to server:", mrError);
+          this.engine.seekTo(0);
+          this.photoShowStartFrame.clear();
           this.hideAllSegments();
           return await this.exportWithServer(
             offscreen, offCtx, canvas, scaleX, scaleY,
@@ -1044,6 +1075,48 @@ export class VideoExporter {
     onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "webcodecs" });
     const blob = await webCodecsExporter.finalize();
     onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "webcodecs" });
+    return blob;
+  }
+
+  private async exportWithMediaRecorder(
+    offscreen: HTMLCanvasElement,
+    offCtx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    scaleX: number,
+    scaleY: number,
+    totalFrames: number,
+    totalDuration: number,
+    fps: number,
+    onProgress: ProgressCallback,
+    captured: { routeDraw: AnimationEvent | null; progress: AnimationEvent | null }
+  ): Promise<Blob | null> {
+    const mrExporter = new MediaRecorderExporter(offscreen, {
+      width: offscreen.width,
+      height: offscreen.height,
+      fps,
+    });
+
+    mrExporter.start();
+
+    for (let i = 0; i < totalFrames; i++) {
+      if (this.cancelled) return null;
+
+      await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
+      await mrExporter.captureFrame();
+
+      onProgress({
+        phase: "capturing",
+        current: i + 1,
+        total: totalFrames,
+        encodingMethod: "mediarecorder",
+      });
+    }
+
+    if (this.cancelled) return null;
+
+    onProgress({ phase: "encoding", current: 0, total: 1, encodingMethod: "mediarecorder" });
+    const blob = await mrExporter.finalize();
+    onProgress({ phase: "done", current: 1, total: 1, encodingMethod: "mediarecorder" });
     return blob;
   }
 

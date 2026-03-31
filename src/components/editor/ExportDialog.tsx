@@ -77,7 +77,7 @@ export default function ExportDialog() {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadSize, setDownloadSize] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [encodingMethod, setEncodingMethod] = useState<"webcodecs" | "server" | null>(null);
+  const [encodingMethod, setEncodingMethod] = useState<"webcodecs" | "mediarecorder" | "server" | null>(null);
   const exporterRef = useRef<VideoExporter | null>(null);
 
   const startExport = useCallback(async (settings: ExportSettings) => {
@@ -210,6 +210,8 @@ export default function ExportDialog() {
               <p className="text-xs text-muted-foreground text-center">
                 {encodingMethod === "webcodecs"
                   ? "Encoded locally with WebCodecs"
+                  : encodingMethod === "mediarecorder"
+                  ? "Encoded locally with MediaRecorder"
                   : "Encoded on server"}
               </p>
             )}
