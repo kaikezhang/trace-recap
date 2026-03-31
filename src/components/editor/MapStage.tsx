@@ -147,6 +147,7 @@ export default function MapStage({
   const cityLabelTopPercent = useUIStore((s) => s.cityLabelTopPercent);
   const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
   const routeLabelSize = useUIStore((s) => s.routeLabelSize);
+  const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const globalSceneTransition = useUIStore((s) => s.sceneTransition);
   const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
 
@@ -173,11 +174,17 @@ export default function MapStage({
 
   const isPlaying = playbackState === "playing";
   const currentSegment = segments[currentSegmentIndex];
-  const fromCity = currentSegment
-    ? locations.find((l) => l.id === currentSegment.fromId)?.name
+  const fromLoc = currentSegment
+    ? locations.find((l) => l.id === currentSegment.fromId)
     : null;
-  const toCity = currentSegment
-    ? locations.find((l) => l.id === currentSegment.toId)?.name
+  const toLoc = currentSegment
+    ? locations.find((l) => l.id === currentSegment.toId)
+    : null;
+  const fromCity = fromLoc
+    ? (cityLabelLang === "zh" ? fromLoc.nameZh || fromLoc.name : fromLoc.name)
+    : null;
+  const toCity = toLoc
+    ? (cityLabelLang === "zh" ? toLoc.nameZh || toLoc.name : toLoc.name)
     : null;
 
   return (
