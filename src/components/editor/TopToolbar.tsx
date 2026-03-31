@@ -404,11 +404,11 @@ export default function TopToolbar() {
             <>
               {/* Backdrop */}
               <div
-                className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+                className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm"
                 onClick={() => setSettingsOpen(false)}
               />
               {/* Drawer */}
-              <div className="fixed bottom-0 left-0 right-0 z-[60] max-h-[85vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t bg-background shadow-2xl pb-[env(safe-area-inset-bottom)]">
+              <div className="fixed bottom-0 left-0 right-0 z-[70] max-h-[85vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t bg-background shadow-2xl pb-[env(safe-area-inset-bottom)]">
                 {/* Drag handle */}
                 <div className="sticky top-0 z-10 bg-background pt-3 pb-2 px-4 rounded-t-2xl">
                   <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/30" />
