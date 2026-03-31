@@ -237,6 +237,8 @@ export default function PhotoOverlay({
   incomingPhotos,
   incomingPhotoLayout,
   transitionBearing,
+  incomingOriginCoordinates,
+  incomingPortalAccentColor = "#ffffff",
 }: PhotoOverlayProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const photoAnimation = useUIStore((s) => s.photoAnimation);
@@ -440,6 +442,11 @@ export default function PhotoOverlay({
     ? clamp01(portalProgressOverride ?? computePortalPhaseProgress(getArrivePhaseProgress(currentTime, timeline[currentSegmentIndex])))
     : 0;
 
+  const incomingPortalOrigin = useProjectedOrigin(containerRef, incomingOriginCoordinates);
+  const incomingPortalProgress = isActiveTransition && incomingPhotoStyleResolved === "portal" && sceneTransitionProgress !== undefined
+    ? computePortalPhaseProgress(sceneTransitionProgress)
+    : 0;
+
   return (
     <div
       ref={containerRef}
@@ -585,6 +592,18 @@ export default function PhotoOverlay({
           })
         ) : null}
       </div>
+
+      {hasIncomingPhotos && incomingPhotoStyleResolved === "portal" && incomingPortalProgress > 0 && (
+        <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionIncomingStyle }}>
+          <PortalPhotoLayer
+            photos={incomingOrderedMetas as PortalPhoto[]}
+            containerSize={containerSize}
+            origin={incomingPortalOrigin}
+            portalProgress={incomingPortalProgress}
+            accentColor={incomingPortalAccentColor}
+          />
+        </div>
+      )}
 
       {hasIncomingPhotos && incomingPhotoStyleResolved !== "portal" && (
         <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionIncomingStyle }}>

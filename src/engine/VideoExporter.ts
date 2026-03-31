@@ -1339,7 +1339,7 @@ export class VideoExporter {
     canvasWidth: number,
     canvasHeight: number,
     scaleX: number,
-    _scaleY: number,
+    scaleY: number,
     captured: { progress: AnimationEvent | null },
     _frameIndex: number,
     _fps: number,
@@ -1460,7 +1460,7 @@ export class VideoExporter {
     const isPolaroid = layout?.template === "polaroid";
     const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
     if (photoStyle === "portal") {
-      const portalProgress = Math.max(0, Math.min(1, (transitionProgress - 0.6) / 0.4));
+      const portalProgress = computePortalPhaseProgress(transitionProgress);
       if (portalProgress <= 0 || incomingOpacity <= 0) return;
 
       this.drawPortalPhotos(
