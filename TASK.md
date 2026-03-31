@@ -1,177 +1,83 @@
 # ⚠️ DO NOT MERGE ANY PR. Create PR and STOP.
 
-# TASK: Free Mode — Interactive Photo & Caption Editing
+# TASK: Free Mode UX Fixes — Comprehensive Bug Fix Round
 
-## Summary
+## Issues to Fix
 
-Add a "Free" layout mode to the PhotoLayoutEditor that lets users interactively manipulate photos and captions after selecting any layout template. When a user drags, rotates, or scales any photo/caption, the layout automatically switches to "Free" mode, preserving the current positions as the starting point.
+### 1. Default (non-free) captions should use pill style, not plain text
+**Files:** `src/components/editor/PhotoOverlay.tsx`
+**Problem:** Non-free mode captions use `text-gray-700 text-center truncate px-1` (plain dark text, no background). They should match the free mode pill style.
+**Fix:** Change ALL non-free caption `<p>` elements to use the same pill style as free mode:
+- Add `rounded-md shadow-sm` classes
+- Add `backgroundColor: "rgba(255,255,255,0.74)"`
+- Add `textShadow: "0 1px 3px rgba(0,0,0,0.35)"`
+- Change text color from `text-gray-700` to white (the text color should come from the caption color setting, default `#ffffff`)
+- Remove `truncate` — let text wrap naturally
+- These exist in 3 places: bloom rendering, normal rendering, and incoming photo rendering
 
-## Context
+### 2. Switching to Free mode must preserve exact visual positions (WYSIWYG)
+**Files:** `src/lib/photoLayout.ts` (`computedRectsToFreeTransforms`), `src/components/editor/PhotoLayoutEditor.tsx`
+**Problem:** When clicking "Free" in layout selector, the photos jump to different positions. The caption offsets and zIndex get reset. The conversion from computed rects to free transforms doesn't preserve the current visual state perfectly.
+**Fix:**
+- `computedRectsToFreeTransforms` should produce transforms that render IDENTICALLY to the computed rects
+- Ensure caption default offset position matches exactly where captions appear in non-free mode (below the photo, centered)
+- Preserve any existing caption text from `Photo.caption`
 
-Currently, users can pick a layout template (Grid, Scatter, Polaroid, etc.) which computes fixed positions for photos. There is no way to manually adjust individual photo positions, sizes, or rotations — nor to edit caption text, position, font, size, or color per-caption.
+### 3. Cannot deselect / exit caption editing
+**Files:** `src/components/editor/FreeCanvas.tsx`
+**Problem:** After selecting a caption or entering edit mode, there's no way to deselect/exit. Clicking empty space should deselect. Pressing Escape should exit editing.
+**Fix:**
+- Clicking on empty canvas area (the background) should clear selection (`setSelection(null)`) AND exit editing (`setEditingCaptionId(null)`) — verify the existing `onPointerDown` on the container actually works (it may be intercepted by child elements)
+- Pressing Escape while editing a caption should exit edit mode (this may already exist but verify it works)
+- Clicking a different photo/caption should deselect the current one
 
-## Requirements
+### 4. Cannot select/edit other photos — only one photo is interactive
+**Files:** `src/components/editor/FreeCanvas.tsx`
+**Problem:** User can only interact with one photo. Clicking other photos doesn't select them.
+**Fix:** Debug the pointer event handling. Likely issue: the z-index layering or event propagation prevents clicks on photos that aren't on top. Each photo's container div has `className="absolute inset-0"` with `style={{ zIndex: transform.zIndex }}` — this creates overlapping full-size divs where only the top one receives clicks.
+**Root cause:** Each photo is wrapped in `<div className="absolute inset-0" style={{ zIndex: transform.zIndex }}>` — this makes EVERY photo a full-screen overlay. Only the highest z-index one receives pointer events.
+**Fix:** Change the outer wrapper from `absolute inset-0` to only cover the photo's actual area. The wrapper should be positioned at the photo's coordinates, not span the full container.
 
-### 1. Free Mode Activation
+### 5. Expanded view wastes too much space — remove header and footer
+**Files:** `src/components/editor/PhotoLayoutEditor.tsx`
+**Problem:** In expanded mode, the header (title + buttons) and footer ("Changes applied automatically" + Done button) waste vertical space. The photo editing area should be maximized.
+**Fix:**
+- When `expanded` is true, hide the header and footer entirely
+- Show only a floating minimize button (Minimize2 icon) in the top-right corner of the canvas, with a semi-transparent background so it doesn't obstruct editing
+- The minimize button should restore the normal modal view
 
-- **Trigger**: Any drag/rotate/scale gesture on a photo OR caption in the preview area automatically switches the layout to `mode: "free"`.
-- **Initial state**: When switching to Free mode, capture the current computed `PhotoRect[]` positions as the starting `freeTransforms` array.
-- **Layout selector**: Add a "Free" option (with `Hand` icon from lucide-react) to the `LAYOUT_STYLES` array. It should appear as the last option.
-- **Switching back**: If the user selects any other layout template, the free transforms are discarded and the layout reverts to computed positions.
+### 6. Max caption font size too small
+**Files:** `src/components/editor/FreeCanvas.tsx`
+**Problem:** The font size slider max is 32px — too small for large canvases.
+**Fix:** Double the max to 64px. The `<input type="range">` max should be `64` instead of `32`.
 
-### 2. Photo Manipulation (in Free Mode)
+### 7. Caption background fill should be customizable
+**Files:** `src/components/editor/FreeCanvas.tsx`, `src/types/index.ts`
+**Problem:** Caption pill background is hardcoded to `rgba(255,255,255,0.74)`. Users need to customize it.
+**Fix:**
+- Add `bgColor?: string` to the caption type in `FreePhotoTransform.caption` in `src/types/index.ts`
+- Add a background color row in the caption style toolbar (below the text color row)
+- Preset options: `rgba(255,255,255,0.74)` (default white), `rgba(0,0,0,0.6)` (dark), `rgba(99,102,241,0.7)` (indigo), `transparent` (no bg)
+- The `bgColor` should be used in both FreeCanvas rendering AND PhotoOverlay free mode caption rendering
+- Default: `rgba(255,255,255,0.74)` (current behavior)
+- Also update `src/stores/projectStore.ts` serialization/deserialization to include `bgColor`
 
-Each photo in the preview should support:
-- **Drag** — move the photo anywhere within the container (update `x`, `y` in fractional coords 0-1)
-- **Resize** — corner handles to scale while maintaining aspect ratio (update `width`, `height`)
-- **Rotate** — rotation handle (circular handle above the photo) to rotate freely (update `rotation` in degrees)
-- **Selection** — clicking a photo selects it (shows handles); clicking empty space deselects
-
-Visual feedback:
-- Selected photo shows 4 corner resize handles (small circles) + 1 rotation handle (circle connected by a line above the top-center)
-- Selected photo has a dashed border outline
-- Drag cursor: `grab` / `grabbing`
-- Handles should be rendered in indigo-500 color to match the UI theme
-
-### 3. Caption Editing (in Free Mode)
-
-Each photo's caption should be independently editable:
-- **Inline edit**: Double-click a caption to enter edit mode (text input). Press Enter or click outside to confirm.
-- **Drag**: Captions can be dragged independently from their photo (stored as `captionOffsetX`, `captionOffsetY` relative to the photo center)
-- **Per-caption styling**: When a caption is selected, show a mini toolbar (floating, above the caption) with:
-  - Font family dropdown (System UI, Serif, Monospace, Cursive — same as existing)
-  - Font size slider (10-32px)
-  - Color picker (a small palette of preset colors: white, black, gray, indigo-500, red-500, amber-500 + a custom hex input)
-- These per-caption overrides are stored in `freeTransforms[i].caption`
-
-### 4. Type Changes
-
-#### `PhotoLayout` (in `src/types/index.ts`)
-
-Add new mode value and fields:
-```typescript
-export interface PhotoLayout {
-  mode: "auto" | "manual" | "free";  // ADD "free"
-  // ... existing fields ...
-  freeTransforms?: FreePhotoTransform[];  // NEW — only used when mode === "free"
-}
-
-// NEW type
-export interface FreePhotoTransform {
-  photoId: string;
-  x: number;       // 0-1 fraction of container
-  y: number;       // 0-1 fraction of container
-  width: number;   // 0-1 fraction of container
-  height: number;  // 0-1 fraction of container
-  rotation: number; // degrees
-  zIndex: number;   // stacking order (higher = on top)
-  caption?: {
-    text?: string;            // override caption text
-    offsetX: number;          // offset from photo center, fraction of container width
-    offsetY: number;          // offset from photo center, fraction of container height
-    fontFamily?: string;
-    fontSize?: number;        // px
-    color?: string;           // CSS color
-    rotation?: number;        // caption rotation independent from photo, degrees
-  };
-}
-```
-
-### 5. Component Architecture
-
-#### New: `FreeCanvas.tsx` (`src/components/editor/FreeCanvas.tsx`)
-
-A new component that renders the interactive free-mode canvas inside the PhotoLayoutEditor preview area. This handles:
-- Rendering photos at their `freeTransforms` positions
-- Selection state (which photo/caption is selected)
-- Drag, resize, rotate gesture handling via pointer events (NOT a drag library — use raw `onPointerDown/Move/Up` for precision)
-- Rendering selection handles (corners + rotation)
-- Caption rendering with inline edit
-- Caption mini-toolbar when a caption is selected
-
-Props:
-```typescript
-interface FreeCanvasProps {
-  photos: Photo[];
-  transforms: FreePhotoTransform[];
-  containerSize: { w: number; h: number };
-  mapSnapshot: string | null;
-  borderRadius: number;
-  onTransformsChange: (transforms: FreePhotoTransform[]) => void;
-}
-```
-
-#### Modified: `PhotoLayoutEditor.tsx`
-
-- Add "Free" to `LAYOUT_STYLES` array
-- When `layout.mode === "free"`, render `<FreeCanvas>` instead of `<PhotoOverlay>` in the preview area
-- When switching to Free mode from a computed layout, initialize `freeTransforms` from the currently computed `rects` array
-- Wire up `onTransformsChange` to call `updateLayout({ freeTransforms: ... })`
-
-#### Modified: `PhotoOverlay.tsx`
-
-- When `photoLayout.mode === "free"` and `photoLayout.freeTransforms` exists, use those transforms directly instead of computing layout via `computeAutoLayout` / `computeTemplateLayout`.
-- Map `freeTransforms` to the `rects` array format (they already match `PhotoRect` structure).
-- Render captions using per-caption overrides from `freeTransforms[i].caption` if present.
-- Respect `zIndex` ordering when rendering.
-
-### 6. Interaction Details
-
-**Drag (Photo)**:
-- `onPointerDown` on photo → record start position, set `isDragging`
-- `onPointerMove` → compute delta in fraction-of-container coords, update `x`/`y`
-- `onPointerUp` → finalize, commit to store
-- Constrain: photos can go partially off-screen but center must stay within container
-
-**Resize (Photo)**:
-- Corner handles only (not edge handles — keeps it simple)
-- Drag a corner → scale width/height proportionally (maintain original aspect ratio)
-- Minimum size: 5% of container in either dimension
-- The opposite corner stays fixed (anchor point)
-
-**Rotate (Photo)**:
-- A circular handle connected by a thin line from the top-center of the photo
-- Drag the handle → compute angle from photo center to pointer position
-- Snap to 0°, 90°, 180°, 270° when within 5° (hold Shift to disable snap)
-
-**Z-Index**:
-- Clicking a photo brings it to the front (max zIndex + 1)
-- Future: could add "Send to back" in context menu, but not for v1
-
-**Caption drag**:
-- Caption is positioned below the photo by default (offsetX=0, offsetY = height/2 + padding)
-- Dragging a caption updates `captionOffsetX`/`captionOffsetY` relative to photo center
-- Captions move with their photo when the photo is dragged
-
-### 7. Persistence
-
-- Free transforms are stored in `PhotoLayout.freeTransforms` alongside existing layout fields
-- They are persisted to IndexedDB via the existing projectStore save mechanism
-- When exporting video, `PhotoOverlay` reads `freeTransforms` and renders accordingly
-
-### 8. Scope Exclusions (NOT in this PR)
-
-- No undo/redo for free mode transforms (existing Zustand history doesn't cover this yet)
-- No multi-select (select multiple photos at once)
-- No alignment guides / snap-to-grid
-- No right-click context menu
-- No keyboard shortcuts for manipulation
-- No animation preview in free mode (playback uses PhotoOverlay which will read freeTransforms)
-
-### 9. Testing
-
-- `npx tsc --noEmit` must pass
-- `npm run build` must pass
-- Manual test: select a layout → drag a photo → verify it switches to Free mode → verify positions persist after closing and reopening the editor
+### 8. PhotoOverlay free mode captions should also use bgColor
+**Files:** `src/components/editor/PhotoOverlay.tsx`
+**Problem:** Free mode captions in PhotoOverlay have hardcoded `backgroundColor: "rgba(255,255,255,0.74)"`. Should use the per-caption `bgColor` if set.
+**Fix:** Read `freeTransform.caption.bgColor` and use it as `backgroundColor`. Fall back to `"rgba(255,255,255,0.74)"` if not set. Apply this to all 3 free-mode caption render locations in PhotoOverlay.
 
 ## File Checklist
+- [ ] `src/types/index.ts` — Add `bgColor?: string` to `FreePhotoTransform.caption`
+- [ ] `src/components/editor/FreeCanvas.tsx` — Fix issues #3, #4, #6, #7
+- [ ] `src/components/editor/PhotoOverlay.tsx` — Fix issues #1, #8
+- [ ] `src/components/editor/PhotoLayoutEditor.tsx` — Fix issue #5
+- [ ] `src/lib/photoLayout.ts` — Fix issue #2
+- [ ] `src/stores/projectStore.ts` — Serialize/deserialize `bgColor`
 
-- [ ] `src/types/index.ts` — Add `"free"` to mode union, add `FreePhotoTransform` interface
-- [ ] `src/components/editor/FreeCanvas.tsx` — NEW: interactive free-mode canvas
-- [ ] `src/components/editor/PhotoLayoutEditor.tsx` — Add Free to layout styles, render FreeCanvas when mode=free
-- [ ] `src/components/editor/PhotoOverlay.tsx` — Read freeTransforms when mode=free for playback
-- [ ] `src/lib/photoLayout.ts` — Export helper to convert computed rects → FreePhotoTransform[]
+## Validation
+- `npx tsc --noEmit` must pass
+- `npm run build` must pass
 
 ## Branch
-
-`feat/free-mode`
+`fix/free-mode-ux`
