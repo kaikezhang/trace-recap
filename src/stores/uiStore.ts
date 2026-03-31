@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AspectRatio, PhotoAnimation } from "@/types";
+import type { AspectRatio, PhotoAnimation, PhotoStyle } from "@/types";
 
 export type BottomSheetState = "collapsed" | "half" | "full";
 
@@ -13,6 +13,7 @@ interface PersistedUISettings {
   routeLabelSize: number;
   viewportRatio: AspectRatio;
   photoAnimation: PhotoAnimation;
+  photoStyle: PhotoStyle;
 }
 
 function loadPersistedSettings(): Partial<PersistedUISettings> {
@@ -51,6 +52,7 @@ interface UIState {
   routeLabelSize: number; // Route label font size in px (default 14)
   viewportRatio: AspectRatio; // WYSIWYG viewport aspect ratio
   photoAnimation: PhotoAnimation; // Photo enter/exit animation style
+  photoStyle: PhotoStyle; // Photo display style (classic or kenburns)
 
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -65,6 +67,7 @@ interface UIState {
   setRouteLabelSize: (size: number) => void;
   setViewportRatio: (ratio: AspectRatio) => void;
   setPhotoAnimation: (animation: PhotoAnimation) => void;
+  setPhotoStyle: (style: PhotoStyle) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -81,6 +84,7 @@ export const useUIStore = create<UIState>((set) => ({
   routeLabelSize: saved.routeLabelSize ?? 14,
   viewportRatio: saved.viewportRatio ?? "free",
   photoAnimation: saved.photoAnimation ?? "scale",
+  photoStyle: saved.photoStyle ?? "classic",
 
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
@@ -95,6 +99,7 @@ export const useUIStore = create<UIState>((set) => ({
   setRouteLabelSize: (routeLabelSize) => set({ routeLabelSize }),
   setViewportRatio: (viewportRatio) => set({ viewportRatio }),
   setPhotoAnimation: (photoAnimation) => set({ photoAnimation }),
+  setPhotoStyle: (photoStyle) => set({ photoStyle }),
 }));
 
 // Persist user settings on change (debounced)
@@ -110,6 +115,7 @@ useUIStore.subscribe((state) => {
       routeLabelSize: state.routeLabelSize,
       viewportRatio: state.viewportRatio,
       photoAnimation: state.photoAnimation,
+      photoStyle: state.photoStyle,
     });
   }, 500);
 });

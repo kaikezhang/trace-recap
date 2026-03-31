@@ -1,6 +1,6 @@
 import * as turf from "@turf/turf";
 import type mapboxgl from "mapbox-gl";
-import type { ExportSettings, Photo, PhotoAnimation } from "@/types";
+import type { ExportSettings, Photo, PhotoAnimation, PhotoStyle } from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 import type { AnimationEvent } from "./AnimationEngine";
 import {
@@ -9,7 +9,7 @@ import {
   SEGMENT_GLOW_LAYER_PREFIX,
   SEGMENT_SOURCE_PREFIX,
 } from "@/components/editor/routeSegmentSources";
-import { resolvePhotoAnimations } from "@/lib/photoAnimation";
+import { resolvePhotoAnimations, resolvePhotoStyle, getKenBurnsTransform, KEN_BURNS_DURATION_SEC } from "@/lib/photoAnimation";
 import { isSolidStyle, resolveIconVariant } from "@/lib/transportIcons";
 import type { IconDirection } from "@/lib/transportIcons";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
@@ -643,6 +643,21 @@ export class VideoExporter {
       enterAnimation: enterAnimStyle,
       exitAnimation: exitAnimStyle,
     } = resolvePhotoAnimations(layout, this.settings.photoAnimation ?? "scale");
+    const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
+
+    // Ken Burns: compute elapsed time since ARRIVE start (seconds).
+    // Per-photo progress is derived inside the loop to account for enter stagger.
+    let kenBurnsElapsed = 0;
+    if (photoStyle === "kenburns") {
+      const timeline = this.engine.getTimeline();
+      const entry = timeline[progress.groupIndex];
+      if (entry) {
+        const arrivePhase = entry.phases.find((p: { phase: string }) => p.phase === "ARRIVE");
+        if (arrivePhase) {
+          kenBurnsElapsed = Math.max(0, progress.time - arrivePhase.startTime);
+        }
+      }
+    }
 
     // Use the photo source group index for tracking (prev group during fade-out)
     const photoGroupIdx = progress.phase === "ARRIVE"
@@ -785,26 +800,52 @@ export class VideoExporter {
         const imgAreaW = frameW - polPadSide * 2;
         const imgAreaH = frameH - polPadTop - polPadBottom;
 
-        // Fit image within the area (contain)
+        // Fit image within the area
         const imgAspect = preloaded.aspect;
         const areaAspect = imgAreaW / imgAreaH;
         let drawW: number, drawH: number, drawX: number, drawY: number;
-        if (imgAspect > areaAspect) {
-          drawW = imgAreaW;
-          drawH = imgAreaW / imgAspect;
-          drawX = imgAreaX;
-          drawY = imgAreaY + (imgAreaH - drawH) / 2;
+
+        if (photoStyle === "kenburns") {
+          // Ken Burns: "cover" — fill area, may crop, focal-aware positioning
+          if (imgAspect > areaAspect) {
+            drawH = imgAreaH;
+            drawW = imgAreaH * imgAspect;
+          } else {
+            drawW = imgAreaW;
+            drawH = imgAreaW / imgAspect;
+          }
+          drawX = imgAreaX + (imgAreaW - drawW) * fp.x;
+          drawY = imgAreaY + (imgAreaH - drawH) * fp.y;
         } else {
-          drawH = imgAreaH;
-          drawW = imgAreaH * imgAspect;
-          drawX = imgAreaX + (imgAreaW - drawW) / 2;
-          drawY = imgAreaY;
+          // Classic: "contain" — fit entire image
+          if (imgAspect > areaAspect) {
+            drawW = imgAreaW;
+            drawH = imgAreaW / imgAspect;
+            drawX = imgAreaX;
+            drawY = imgAreaY + (imgAreaH - drawH) / 2;
+          } else {
+            drawH = imgAreaH;
+            drawW = imgAreaH * imgAspect;
+            drawX = imgAreaX + (imgAreaW - drawW) / 2;
+            drawY = imgAreaY;
+          }
         }
 
         ctx.save();
         ctx.beginPath();
         ctx.rect(imgAreaX, imgAreaY, imgAreaW, imgAreaH);
         ctx.clip();
+        if (photoStyle === "kenburns") {
+          const kbStagger = enterAnimStyle === "none" ? 0 : enterAnimStyle === "typewriter" ? i * 0.2 : i * 0.08;
+          const kbProgress = Math.max(0, Math.min(1, (kenBurnsElapsed - kbStagger) / KEN_BURNS_DURATION_SEC));
+          const kb = getKenBurnsTransform(kbProgress, i, fp);
+          const areaCX = imgAreaX + imgAreaW / 2;
+          const areaCY = imgAreaY + imgAreaH / 2;
+          ctx.translate(areaCX, areaCY);
+          ctx.translate(kb.translateX * imgAreaW / 100, kb.translateY * imgAreaH / 100);
+          ctx.scale(kb.scale, kb.scale);
+          ctx.translate(-areaCX, -areaCY);
+        }
         ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
         ctx.restore();
 
@@ -822,20 +863,34 @@ export class VideoExporter {
         }
       } else {
         // Default: direct image with rounded corners
-        // Compute contain dimensions (fit entire image, no crop)
         const imgAspect = preloaded.aspect;
         const targetAspect = frameW / frameH;
         let drawW: number, drawH: number, drawX: number, drawY: number;
-        if (imgAspect > targetAspect) {
-          drawW = frameW;
-          drawH = frameW / imgAspect;
-          drawX = -frameW / 2;
-          drawY = -drawH / 2;
+
+        if (photoStyle === "kenburns") {
+          // Ken Burns: use "cover" (fill area, may crop) + focal-aware positioning
+          if (imgAspect > targetAspect) {
+            drawH = frameH;
+            drawW = frameH * imgAspect;
+          } else {
+            drawW = frameW;
+            drawH = frameW / imgAspect;
+          }
+          drawX = -frameW / 2 + (frameW - drawW) * fp.x;
+          drawY = -frameH / 2 + (frameH - drawH) * fp.y;
         } else {
-          drawH = frameH;
-          drawW = frameH * imgAspect;
-          drawX = -drawW / 2;
-          drawY = -frameH / 2;
+          // Classic: use "contain" (fit entire image, no crop)
+          if (imgAspect > targetAspect) {
+            drawW = frameW;
+            drawH = frameW / imgAspect;
+            drawX = -frameW / 2;
+            drawY = -drawH / 2;
+          } else {
+            drawH = frameH;
+            drawW = frameH * imgAspect;
+            drawX = -drawW / 2;
+            drawY = -frameH / 2;
+          }
         }
 
         // Drop shadow
@@ -847,8 +902,22 @@ export class VideoExporter {
         // Clip to rounded rect and draw
         ctx.save();
         ctx.beginPath();
-        ctx.roundRect(drawX, drawY, drawW, drawH, radius);
+        if (photoStyle === "kenburns") {
+          // Clip to frame bounds for Ken Burns (image overflows due to cover+zoom)
+          ctx.roundRect(-frameW / 2, -frameH / 2, frameW, frameH, radius);
+        } else {
+          ctx.roundRect(drawX, drawY, drawW, drawH, radius);
+        }
         ctx.clip();
+
+        if (photoStyle === "kenburns") {
+          // Apply Ken Burns zoom+pan transform (per-photo progress with stagger)
+          const kbStagger = enterAnimStyle === "none" ? 0 : enterAnimStyle === "typewriter" ? i * 0.2 : i * 0.08;
+          const kbProgress = Math.max(0, Math.min(1, (kenBurnsElapsed - kbStagger) / KEN_BURNS_DURATION_SEC));
+          const kb = getKenBurnsTransform(kbProgress, i, fp);
+          ctx.translate(kb.translateX * frameW / 100, kb.translateY * frameH / 100);
+          ctx.scale(kb.scale, kb.scale);
+        }
         ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
         ctx.restore();
 

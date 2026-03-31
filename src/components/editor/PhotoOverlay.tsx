@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, type Transition, type TargetAndTransition } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
-import { resolvePhotoAnimations } from "@/lib/photoAnimation";
+import { resolvePhotoAnimations, resolvePhotoStyle, getKenBurnsTransform, KEN_BURNS_DURATION_SEC } from "@/lib/photoAnimation";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout, PhotoAnimation } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -195,6 +195,7 @@ function usePhotoDimensions(photos: Photo[]): PhotoMeta[] {
 export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1, containerMode = "viewport" }: PhotoOverlayProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const photoAnimation = useUIStore((s) => s.photoAnimation);
+  const globalPhotoStyle = useUIStore((s) => s.photoStyle);
   const metas = usePhotoDimensions(photos);
   const hasPhotos = metas.length > 0;
 
@@ -208,6 +209,7 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
   const displayLayout = visible && hasPhotos ? photoLayout : lastVisibleRef.current.layout;
   const hasDisplayPhotos = displayMetas.length > 0;
   const { enterAnimation, exitAnimation } = resolvePhotoAnimations(displayLayout, photoAnimation);
+  const photoStyle = resolvePhotoStyle(displayLayout, globalPhotoStyle);
   // When a fixed ratio is set, the parent map container already has that aspect ratio,
   // so we use percentage-based sizing to stay within bounds. For "free", keep vw/vh.
   const containerStyle = useMemo(() => {
@@ -316,7 +318,15 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
             const staggerOffset = n > 1 ? (n - 1 - i) / (n - 1) * 0.4 : 0;
             const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
 
+            // Ken Burns: compute start/end transforms for this photo
+            const isKenBurns = photoStyle === "kenburns";
+            const kbStart = isKenBurns ? getKenBurnsTransform(0, i, fp) : null;
+            const kbEnd = isKenBurns ? getKenBurnsTransform(1, i, fp) : null;
+
             const enter = getEnterAnimation(enterAnimation, i, n);
+            const enterDelay = typeof (enter.transition as { delay?: number }).delay === "number"
+              ? (enter.transition as { delay?: number }).delay!
+              : 0;
             const exit = getExitValues(exitAnimation, exitProgress, photoExitT, i);
 
             const enterRotate = typeof (enter.animate as { rotate?: number }).rotate === "number"
@@ -364,14 +374,41 @@ export default function PhotoOverlay({ photos, visible, photoLayout, opacity = 1
                   className="w-full overflow-hidden"
                   style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
                 >
-                  <img
-                    src={photo.url}
-                    alt={photo.caption || ""}
-                    className="w-full h-full object-contain"
-                    style={{
-                      objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
-                    }}
-                  />
+                  {isKenBurns && kbStart && kbEnd ? (
+                    <motion.img
+                      src={photo.url}
+                      alt={photo.caption || ""}
+                      className="w-full h-full object-cover"
+                      initial={{
+                        scale: kbStart.scale,
+                        x: `${kbStart.translateX}%`,
+                        y: `${kbStart.translateY}%`,
+                      }}
+                      animate={{
+                        scale: kbEnd.scale,
+                        x: `${kbEnd.translateX}%`,
+                        y: `${kbEnd.translateY}%`,
+                      }}
+                      transition={{
+                        duration: KEN_BURNS_DURATION_SEC,
+                        delay: enterDelay,
+                        ease: "linear",
+                        repeat: 0,
+                      }}
+                      style={{
+                        objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
+                      }}
+                    />
+                  ) : (
+                    <img
+                      src={photo.url}
+                      alt={photo.caption || ""}
+                      className="w-full h-full object-contain"
+                      style={{
+                        objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
+                      }}
+                    />
+                  )}
                 </div>
                 {hasCaption && (
                   <p
