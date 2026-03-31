@@ -15,6 +15,7 @@ import {
   Settings,
   ChevronDown,
   Palette,
+  X,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -83,9 +84,20 @@ export default function TopToolbar() {
   const canUndo = useHistoryStore((s) => s.canUndo);
   const canRedo = useHistoryStore((s) => s.canRedo);
 
-  // Close settings panel on outside click
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile breakpoint
   useEffect(() => {
-    if (!settingsOpen) return;
+    const mql = window.matchMedia("(max-width: 767px)");
+    setIsMobile(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
+  // Close settings panel on outside click (desktop only)
+  useEffect(() => {
+    if (!settingsOpen || isMobile) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (
         settingsPanelRef.current &&
@@ -98,7 +110,16 @@ export default function TopToolbar() {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [settingsOpen]);
+  }, [settingsOpen, isMobile]);
+
+  // Prevent body scrolling when mobile drawer is open
+  useEffect(() => {
+    if (!settingsOpen || !isMobile) return;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [settingsOpen, isMobile]);
 
   const ratioOptions: AspectRatio[] = ["free", "16:9", "9:16", "4:3", "3:4", "1:1"];
   const ratioLabels: Record<AspectRatio, string> = {
@@ -350,165 +371,81 @@ export default function TopToolbar() {
             >
               <Settings className="h-4 w-4" />
             </Button>
-            {settingsOpen && (
+
+            {/* Desktop: absolute dropdown */}
+            {settingsOpen && !isMobile && (
               <div
                 ref={settingsPanelRef}
                 className="absolute right-0 top-full mt-2 z-50 w-72 max-h-[80vh] overflow-y-auto rounded-lg border bg-background p-4 shadow-lg space-y-4"
               >
                 <p className="text-sm font-semibold">Settings</p>
-                {/* Map Style */}
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-muted-foreground">Map Style</label>
-                  {(["classic", "navigation", "creative"] as MapStyleCategory[]).map((cat) => {
-                    const styles = MAP_STYLE_CONFIGS.filter((c) => c.category === cat);
-                    return (
-                      <div key={cat} className="space-y-1.5">
-                        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                          {MAP_STYLE_CATEGORY_LABELS[cat]}
-                        </span>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {styles.map((cfg) => (
-                            <button
-                              key={cfg.id}
-                              className={`flex flex-col items-center gap-1 rounded-lg p-1.5 text-[10px] font-medium transition-colors ${
-                                mapStyle === cfg.id
-                                  ? "ring-2 ring-indigo-500 bg-indigo-50 text-indigo-700"
-                                  : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-                              }`}
-                              onClick={() => setMapStyle(cfg.id)}
-                            >
-                              <span
-                                className="h-6 w-full rounded"
-                                style={{ backgroundColor: cfg.swatch }}
-                              />
-                              <span className="truncate w-full text-center">{cfg.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <hr className="border-gray-100" />
-                {/* Language toggle */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">Language</label>
-                  <div className="flex gap-2">
-                    {([
-                      { value: "en", label: "English" },
-                      { value: "zh", label: "中文" },
-                    ] as const).map((opt) => (
-                      <button
-                        key={opt.value}
-                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                          cityLabelLang === opt.value
-                            ? "bg-indigo-500 text-white"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                        onClick={() => setCityLabelLang(opt.value)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Label size slider */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Label Size: {cityLabelSize}px
-                  </label>
-                  <Slider
-                    value={[cityLabelSize]}
-                    min={12}
-                    max={48}
-                    step={1}
-                    onValueChange={(v) => {
-                      const val = Array.isArray(v) ? v[0] : v;
-                      setCityLabelSize(val);
-                    }}
-                  />
-                </div>
-                {/* City label position slider */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    City Label Position: {cityLabelTopPercent}%
-                  </label>
-                  <Slider
-                    value={[cityLabelTopPercent]}
-                    min={0}
-                    max={30}
-                    step={1}
-                    onValueChange={(v) => {
-                      const val = Array.isArray(v) ? v[0] : v;
-                      setCityLabelTopPercent(val);
-                    }}
-                  />
-                </div>
-                {/* Route label position slider */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Route Label Position: {routeLabelBottomPercent}%
-                  </label>
-                  <Slider
-                    value={[routeLabelBottomPercent]}
-                    min={5}
-                    max={40}
-                    step={1}
-                    onValueChange={(v) => {
-                      const val = Array.isArray(v) ? v[0] : v;
-                      setRouteLabelBottomPercent(val);
-                    }}
-                  />
-                </div>
-                {/* Route label size slider */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Route Label Size: {routeLabelSize}px
-                  </label>
-                  <Slider
-                    value={[routeLabelSize]}
-                    min={10}
-                    max={32}
-                    step={1}
-                    onValueChange={(v) => {
-                      const val = Array.isArray(v) ? v[0] : v;
-                      setRouteLabelSize(val);
-                    }}
-                  />
-                </div>
-                <hr className="border-gray-100" />
-                {/* Mood Colors toggle */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Palette className="h-4 w-4" />
-                    Mood Colors
-                  </label>
-                  <p className="text-[11px] text-muted-foreground/70">
-                    Color route lines using dominant colors from attached photos
-                  </p>
-                  <div className="flex gap-2">
-                    {([
-                      { value: true, label: "On" },
-                      { value: false, label: "Off" },
-                    ] as const).map((opt) => (
-                      <button
-                        key={String(opt.value)}
-                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                          moodColorsEnabled === opt.value
-                            ? "bg-indigo-500 text-white"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                        onClick={() => setMoodColorsEnabled(opt.value)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
+                <SettingsContent
+                  mapStyle={mapStyle}
+                  setMapStyle={setMapStyle}
+                  cityLabelLang={cityLabelLang}
+                  setCityLabelLang={setCityLabelLang}
+                  cityLabelSize={cityLabelSize}
+                  setCityLabelSize={setCityLabelSize}
+                  cityLabelTopPercent={cityLabelTopPercent}
+                  setCityLabelTopPercent={setCityLabelTopPercent}
+                  routeLabelBottomPercent={routeLabelBottomPercent}
+                  setRouteLabelBottomPercent={setRouteLabelBottomPercent}
+                  routeLabelSize={routeLabelSize}
+                  setRouteLabelSize={setRouteLabelSize}
+                  moodColorsEnabled={moodColorsEnabled}
+                  setMoodColorsEnabled={setMoodColorsEnabled}
+                />
               </div>
             )}
           </div>
+
+          {/* Mobile: slide-up drawer (rendered via portal to avoid toolbar clipping) */}
+          {settingsOpen && isMobile && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+                onClick={() => setSettingsOpen(false)}
+              />
+              {/* Drawer */}
+              <div className="fixed bottom-0 left-0 right-0 z-[60] max-h-[85vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t bg-background shadow-2xl pb-[env(safe-area-inset-bottom)]">
+                {/* Drag handle */}
+                <div className="sticky top-0 z-10 bg-background pt-3 pb-2 px-4 rounded-t-2xl">
+                  <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/30" />
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">Settings</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setSettingsOpen(false)}
+                      aria-label="Close settings"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="px-4 pb-8 space-y-4">
+                  <SettingsContent
+                    mapStyle={mapStyle}
+                    setMapStyle={setMapStyle}
+                    cityLabelLang={cityLabelLang}
+                    setCityLabelLang={setCityLabelLang}
+                    cityLabelSize={cityLabelSize}
+                    setCityLabelSize={setCityLabelSize}
+                    cityLabelTopPercent={cityLabelTopPercent}
+                    setCityLabelTopPercent={setCityLabelTopPercent}
+                    routeLabelBottomPercent={routeLabelBottomPercent}
+                    setRouteLabelBottomPercent={setRouteLabelBottomPercent}
+                    routeLabelSize={routeLabelSize}
+                    setRouteLabelSize={setRouteLabelSize}
+                    moodColorsEnabled={moodColorsEnabled}
+                    setMoodColorsEnabled={setMoodColorsEnabled}
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           {/* More menu */}
           <DropdownMenu>
@@ -592,6 +529,198 @@ export default function TopToolbar() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Shared settings controls used by both desktop dropdown and mobile */
+/* ------------------------------------------------------------------ */
+
+interface SettingsContentProps {
+  mapStyle: MapStyle;
+  setMapStyle: (v: MapStyle) => void;
+  cityLabelLang: "en" | "zh";
+  setCityLabelLang: (v: "en" | "zh") => void;
+  cityLabelSize: number;
+  setCityLabelSize: (v: number) => void;
+  cityLabelTopPercent: number;
+  setCityLabelTopPercent: (v: number) => void;
+  routeLabelBottomPercent: number;
+  setRouteLabelBottomPercent: (v: number) => void;
+  routeLabelSize: number;
+  setRouteLabelSize: (v: number) => void;
+  moodColorsEnabled: boolean;
+  setMoodColorsEnabled: (v: boolean) => void;
+}
+
+function SettingsContent({
+  mapStyle,
+  setMapStyle,
+  cityLabelLang,
+  setCityLabelLang,
+  cityLabelSize,
+  setCityLabelSize,
+  cityLabelTopPercent,
+  setCityLabelTopPercent,
+  routeLabelBottomPercent,
+  setRouteLabelBottomPercent,
+  routeLabelSize,
+  setRouteLabelSize,
+  moodColorsEnabled,
+  setMoodColorsEnabled,
+}: SettingsContentProps) {
+  return (
+    <>
+      {/* Map Style */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium text-muted-foreground">Map Style</label>
+        {(["classic", "navigation", "creative"] as MapStyleCategory[]).map((cat) => {
+          const styles = MAP_STYLE_CONFIGS.filter((c) => c.category === cat);
+          return (
+            <div key={cat} className="space-y-1.5">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                {MAP_STYLE_CATEGORY_LABELS[cat]}
+              </span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {styles.map((cfg) => (
+                  <button
+                    key={cfg.id}
+                    className={`flex flex-col items-center gap-1 rounded-lg p-1.5 text-[10px] font-medium transition-colors ${
+                      mapStyle === cfg.id
+                        ? "ring-2 ring-indigo-500 bg-indigo-50 text-indigo-700"
+                        : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    }`}
+                    onClick={() => setMapStyle(cfg.id)}
+                  >
+                    <span
+                      className="h-6 w-full rounded"
+                      style={{ backgroundColor: cfg.swatch }}
+                    />
+                    <span className="truncate w-full text-center">{cfg.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <hr className="border-gray-100" />
+      {/* Language toggle */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground">Language</label>
+        <div className="flex gap-2">
+          {([
+            { value: "en", label: "English" },
+            { value: "zh", label: "中文" },
+          ] as const).map((opt) => (
+            <button
+              key={opt.value}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                cityLabelLang === opt.value
+                  ? "bg-indigo-500 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              onClick={() => setCityLabelLang(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Label size slider */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground">
+          Label Size: {cityLabelSize}px
+        </label>
+        <Slider
+          value={[cityLabelSize]}
+          min={12}
+          max={48}
+          step={1}
+          onValueChange={(v) => {
+            const val = Array.isArray(v) ? v[0] : v;
+            setCityLabelSize(val);
+          }}
+        />
+      </div>
+      {/* City label position slider */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground">
+          City Label Position: {cityLabelTopPercent}%
+        </label>
+        <Slider
+          value={[cityLabelTopPercent]}
+          min={0}
+          max={30}
+          step={1}
+          onValueChange={(v) => {
+            const val = Array.isArray(v) ? v[0] : v;
+            setCityLabelTopPercent(val);
+          }}
+        />
+      </div>
+      {/* Route label position slider */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground">
+          Route Label Position: {routeLabelBottomPercent}%
+        </label>
+        <Slider
+          value={[routeLabelBottomPercent]}
+          min={5}
+          max={40}
+          step={1}
+          onValueChange={(v) => {
+            const val = Array.isArray(v) ? v[0] : v;
+            setRouteLabelBottomPercent(val);
+          }}
+        />
+      </div>
+      {/* Route label size slider */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground">
+          Route Label Size: {routeLabelSize}px
+        </label>
+        <Slider
+          value={[routeLabelSize]}
+          min={10}
+          max={32}
+          step={1}
+          onValueChange={(v) => {
+            const val = Array.isArray(v) ? v[0] : v;
+            setRouteLabelSize(val);
+          }}
+        />
+      </div>
+      <hr className="border-gray-100" />
+      {/* Mood Colors toggle */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <Palette className="h-4 w-4" />
+          Mood Colors
+        </label>
+        <p className="text-[11px] text-muted-foreground/70">
+          Color route lines using dominant colors from attached photos
+        </p>
+        <div className="flex gap-2">
+          {([
+            { value: true, label: "On" },
+            { value: false, label: "Off" },
+          ] as const).map((opt) => (
+            <button
+              key={String(opt.value)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                moodColorsEnabled === opt.value
+                  ? "bg-indigo-500 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              onClick={() => setMoodColorsEnabled(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </>
   );
 }
