@@ -82,7 +82,7 @@ export default memo(function PlaybackControls({
   ].join(" ");
   const sliderContainerClassName = [
     "min-w-0 transition-all duration-300 ease-in-out",
-    isPlaying ? "flex-1" : "flex-1 md:w-48 md:flex-none",
+    isPlaying ? "flex-1" : "flex-1 md:w-96 md:flex-none",
   ].join(" ");
   const sliderClassName = isPlaying
     ? "h-4 [&>div:first-child]:h-1 md:[&>div:first-child]:h-1"
