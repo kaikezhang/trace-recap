@@ -64,6 +64,7 @@ export default function ExportDialog() {
   const { map } = useMap();
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
+  const segmentTimingOverrides = useProjectStore((s) => s.segmentTimingOverrides);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
@@ -94,7 +95,7 @@ export default function ExportDialog() {
     setExportError(null);
     setEncodingMethod(null);
 
-    const engine = new AnimationEngine(map, locations, segments);
+    const engine = new AnimationEngine(map, locations, segments, segmentTimingOverrides);
     const exporter = new VideoExporter(engine, map, {
       ...settings,
       cityLabelSize,
