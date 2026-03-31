@@ -821,7 +821,7 @@ export function computedRectsToFreeTransforms(
         caption: {
           text: photo.caption,
           offsetX: 0,
-          offsetY: hasCaption ? rect.height / 2 : rect.height / 2 + 0.04,
+          offsetY: photoHeight / 2 + 0.04,
           rotation: 0,
         },
       });
