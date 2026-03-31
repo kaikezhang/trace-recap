@@ -112,10 +112,41 @@ export default function TopToolbar() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const data: ImportRouteData = JSON.parse(text);
-      await loadRouteData(data);
-      void enrichChineseNames();
+      if (file.name.endsWith(".zip")) {
+        // Import zip project (photos as separate files)
+        const JSZip = (await import("jszip")).default;
+        const zip = await JSZip.loadAsync(file);
+        const routeFile = zip.file("route.json");
+        if (!routeFile) throw new Error("No route.json in zip");
+        const routeText = await routeFile.async("text");
+        const data: ImportRouteData = JSON.parse(routeText);
+
+        // Convert photo file references to blob URLs
+        if (data.locations) {
+          for (const loc of data.locations) {
+            if (loc.photos) {
+              for (const photo of loc.photos) {
+                if (photo.url.startsWith("photos/")) {
+                  const photoFile = zip.file(photo.url);
+                  if (photoFile) {
+                    const blob = await photoFile.async("blob");
+                    photo.url = URL.createObjectURL(blob);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        await loadRouteData(data);
+        void enrichChineseNames();
+      } else {
+        // Import plain JSON
+        const text = await file.text();
+        const data: ImportRouteData = JSON.parse(text);
+        await loadRouteData(data);
+        void enrichChineseNames();
+      }
     } catch (error) {
       console.error("Failed to import route file.", error);
     }
@@ -123,14 +154,66 @@ export default function TopToolbar() {
   };
 
   const handleExportRoute = async () => {
-    const data = await exportRoute();
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    const { locations, segments, mapStyle, segmentTimingOverrides, currentProjectName } = useProjectStore.getState();
+
+    // Store photos as separate files in the zip, reference by filename in JSON
+    const photoFiles: Map<string, string> = new Map(); // photoId → filename
+    let photoIndex = 0;
+
+    const exportedLocations = await Promise.all(
+      locations.map(async (loc) => {
+        const photos = await Promise.all(
+          loc.photos.map(async (p) => {
+            const filename = `photos/photo_${photoIndex++}.jpg`;
+            try {
+              const resp = await fetch(p.url);
+              const blob = await resp.blob();
+              zip.file(filename, blob);
+            } catch {
+              // skip failed photos
+            }
+            photoFiles.set(p.id, filename);
+            return {
+              url: filename, // reference to file in zip
+              caption: p.caption,
+              ...(p.focalPoint ? { focalPoint: p.focalPoint } : {}),
+            };
+          }),
+        );
+        return {
+          name: loc.name,
+          nameZh: loc.nameZh,
+          coordinates: loc.coordinates as [number, number],
+          isWaypoint: loc.isWaypoint ?? false,
+          ...(photos.length > 0 ? { photos } : {}),
+          ...(loc.photoLayout ? { photoLayout: loc.photoLayout } : {}),
+        };
+      }),
+    );
+
+    const routeData = {
+      name: currentProjectName ?? "Untitled",
+      mapStyle,
+      locations: exportedLocations,
+      segments: segments.map((seg) => ({
+        fromIndex: locations.findIndex((l) => l.id === seg.fromId),
+        toIndex: locations.findIndex((l) => l.id === seg.toId),
+        transportMode: seg.transportMode,
+        ...(seg.iconVariant ? { iconVariant: seg.iconVariant } : {}),
+        ...(seg.iconStyle ? { iconStyle: seg.iconStyle } : {}),
+      })),
+      segmentTimingOverrides,
+    };
+
+    zip.file("route.json", JSON.stringify(routeData, null, 2));
+
+    const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "trace-recap-route.json";
+    a.download = `${currentProjectName ?? "trace-recap"}.zip`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -462,7 +545,7 @@ export default function TopToolbar() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json"
+            accept=".json,.zip"
             className="hidden"
             onChange={handleImport}
           />
