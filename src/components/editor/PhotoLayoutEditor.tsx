@@ -38,6 +38,7 @@ import {
   RefreshCw,
   Camera,
   ScanEye,
+  Flower2,
   Film,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -748,6 +749,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                       {([
                         { value: "classic" as const, label: "Classic", icon: Camera },
                         { value: "kenburns" as const, label: "Ken Burns", icon: ScanEye },
+                        { value: "bloom" as const, label: "Bloom", icon: Flower2 },
                       ]).map(({ value, label, icon: Icon }) => {
                         const isActive = activePhotoStyle === value;
                         return (

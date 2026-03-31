@@ -17,6 +17,7 @@ interface MapStageProps {
   currentCityLabel?: string | null;
   editingLocation: Location | null;
   hasSegments: boolean;
+  bloomOrigin: { x: number; y: number } | null;
   photos: Photo[];
   photoLayout?: PhotoLayout;
   photoOverlayOpacity: number;
@@ -97,6 +98,7 @@ function CityLabelOverlay({
 }
 
 export default function MapStage({
+  bloomOrigin,
   cityLabelSize,
   currentCityLabel,
   editingLocation,
@@ -184,6 +186,7 @@ export default function MapStage({
         visible={showPhotoOverlay}
         photoLayout={photoLayout}
         opacity={photoOverlayOpacity}
+        bloomOrigin={bloomOrigin}
         sceneTransition={effectiveTransition}
         sceneTransitionProgress={isTransitioning ? sceneTransitionProgress : undefined}
         incomingPhotos={isTransitioning ? incomingPhotos : undefined}

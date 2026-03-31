@@ -137,6 +137,7 @@ function EditorContent() {
   const setTransitionBearing = useAnimationStore(
     (s) => s.setTransitionBearing,
   );
+  const setBloomOrigin = useAnimationStore((s) => s.setBloomOrigin);
   const reset = useAnimationStore((s) => s.reset);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
@@ -249,6 +250,7 @@ function EditorContent() {
   const visiblePhotos = useAnimationStore((s) => s.visiblePhotos);
   const showPhotoOverlay = useAnimationStore((s) => s.showPhotoOverlay);
   const photoOverlayOpacity = useAnimationStore((s) => s.photoOverlayOpacity);
+  const bloomOrigin = useAnimationStore((s) => s.bloomOrigin);
 
   const searchRef = useRef<CitySearchHandle>(null);
 
@@ -262,6 +264,33 @@ function EditorContent() {
   >(null);
   const visiblePhotoLocation =
     locations.find((l) => l.id === visiblePhotoLocationId) ?? null;
+
+  // Bloom origin tracking: project city coords to screen space
+  useEffect(() => {
+    if (!map) return;
+
+    const updateBloomOrigin = () => {
+      const locId = useAnimationStore.getState().showPhotoOverlay
+        ? visiblePhotoLocationId
+        : null;
+      const loc = locId ? locations.find((l) => l.id === locId) : null;
+      if (!loc) {
+        setBloomOrigin(null);
+        return;
+      }
+      const point = map.project(loc.coordinates as [number, number]);
+      const container = map.getContainer();
+      const containerRect = container.getBoundingClientRect();
+      setBloomOrigin({ x: point.x / containerRect.width, y: point.y / containerRect.height });
+    };
+
+    updateBloomOrigin();
+    map.on("move", updateBloomOrigin);
+    return () => {
+      map.off("move", updateBloomOrigin);
+    };
+  }, [map, visiblePhotoLocationId, locations, setBloomOrigin]);
+
   const [shouldLoadDemo, setShouldLoadDemo] = useState(false);
   const [demoQueryChecked, setDemoQueryChecked] = useState(false);
   const [onboardingState, setOnboardingState] =
@@ -713,6 +742,7 @@ function EditorContent() {
                   hasSegments={hasSegments}
                   photos={visiblePhotos}
                   photoLayout={visiblePhotoLocation?.photoLayout}
+                  bloomOrigin={bloomOrigin}
                   photoOverlayOpacity={photoOverlayOpacity}
                   playHintMessage={playHintMessage}
                   showPhotoOverlay={showPhotoOverlay}
@@ -749,7 +779,8 @@ function EditorContent() {
                     hasSegments={hasSegments}
                     photos={visiblePhotos}
                     photoLayout={visiblePhotoLocation?.photoLayout}
-                    photoOverlayOpacity={photoOverlayOpacity}
+                    bloomOrigin={bloomOrigin}
+                  photoOverlayOpacity={photoOverlayOpacity}
                     playHintMessage={playHintMessage}
                     showPhotoOverlay={showPhotoOverlay}
                     showEmptyState={locations.length === 0}

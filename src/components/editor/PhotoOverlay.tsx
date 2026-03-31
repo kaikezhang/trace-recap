@@ -3,7 +3,16 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, type Transition, type TargetAndTransition } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
-import { resolvePhotoAnimations, resolvePhotoStyle, getKenBurnsTransform, KEN_BURNS_DURATION_SEC } from "@/lib/photoAnimation";
+import {
+  resolvePhotoAnimations,
+  resolvePhotoStyle,
+  getKenBurnsTransform,
+  KEN_BURNS_DURATION_SEC,
+  getBloomTransform,
+  getBloomExitTransform,
+  BLOOM_ENTER_DURATION_SEC,
+  BLOOM_EXIT_DURATION_SEC,
+} from "@/lib/photoAnimation";
 import type { PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import type { Photo, PhotoLayout, PhotoAnimation, SceneTransition } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -142,6 +151,8 @@ interface PhotoOverlayProps {
   photoLayout?: PhotoLayout;
   opacity?: number; // 0-1, for fade-out transition
   containerMode?: "viewport" | "parent"; // 'parent' uses 100% sizing instead of vw/vh
+  /** Bloom origin in container-relative fractions (0-1) for geo-anchored bloom */
+  bloomOrigin?: { x: number; y: number } | null;
   /** Active scene transition type */
   sceneTransition?: SceneTransition;
   /** Scene transition progress (0-1): 0 = fully outgoing, 1 = fully incoming */
@@ -209,6 +220,7 @@ export default function PhotoOverlay({
   photoLayout,
   opacity = 1,
   containerMode = "viewport",
+  bloomOrigin,
   sceneTransition,
   sceneTransitionProgress,
   incomingPhotos,
@@ -257,6 +269,44 @@ export default function PhotoOverlay({
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
+
+  // ── Bloom animation progress tracking ──
+  const isBloom = photoStyle === "bloom";
+  const bloomStartRef = useRef<number | null>(null);
+  const [bloomProgress, setBloomProgress] = useState(0);
+  const bloomAnimFrameRef = useRef<number | null>(null);
+
+  // Reset bloom animation when photos appear/change
+  useEffect(() => {
+    if (!isBloom) {
+      bloomStartRef.current = null;
+      setBloomProgress(0);
+      return;
+    }
+
+    if (visible && hasDisplayPhotos) {
+      bloomStartRef.current = performance.now();
+      setBloomProgress(0);
+
+      const animate = () => {
+        const start = bloomStartRef.current;
+        if (start === null) return;
+        const elapsed = (performance.now() - start) / 1000;
+        const p = Math.min(1, elapsed / BLOOM_ENTER_DURATION_SEC);
+        setBloomProgress(p);
+        if (p < 1) {
+          bloomAnimFrameRef.current = requestAnimationFrame(animate);
+        }
+      };
+      bloomAnimFrameRef.current = requestAnimationFrame(animate);
+
+      return () => {
+        if (bloomAnimFrameRef.current !== null) {
+          cancelAnimationFrame(bloomAnimFrameRef.current);
+        }
+      };
+    }
+  }, [isBloom, visible, hasDisplayPhotos]);
 
   // Use actual container dimensions for layout calculation
   const containerAspect = containerSize.h > 0 ? containerSize.w / containerSize.h : 16 / 9;
@@ -441,7 +491,6 @@ export default function PhotoOverlay({
             if (!photo) return null;
             const n = orderedMetas.length;
             const hasCaption = !!photo.caption;
-            const pad = 6; // px padding inside frame
             const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
             const isPolaroid = displayLayout?.template === "polaroid";
 
@@ -459,6 +508,70 @@ export default function PhotoOverlay({
             const staggerOffset = n > 1 ? (n - 1 - i) / (n - 1) * 0.4 : 0;
             const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
 
+            // ── Bloom style: geo-anchored animation ──
+            if (isBloom && bloomOrigin && containerSize.w > 0) {
+              const originPx = { x: bloomOrigin.x * containerSize.w, y: bloomOrigin.y * containerSize.h };
+              const targetPx = {
+                x: rect.x * containerSize.w,
+                y: rect.y * containerSize.h,
+                w: rect.width * containerSize.w,
+                h: rect.height * containerSize.h,
+              };
+
+              let bt: { scale: number; translateX: number; translateY: number; opacity: number };
+              if (exitProgress > 0) {
+                bt = getBloomExitTransform(exitProgress, i, n, originPx.x, originPx.y, targetPx);
+              } else {
+                bt = getBloomTransform(bloomProgress, i, n, originPx.x, originPx.y, targetPx);
+              }
+
+              return (
+                <div
+                  key={photo.id}
+                  className="absolute overflow-hidden drop-shadow-xl"
+                  style={{
+                    left: `${rect.x * 100}%`,
+                    top: `${rect.y * 100}%`,
+                    width: `${rect.width * 100}%`,
+                    height: `${rect.height * 100}%`,
+                    borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
+                    display: "flex",
+                    flexDirection: "column" as const,
+                    opacity: bt.opacity,
+                    transform: `translate(${bt.translateX}px, ${bt.translateY}px) scale(${bt.scale}) rotate(${rotation}deg)`,
+                    transition: exitProgress > 0 ? "transform 0.05s linear, opacity 0.05s linear" : undefined,
+                    willChange: "transform, opacity",
+                    ...(isPolaroid ? {
+                      background: "white",
+                      padding: "4% 4% 10% 4%",
+                      boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+                    } : {}),
+                  }}
+                >
+                  <div
+                    className="w-full overflow-hidden"
+                    style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
+                  >
+                    <img
+                      src={photo.url}
+                      alt={photo.caption || ""}
+                      className="w-full h-full object-contain"
+                      style={{ objectPosition: `${fp.x * 100}% ${fp.y * 100}%` }}
+                    />
+                  </div>
+                  {hasCaption && (
+                    <p
+                      className="text-sm text-gray-700 text-center truncate px-1"
+                      style={{ height: `${captionH}px`, lineHeight: `${captionH}px`, flexShrink: 0 }}
+                    >
+                      {photo.caption}
+                    </p>
+                  )}
+                </div>
+              );
+            }
+
+            // ── Normal (non-bloom) rendering ──
             // Ken Burns: compute start/end transforms for this photo
             const isKenBurns = photoStyle === "kenburns";
             const kbStart = isKenBurns ? getKenBurnsTransform(0, i, fp) : null;
@@ -562,6 +675,38 @@ export default function PhotoOverlay({
               </motion.div>
             );
           })}
+
+        {/* Bloom tether lines */}
+        {isBloom && bloomOrigin && hasDisplayPhotos && containerSize.w > 0 && (
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{
+              opacity: bloomProgress >= 1 && opacity >= 1 ? 0.3 : 0,
+              transition: "opacity 0.4s ease",
+            }}
+          >
+            {rects.map((rect, i) => {
+              const photo = orderedMetas[i];
+              if (!photo) return null;
+              const originPx = { x: bloomOrigin.x * containerSize.w, y: bloomOrigin.y * containerSize.h };
+              const targetCX = (rect.x + rect.width / 2) * containerSize.w;
+              const targetCY = (rect.y + rect.height / 2) * containerSize.h;
+              // Quadratic bezier control point: midpoint shifted toward origin
+              const cpX = (originPx.x + targetCX) / 2;
+              const cpY = (originPx.y + targetCY) / 2 - 20;
+              return (
+                <path
+                  key={`tether-${photo.id}`}
+                  d={`M ${originPx.x} ${originPx.y} Q ${cpX} ${cpY} ${targetCX} ${targetCY}`}
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              );
+            })}
+          </svg>
+        )}
       </div>
 
       {/* Incoming photos — scene transition overlay */}
