@@ -34,6 +34,7 @@ import {
   getImageDimensions,
   isImageOversized,
 } from "@/lib/imageUtils";
+import { ALLOWED_CAPTION_FONTS } from "@/lib/constants";
 
 export interface ImportRouteData {
   name: string;
@@ -70,8 +71,6 @@ type SerializedLocation = PersistedProjectData["locations"][number];
 const DEFAULT_ROUTE_NAME = "My Trip";
 const DEFAULT_MAP_STYLE: MapStyle = "light";
 const PROJECT_SAVE_DEBOUNCE_MS = 2000; // 2 seconds — prevents heavy serialization during rapid slider drags
-const ALLOWED_CAPTION_FONTS = ["system-ui", "serif", "monospace", "cursive"] as const;
-
 function serializeFreeTransforms(
   photoLayout: PhotoLayout | undefined,
   photos: Location["photos"],

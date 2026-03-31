@@ -52,6 +52,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS, resolvePhotoStyle } from "@/lib/photoAnimation";
 import { resolveSceneTransition, SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
 import { computeAutoLayout, computeTemplateLayout, computedRectsToFreeTransforms, type PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
+import { CAPTION_FONT_OPTIONS, DEFAULT_CAPTION_FONT_FAMILY } from "@/lib/constants";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
 import FreeCanvas, { type FreeCanvasInitialGesture } from "./FreeCanvas";
@@ -460,6 +461,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const mobilePreviewRef = useRef<HTMLDivElement>(null);
   const desktopPreviewRef = useRef<HTMLDivElement>(null);
   const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     // Only observe the container that matches the current viewport
@@ -509,6 +511,10 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       return { width: 0, height: 0 };
     }
 
+    if (expanded) {
+      return { width: panelSize.width, height: panelSize.height };
+    }
+
     if (viewportRatio === "free" || !panelSize) {
       return { width: panelSize.width, height: panelSize.height };
     }
@@ -526,11 +532,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       w = ph * targetRatio;
     }
     return { width: w, height: h };
-  }, [panelSize, previewAspect, viewportRatio]);
+  }, [expanded, panelSize, previewAspect, viewportRatio]);
 
   // Compute fitted preview container style
   const previewContainerStyle = useMemo<React.CSSProperties>(() => {
-    if (viewportRatio === "free") {
+    if (expanded || viewportRatio === "free") {
       return { width: "100%", height: "100%" };
     }
 
@@ -539,7 +545,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     }
 
     return { width: `${previewPixelSize.width}px`, height: `${previewPixelSize.height}px` };
-  }, [previewPixelSize.height, previewPixelSize.width, viewportRatio]);
+  }, [expanded, previewPixelSize.height, previewPixelSize.width, viewportRatio]);
 
   const orderedPhotos = useMemo(
     () => getOrderedPhotos(location.photos, photoOrder),
@@ -602,7 +608,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const [activeDragPhotoId, setActiveDragPhotoId] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [previewOpacity, setPreviewOpacity] = useState(1);
-  const [expanded, setExpanded] = useState(false);
   const [initialFreeGesture, setInitialFreeGesture] = useState<FreeCanvasInitialGesture | null>(null);
   const exitPreviewTimeoutRef = useRef<number | null>(null);
   const exitPreviewFrameRef = useRef<number | null>(null);
@@ -874,7 +879,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
         containerSize={{ w: previewPixelSize.width, h: previewPixelSize.height }}
         mapSnapshot={mapSnapshot}
         borderRadius={borderRadius}
-        defaultCaptionFontFamily={layout.captionFontFamily ?? "system-ui"}
+        defaultCaptionFontFamily={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
         defaultCaptionFontSize={layout.captionFontSize ?? 14}
         onTransformsChange={handleFreeTransformsChange}
         initialGesture={initialFreeGesture}
@@ -1270,13 +1275,19 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                       <label className="text-xs text-gray-500 w-14 shrink-0">Font</label>
                       <select
                         className="flex-1 h-7 text-xs rounded-md border border-gray-200 bg-white px-2 focus:border-indigo-400 focus:outline-none"
-                        value={layout.captionFontFamily ?? "system-ui"}
+                        style={{ fontFamily: layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY }}
+                        value={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
                         onChange={(e) => updateLayout({ captionFontFamily: e.target.value })}
                       >
-                        <option value="system-ui">System UI</option>
-                        <option value="serif">Serif</option>
-                        <option value="monospace">Monospace</option>
-                        <option value="cursive">Cursive</option>
+                        {CAPTION_FONT_OPTIONS.map((option) => (
+                          <option
+                            key={option.value}
+                            value={option.value}
+                            style={{ fontFamily: option.value }}
+                          >
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="flex items-center gap-2">
