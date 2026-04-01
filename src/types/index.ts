@@ -82,9 +82,11 @@ export interface CameraState {
 export type PlaybackState = "idle" | "playing" | "paused" | "exporting";
 
 export type AspectRatio = "free" | "16:9" | "9:16" | "4:3" | "3:4" | "1:1";
+export type ExportResolution = "720p" | "1080p" | "4K";
 
 export interface ExportSettings {
   fps: number;
+  resolution?: ExportResolution;
   cityLabelSize?: number; // CSS font size in px (default 18)
   cityLabelLang?: "en" | "zh";
   cityLabelTopPercent?: number; // City label top position % (default 5)

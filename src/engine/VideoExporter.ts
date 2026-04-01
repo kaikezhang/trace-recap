@@ -3431,6 +3431,7 @@ export class VideoExporter {
       this.settings.viewportRatio ?? "free",
       canvas.width,
       canvas.height,
+      this.settings.resolution ?? "1080p",
     );
 
     await this.preloadIcons();
