@@ -99,8 +99,8 @@ function PinLabel({
 }
 
 /**
- * Open Album — 3x larger (252×180), initially blank (no photos shown).
- * Photos appear as "sheet" animations during collecting phase.
+ * Open Album — 3x larger (252×180).
+ * Starts blank, photos appear on pages during/after collecting.
  */
 function OpenAlbum({
   location,
@@ -109,7 +109,10 @@ function OpenAlbum({
   location: Location;
   collecting: boolean;
 }) {
-  const stackCount = Math.min(Math.max(location.photos.length, 1), 5);
+  const photos = location.photos;
+  const leftPhoto = photos[0]?.url;
+  const rightPhoto = photos[1]?.url ?? photos[0]?.url;
+  const stackCount = Math.min(Math.max(photos.length, 1), 5);
 
   return (
     <div className="relative flex flex-col items-center gap-2">
@@ -138,25 +141,50 @@ function OpenAlbum({
             : SPRING_TRANSITION
         }
       >
-        {/* Album body — blank pages, no photos */}
         <div className="relative h-[180px] w-[252px] rounded-[28px] bg-gradient-to-br from-stone-100 via-white to-stone-200 shadow-[0_24px_48px_rgba(28,25,23,0.22)]">
           {/* Left page */}
-          <div className="absolute inset-y-[14px] left-[16px] right-1/2 rounded-[18px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner" />
-          {/* Right page */}
-          <div className="absolute inset-y-[14px] left-1/2 right-[16px] rounded-[18px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner" />
-          {/* Spine */}
-          <div className="absolute inset-y-[8px] left-1/2 w-[10px] -translate-x-1/2 rounded-full bg-gradient-to-b from-stone-300 via-stone-200 to-stone-400 opacity-80" />
-
-          {/* Decorative lines on blank pages */}
-          <div className="absolute bottom-[24px] left-[24px] right-[140px] h-[2.5px] rounded-full bg-stone-200/70" />
-          <div className="absolute bottom-[34px] left-[24px] right-[160px] h-[2.5px] rounded-full bg-stone-200/60" />
-          <div className="absolute bottom-[24px] left-[140px] right-[24px] h-[2.5px] rounded-full bg-stone-200/70" />
-          <div className="absolute bottom-[34px] left-[140px] right-[40px] h-[2.5px] rounded-full bg-stone-200/60" />
-
-          {/* City emoji centered on blank album */}
-          <div className="absolute inset-x-0 top-[50px] text-center text-4xl leading-none opacity-40">
-            {location.chapterEmoji || "📍"}
+          <div className="absolute inset-y-[14px] left-[16px] right-1/2 rounded-[18px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner overflow-hidden">
+            {/* Photo on left page — fades in when collecting */}
+            {leftPhoto && collecting && (
+              <motion.img
+                src={leftPhoto}
+                alt=""
+                className="h-full w-full object-cover"
+                initial={{ opacity: 0, scale: 1.15 }}
+                animate={{ opacity: 0.85, scale: 1 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+              />
+            )}
           </div>
+          {/* Right page */}
+          <div className="absolute inset-y-[14px] left-1/2 right-[16px] rounded-[18px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner overflow-hidden">
+            {/* Photo on right page — fades in when collecting */}
+            {rightPhoto && collecting && (
+              <motion.img
+                src={rightPhoto}
+                alt=""
+                className="h-full w-full object-cover"
+                initial={{ opacity: 0, scale: 1.15 }}
+                animate={{ opacity: 0.85, scale: 1 }}
+                transition={{ duration: 0.5, delay: 0.35 }}
+              />
+            )}
+          </div>
+          {/* Spine */}
+          <div className="absolute inset-y-[8px] left-1/2 w-[10px] -translate-x-1/2 rounded-full bg-gradient-to-b from-stone-300 via-stone-200 to-stone-400 opacity-80 z-10" />
+
+          {/* Blank state: decorative lines + emoji (hidden when collecting) */}
+          {!collecting && (
+            <>
+              <div className="absolute bottom-[24px] left-[24px] right-[140px] h-[2.5px] rounded-full bg-stone-200/70" />
+              <div className="absolute bottom-[34px] left-[24px] right-[160px] h-[2.5px] rounded-full bg-stone-200/60" />
+              <div className="absolute bottom-[24px] left-[140px] right-[24px] h-[2.5px] rounded-full bg-stone-200/70" />
+              <div className="absolute bottom-[34px] left-[140px] right-[40px] h-[2.5px] rounded-full bg-stone-200/60" />
+              <div className="absolute inset-x-0 top-[50px] text-center text-4xl leading-none opacity-40">
+                {location.chapterEmoji || "📍"}
+              </div>
+            </>
+          )}
 
           {/* Collecting animation — photo sheets flying in */}
           <AnimatePresence initial={false}>
@@ -199,8 +227,8 @@ function OpenAlbum({
 }
 
 /**
- * Closed Album — larger (144×144), shows cover photo after photos collected.
- * Book-like appearance with spine shadow.
+ * Closed Album — book snapping shut with cover photo visible.
+ * Brief appearance (200ms) before morphing to visited pin.
  */
 function ClosedAlbum({ location }: { location: Location }) {
   const coverPhoto = location.photos[0]?.url;
@@ -210,18 +238,15 @@ function ClosedAlbum({ location }: { location: Location }) {
       <motion.div
         layout
         className="relative h-36 w-36 overflow-hidden rounded-3xl border-2 border-white/80 bg-stone-100 shadow-[0_20px_40px_rgba(15,23,42,0.25)]"
-        initial={{ scale: 0.85, rotate: -6, y: -6 }}
-        animate={{ scale: 1, rotate: -2, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.34, 1.56, 0.64, 1] }}
+        initial={{ scaleX: 0.1, scaleY: 1.05, rotate: -4, opacity: 0.8 }}
+        animate={{ scaleX: 1, scaleY: 1, rotate: -2, opacity: 1 }}
+        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       >
         {coverPhoto ? (
-          <motion.img
+          <img
             src={coverPhoto}
             alt=""
             className="h-full w-full object-cover"
-            initial={{ opacity: 0, scale: 1.1 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-stone-200 via-stone-50 to-stone-300 text-4xl">

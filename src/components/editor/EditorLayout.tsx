@@ -219,14 +219,13 @@ function EditorContent() {
 
       pendingAlbumCloseLocationIdRef.current = null;
       setShowPhotoOverlay(false);
-      setAlbumCollectingLocationId(null);
-      setAlbumClosedLocationId(locationId);
       setVisiblePhotoLocationId(null);
       activeAlbumSequenceLocationIdRef.current = null;
 
-      // Don't clear albumClosedLocationId on a timer — it will be cleared
-      // when the next group's FLY phase starts (detected in the progress callback).
-      // This keeps the closed album pin visible during the departure HOVER.
+      // Keep albumCollectingLocationId set — the pin stays in "collecting"
+      // state (open album with photos visible) until the next HOVER phase
+      // triggers the close animation. The progress callback handles the
+      // collecting → closed → visited transition.
     },
     [
       clearAlbumSequenceTimers,
@@ -636,13 +635,35 @@ function EditorContent() {
         setCurrentArrivalLocationId(newArrival);
       }
 
-      // Clear album-closed state when we start flying away (after HOVER).
-      // This triggers the album-closed → visited transition at the right moment.
-      if (
-        (e.phase === "ZOOM_OUT" || e.phase === "FLY") &&
-        useAnimationStore.getState().albumClosedLocationId !== null
-      ) {
-        setAlbumClosedLocationId(null);
+      // Album state machine driven by animation phases:
+      // collecting (open album with photos) → closed (book with cover, 200ms) → visited
+      {
+        const currentCollecting = useAnimationStore.getState().albumCollectingLocationId;
+        const currentClosed = useAnimationStore.getState().albumClosedLocationId;
+
+        // When HOVER starts and album is still in collecting state → close it
+        if (e.phase === "HOVER" && currentCollecting !== null) {
+          setAlbumCollectingLocationId(null);
+          setAlbumClosedLocationId(currentCollecting);
+          // After 200ms showing the closed album, clear it → becomes visited
+          clearAlbumSequenceTimers();
+          albumVisitedTimerRef.current = setTimeout(() => {
+            if (useAnimationStore.getState().albumClosedLocationId === currentCollecting) {
+              setAlbumClosedLocationId(null);
+            }
+            albumVisitedTimerRef.current = null;
+          }, 200);
+        }
+
+        // Safety: if we reach FLY with album still open, force close it
+        if (e.phase === "FLY" && currentCollecting !== null) {
+          setAlbumCollectingLocationId(null);
+          setAlbumClosedLocationId(null);
+        }
+        // Safety: clear closed state if somehow still set during FLY
+        if (e.phase === "FLY" && currentClosed !== null) {
+          setAlbumClosedLocationId(null);
+        }
       }
 
       // Drive bloom elapsed time from engine timeline (not wall-clock)
