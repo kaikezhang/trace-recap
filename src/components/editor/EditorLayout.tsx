@@ -467,7 +467,7 @@ function EditorContent() {
           }
         }
 
-        setVisitedLocationIds(newVisited);
+        setVisitedLocationIds([...new Set(newVisited)]);
         setCurrentArrivalLocationId(newArrival);
       }
 
