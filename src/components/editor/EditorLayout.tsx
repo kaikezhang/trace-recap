@@ -590,7 +590,9 @@ function EditorContent() {
             }
           }
 
-          // toLoc: arriving during ARRIVE phase, visited after
+          // toLoc: arriving during ARRIVE phase, stays as arrival while
+          // photos are still fading out (next group's HOVER + ZOOM_OUT),
+          // becomes visited only after photos fully disappear.
           if (!group.toLoc.isWaypoint) {
             const arrive = entry.phases.find(
               (p: { phase: string }) => p.phase === "ARRIVE",
@@ -600,7 +602,35 @@ function EditorContent() {
               if (t >= arrive.startTime && t < arriveEnd) {
                 newArrival = group.toLoc.id;
               } else if (t >= arriveEnd) {
-                newVisited.push(group.toLoc.id);
+                // Photos fade out during the next group's HOVER + ZOOM_OUT.
+                // Keep pin as "arrival" until photos are fully gone.
+                const hasPhotos = group.toLoc.photos.length > 0;
+                const nextEntry = tl[i + 1];
+                let photosStillVisible = false;
+
+                if (hasPhotos && nextEntry) {
+                  const nextHover = nextEntry.phases.find(
+                    (p: { phase: string }) => p.phase === "HOVER",
+                  );
+                  const nextZoomOut = nextEntry.phases.find(
+                    (p: { phase: string }) => p.phase === "ZOOM_OUT",
+                  );
+                  // Photos fade through HOVER and ZOOM_OUT of next group
+                  const fadeEnd = nextZoomOut
+                    ? nextZoomOut.startTime + nextZoomOut.duration
+                    : nextHover
+                      ? nextHover.startTime + nextHover.duration
+                      : arriveEnd;
+                  if (t < fadeEnd) {
+                    photosStillVisible = true;
+                  }
+                }
+
+                if (photosStillVisible) {
+                  newArrival = group.toLoc.id;
+                } else {
+                  newVisited.push(group.toLoc.id);
+                }
               }
             }
           }
