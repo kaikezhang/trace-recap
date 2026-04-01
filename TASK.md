@@ -1,77 +1,104 @@
-# TASK: Export Video Must Render PhotoFrame Styles
+# TASK — Export Album Book Animation
 
-## ⚠️ CREATE PR AND STOP. DO NOT MERGE.
-
-## Reference
-Read `docs/audit-wysiwyg.md` — discrepancy #2, #5, #9.
+⚠️ DO NOT MERGE ANY PR. Create the PR and stop.
 
 ## Problem
 
-`VideoExporter` does not use `PhotoFrame` or read `photoFrameStyle`. It has its own canvas drawing that only special-cases `layout.template === "polaroid"`. All other frame styles (borderless, film-strip, classic-border, rounded-card) are ignored. This means:
+The preview playback shows a beautiful "fly-to-album" animation where photos shrink and fly into an AlbumBook component (a physical book with spine, pages, and photo grid). The exported video has NO album rendering at all — photos just disappear after the ARRIVE phase.
 
-1. Frame padding, background color, shadow, outer border radius are missing in export
-2. Film strip perforations are missing
-3. Polaroid inline caption typography doesn't match the DOM component
-4. Decorative polaroid rotation is missing
-5. Free-mode caption backgrounds and styling are lost
-6. Non-free caption pill styling doesn't match
+## Goal
 
-## What to Fix
+Implement album book rendering in the VideoExporter's canvas pipeline so exported videos match the preview.
 
-### Step 1: Pass `photoFrameStyle` to VideoExporter
+## What the Preview Does (React/framer-motion — reference only)
 
-- `ExportDialog` must read `photoFrameStyle` from `useUIStore` and pass it in export settings
-- Add `photoFrameStyle` to the export settings type in `src/types/index.ts` if needed
-- `VideoExporter` constructor must accept and store it
+1. **ARRIVE phase**: Photos display in layout (grid/free/template)
+2. **Fly-to-album**: Photos shrink and fly toward the chapter pin position (framer-motion animation)
+3. **Album book appears**: A book-like component with spine, two pages, paper texture, and photo grid
+4. **Album collecting**: Photos populate the album grid with staggered fade-in
+5. **Album → visited pin**: The album shrinks down to a small visited chapter pin (circle avatar + title)
 
-### Step 2: Implement frame rendering in canvas
+Reference files:
+- `src/components/editor/AlbumBook.tsx` — Album book component (264 lines)
+- `src/components/editor/ChapterPin.tsx` — Chapter pin states (future/album-open/album-collecting/visited)
+- `src/components/editor/PhotoOverlay.tsx` — fly-to-album exit animation
+- `src/components/editor/ChapterPinsOverlay.tsx` — album state machine
+- `src/lib/albumStyles.ts` — Album style configs (vintage-leather, japanese-minimal, classic-hardcover, travel-scrapbook)
 
-In `VideoExporter.drawPhotos()` and `drawSceneTransitionPhotos()`, for each photo:
+## What to Implement in VideoExporter
 
-Read the frame config from `PHOTO_FRAME_STYLE_CONFIGS[photoFrameStyle]`:
-- `framePadding` — parse the CSS padding string ("6% 6% 18% 6%") into top/right/bottom/left percentages
-- `frameBackground` — fill rect behind the photo with this color
-- `outerBorderRadius` — clip the outer frame with rounded corners
-- `mediaBorderRadius` — clip the photo media with its own radius
-- `frameShadow` — render shadow (can approximate with canvas shadow APIs)
+Add these methods to `src/engine/VideoExporter.ts`:
 
-For **film-strip** style:
-- Draw the dark strips at top/bottom with perforation pattern
+### 1. `drawAlbumBook(ctx, ...)`
+Draw the album book on canvas:
+- Two pages (left/right) with page color from album style config
+- Spine between pages (with style-specific rendering: stitched, spiral, gold accent)
+- Border and shadow matching the style
+- Photo grid inside pages using `computeAlbumPageGrid()` and `splitPhotosAcrossPages()` from `src/lib/albumStyles.ts`
+- Photos rendered with cover mode and focal point
 
-For **polaroid** style:
-- Draw the off-white frame with thick bottom padding
-- Render inline caption in the bottom area using `inlineCaptionFontFamily`, `inlineCaptionFontSize`, `inlineCaptionColor`
-- Apply decorative rotation via `getPhotoFrameRotation()` (but respect `disableDecorativeRotation` for free mode)
+### 2. Album animation phases in the export timeline
 
-For **borderless** style:
-- Minimal padding, add vignette shadow overlay
+After photos display during ARRIVE, add these transition frames:
 
-For **classic-border** and **rounded-card**:
-- White frame with appropriate padding and border radius
+**Phase A — Photo fly-to-album (0.4s)**
+- Photos shrink from their display positions toward a convergence point (center-bottom area where the chapter pin will be)
+- Progressive opacity reduction and scale-down
+- Slight blur increase
 
-### Step 3: Fix caption rendering in export
+**Phase B — Album open (0.3s)**  
+- Album book fades in at the convergence point
+- Scale from 0.94 → 1.0
+- Photos populate the grid with staggered fade-in (0.12s delay per photo)
 
-- **Free-mode captions**: read `bgColor`, `color`, `fontFamily`, `fontSize`, `rotation` from freeTransform caption data. Draw background rect + styled text.
-- **Non-free captions**: render the same pill-style caption (rounded rect background + white text) that PhotoOverlay uses.
-- **Polaroid inline captions**: let the frame handle it (Step 2), don't double-render.
+**Phase C — Album hold (0.5s)**
+- Album fully visible with all photos displayed
+- Slight -3deg rotation (matching the preview's tilt)
 
-### Step 4: Apply decorative rotation
+**Phase D — Album → visited (0.4s)**
+- Album scales down (scale from 1.0 → 0.72)
+- Opacity from 1.0 → 0.7
+- Transitions into the existing visited chapter pin rendering
 
-- For non-free mode with polaroid frame: apply `getPhotoFrameRotation(photoFrameStyle, photoIndex)` rotation
-- For free mode: skip decorative rotation (user controls rotation directly)
+### 3. Timeline integration
 
-## Testing
+The album animation should happen BETWEEN:
+- The end of the ARRIVE phase photo display 
+- The start of the next FLY phase (HOVER → ZOOM_OUT)
 
-After fixes:
-1. Set frame style to Polaroid → export video → frames should have white border with thick bottom
-2. Set frame style to Film Strip → export → should see dark strips with perforations
-3. Set frame style to Borderless → export → minimal frame, vignette visible
-4. Free mode with custom caption colors → export → caption backgrounds preserved
-5. Non-free mode with captions → export → pill-style caption background visible
+This means the total ARRIVE phase duration may need to be extended, OR the album animation should overlap with the existing photo exit timing.
+
+Look at `AnimationEngine.ts` to understand phase timing. The `PHASE_DURATIONS.PHOTO_DISPLAY` is 1.5s. The album animation (~1.6s total) should fit within or slightly extend this window.
+
+### 4. Read album style from UI store
+
+```ts
+const albumStyle = useUIStore.getState().albumStyle;
+const config = getAlbumStyleConfig(albumStyle);
+```
+
+### 5. Use existing infrastructure
+
+- `this.photoImages` map already has preloaded images
+- `computeAlbumPageGrid()` and `splitPhotosAcrossPages()` from albumStyles.ts for layout
+- `getAlbumStyleConfig()` for style properties
+- The existing `drawVisitedChapterPin()` already handles the final visited state
 
 ## Constraints
 
-- Import `PHOTO_FRAME_STYLE_CONFIGS` and `getPhotoFrameRotation` from `@/lib/frameStyles`
-- Do NOT change PhotoOverlay, FreeCanvas, or PhotoFrame components
-- Build must pass: `npx next build`
-- Create a PR to main when done
+- Canvas 2D only (no DOM, no framer-motion)
+- Must work with all 4 album styles
+- Must work with all photo layouts (auto, manual/template, free)
+- Photo frame styles should be respected in the album grid if practical
+- Don't break existing export functionality
+- Keep the code clean and well-structured
+
+## Testing
+
+- `npx tsc --noEmit` must pass
+- Build should succeed
+- The album should appear in exported videos between photo display and the next city transition
+
+## Deliverable
+
+Feature branch `feat/export-album-animation`, PR to main. CREATE PR AND STOP. DO NOT MERGE.
