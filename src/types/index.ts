@@ -154,6 +154,19 @@ export type PhotoStyle = "classic" | "kenburns" | "portal" | "bloom";
 
 export type SceneTransition = "cut" | "dissolve" | "blur-dissolve" | "wipe";
 
+export type AlbumStyle =
+  | "vintage-leather"
+  | "japanese-minimal"
+  | "classic-hardcover"
+  | "travel-scrapbook";
+
+export type PhotoFrameStyle =
+  | "polaroid"
+  | "borderless"
+  | "film-strip"
+  | "classic-border"
+  | "rounded-card";
+
 export type MapStyle =
   | "light"
   | "dark"

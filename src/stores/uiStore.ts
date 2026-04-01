@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import type { AspectRatio, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
+import type {
+  AlbumStyle,
+  AspectRatio,
+  PhotoAnimation,
+  PhotoFrameStyle,
+  PhotoStyle,
+  SceneTransition,
+} from "@/types";
 
 export type BottomSheetState = "collapsed" | "half" | "full";
 
@@ -15,6 +22,8 @@ interface PersistedUISettings {
   photoAnimation: PhotoAnimation;
   photoStyle: PhotoStyle;
   sceneTransition: SceneTransition;
+  albumStyle: AlbumStyle;
+  photoFrameStyle: PhotoFrameStyle;
   moodColorsEnabled: boolean;
   chapterPinsEnabled: boolean;
   breadcrumbsEnabled: boolean;
@@ -62,6 +71,8 @@ interface UIState {
   photoAnimation: PhotoAnimation; // Photo enter/exit animation style
   photoStyle: PhotoStyle; // Photo display style
   sceneTransition: SceneTransition; // Scene transition style between locations
+  albumStyle: AlbumStyle; // Album visual style for chapter pins
+  photoFrameStyle: PhotoFrameStyle; // Phase 2 photo frame style selection
   moodColorsEnabled: boolean; // Use photo-extracted colors for route lines
   chapterPinsEnabled: boolean; // Show chapter pins at visited cities
   breadcrumbsEnabled: boolean; // Show breadcrumb thumbnails at visited locations
@@ -83,6 +94,8 @@ interface UIState {
   setPhotoAnimation: (animation: PhotoAnimation) => void;
   setPhotoStyle: (style: PhotoStyle) => void;
   setSceneTransition: (transition: SceneTransition) => void;
+  setAlbumStyle: (style: AlbumStyle) => void;
+  setPhotoFrameStyle: (style: PhotoFrameStyle) => void;
   setMoodColorsEnabled: (enabled: boolean) => void;
   setChapterPinsEnabled: (enabled: boolean) => void;
   setBreadcrumbsEnabled: (enabled: boolean) => void;
@@ -105,6 +118,8 @@ export const useUIStore = create<UIState>((set) => ({
   photoAnimation: saved.photoAnimation ?? "scale",
   photoStyle: saved.photoStyle ?? "classic",
   sceneTransition: saved.sceneTransition ?? "dissolve",
+  albumStyle: saved.albumStyle ?? "vintage-leather",
+  photoFrameStyle: saved.photoFrameStyle ?? "polaroid",
   moodColorsEnabled: saved.moodColorsEnabled ?? true,
   chapterPinsEnabled: saved.chapterPinsEnabled ?? true,
   breadcrumbsEnabled: saved.breadcrumbsEnabled ?? true,
@@ -127,6 +142,8 @@ export const useUIStore = create<UIState>((set) => ({
   setPhotoAnimation: (photoAnimation) => set({ photoAnimation }),
   setPhotoStyle: (photoStyle) => set({ photoStyle }),
   setSceneTransition: (sceneTransition) => set({ sceneTransition }),
+  setAlbumStyle: (albumStyle) => set({ albumStyle }),
+  setPhotoFrameStyle: (photoFrameStyle) => set({ photoFrameStyle }),
   setMoodColorsEnabled: (moodColorsEnabled) => set({ moodColorsEnabled }),
   setChapterPinsEnabled: (chapterPinsEnabled) => set({ chapterPinsEnabled }),
   setBreadcrumbsEnabled: (breadcrumbsEnabled) => set({ breadcrumbsEnabled }),
@@ -148,6 +165,8 @@ useUIStore.subscribe((state) => {
       photoAnimation: state.photoAnimation,
       photoStyle: state.photoStyle,
       sceneTransition: state.sceneTransition,
+      albumStyle: state.albumStyle,
+      photoFrameStyle: state.photoFrameStyle,
       moodColorsEnabled: state.moodColorsEnabled,
       chapterPinsEnabled: state.chapterPinsEnabled,
       breadcrumbsEnabled: state.breadcrumbsEnabled,

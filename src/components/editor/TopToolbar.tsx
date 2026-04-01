@@ -46,8 +46,9 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import type { AspectRatio, MapStyle, MapStyleCategory } from "@/types";
+import type { AlbumStyle, AspectRatio, MapStyle, MapStyleCategory } from "@/types";
 import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
+import { ALBUM_STYLE_CONFIGS } from "@/lib/albumStyles";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +80,8 @@ export default function TopToolbar() {
   const setRouteLabelSize = useUIStore((s) => s.setRouteLabelSize);
   const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
   const setMoodColorsEnabled = useUIStore((s) => s.setMoodColorsEnabled);
+  const albumStyle = useUIStore((s) => s.albumStyle);
+  const setAlbumStyle = useUIStore((s) => s.setAlbumStyle);
 
   const setProjectListOpen = useUIStore((s) => s.setProjectListOpen);
   const currentProjectName = useProjectStore((s) => s.currentProjectName);
@@ -379,6 +382,8 @@ export default function TopToolbar() {
                   setRouteLabelSize={setRouteLabelSize}
                   moodColorsEnabled={moodColorsEnabled}
                   setMoodColorsEnabled={setMoodColorsEnabled}
+                  albumStyle={albumStyle}
+                  setAlbumStyle={setAlbumStyle}
                 />
               </div>
             )}
@@ -426,6 +431,8 @@ export default function TopToolbar() {
                     setRouteLabelSize={setRouteLabelSize}
                     moodColorsEnabled={moodColorsEnabled}
                     setMoodColorsEnabled={setMoodColorsEnabled}
+                    albumStyle={albumStyle}
+                    setAlbumStyle={setAlbumStyle}
                   />
                 </div>
               </div>
@@ -537,6 +544,8 @@ interface SettingsContentProps {
   setRouteLabelSize: (v: number) => void;
   moodColorsEnabled: boolean;
   setMoodColorsEnabled: (v: boolean) => void;
+  albumStyle: AlbumStyle;
+  setAlbumStyle: (v: AlbumStyle) => void;
 }
 
 function SettingsContent({
@@ -554,6 +563,8 @@ function SettingsContent({
   setRouteLabelSize,
   moodColorsEnabled,
   setMoodColorsEnabled,
+  albumStyle,
+  setAlbumStyle,
 }: SettingsContentProps) {
   return (
     <>
@@ -702,6 +713,39 @@ function SettingsContent({
               onClick={() => setMoodColorsEnabled(opt.value)}
             >
               {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <hr className="border-gray-100" />
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground">Album Style</label>
+        <div className="grid grid-cols-2 gap-2">
+          {ALBUM_STYLE_CONFIGS.map((config) => (
+            <button
+              key={config.id}
+              className={`flex flex-col items-center gap-1.5 rounded-lg p-2 text-[10px] font-medium transition-colors ${
+                albumStyle === config.id
+                  ? "bg-indigo-50 text-indigo-700 ring-2 ring-indigo-500"
+                  : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+              }`}
+              onClick={() => setAlbumStyle(config.id)}
+            >
+              <div className="flex h-6 w-full overflow-hidden rounded">
+                <span
+                  className="flex-1"
+                  style={{ backgroundColor: config.swatchColors[0] }}
+                />
+                <span
+                  className="w-1 shrink-0"
+                  style={{ backgroundColor: config.swatchColors[1] }}
+                />
+                <span
+                  className="flex-1"
+                  style={{ backgroundColor: config.swatchColors[0] }}
+                />
+              </div>
+              <span className="w-full truncate text-center">{config.label}</span>
             </button>
           ))}
         </div>

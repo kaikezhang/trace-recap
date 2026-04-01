@@ -60,7 +60,6 @@ export default function ChapterPinsOverlay() {
   const albumCollectingLocationId = useAnimationStore(
     (s) => s.albumCollectingLocationId,
   );
-  const albumClosedLocationId = useAnimationStore((s) => s.albumClosedLocationId);
   const setChapterPinPositions = useAnimationStore(
     (s) => s.setChapterPinPositions,
   );
@@ -79,8 +78,6 @@ export default function ChapterPinsOverlay() {
   arrivalRef.current = currentArrivalLocationId;
   const collectingRef = useRef(albumCollectingLocationId);
   collectingRef.current = albumCollectingLocationId;
-  const closedRef = useRef(albumClosedLocationId);
-  closedRef.current = albumClosedLocationId;
   const pinEntriesRef = useRef(pinEntries);
   pinEntriesRef.current = pinEntries;
   const targetPositionsRef = useRef(useAnimationStore.getState().chapterPinPositions);
@@ -154,8 +151,6 @@ export default function ChapterPinsOverlay() {
       let state: ChapterPinState = "future";
       if (location.id === collectingRef.current && hasPhotos) {
         state = "album-collecting";
-      } else if (location.id === closedRef.current && hasPhotos) {
-        state = "album-closed";
       } else if (location.id === arrivalRef.current && hasPhotos) {
         state = "album-open";
       } else if (visitedRef.current.includes(location.id)) {
@@ -200,19 +195,16 @@ export default function ChapterPinsOverlay() {
     let prevVisited = useAnimationStore.getState().visitedLocationIds;
     let prevArrival = useAnimationStore.getState().currentArrivalLocationId;
     let prevCollecting = useAnimationStore.getState().albumCollectingLocationId;
-    let prevClosed = useAnimationStore.getState().albumClosedLocationId;
 
     return useAnimationStore.subscribe((state) => {
       if (
         state.visitedLocationIds !== prevVisited ||
         state.currentArrivalLocationId !== prevArrival ||
-        state.albumCollectingLocationId !== prevCollecting ||
-        state.albumClosedLocationId !== prevClosed
+        state.albumCollectingLocationId !== prevCollecting
       ) {
         prevVisited = state.visitedLocationIds;
         prevArrival = state.currentArrivalLocationId;
         prevCollecting = state.albumCollectingLocationId;
-        prevClosed = state.albumClosedLocationId;
         computePinEntries.current();
         // Also update DOM positions immediately for the new set of pins
         // (use requestAnimationFrame so new pin elements are mounted first)

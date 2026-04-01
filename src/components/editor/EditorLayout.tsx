@@ -30,6 +30,7 @@ import { useHistoryStore } from "@/stores/historyStore";
 import { computeContainedViewportSize } from "@/lib/viewportRatio";
 
 const ONBOARDING_STORAGE_KEY = "trace-recap-onboarded";
+const ALBUM_VISITED_HOLD_MS = 300;
 
 type OnboardingHintKey =
   | "searchStart"
@@ -160,7 +161,6 @@ function EditorContent() {
   const setAlbumCollectingLocationId = useAnimationStore(
     (s) => s.setAlbumCollectingLocationId,
   );
-  const setAlbumClosedLocationId = useAnimationStore((s) => s.setAlbumClosedLocationId);
   const addBreadcrumb = useAnimationStore((s) => s.addBreadcrumb);
   const setBreadcrumbs = useAnimationStore((s) => s.setBreadcrumbs);
   const reset = useAnimationStore((s) => s.reset);
@@ -201,12 +201,7 @@ function EditorContent() {
     pendingAlbumCloseLocationIdRef.current = null;
     completedAlbumLocationIdsRef.current.clear();
     setAlbumCollectingLocationId(null);
-    setAlbumClosedLocationId(null);
-  }, [
-    clearAlbumSequenceTimers,
-    setAlbumClosedLocationId,
-    setAlbumCollectingLocationId,
-  ]);
+  }, [clearAlbumSequenceTimers, setAlbumCollectingLocationId]);
 
   const completeAlbumSequence = useCallback(
     (locationId: string) => {
@@ -220,21 +215,29 @@ function EditorContent() {
       pendingAlbumCloseLocationIdRef.current = null;
       setShowPhotoOverlay(false);
       setVisiblePhotoLocationId(null);
-      activeAlbumSequenceLocationIdRef.current = null;
-      // Mark this location as having completed its album sequence
-      // so shouldStartAlbumSequence won't re-trigger it.
-      completedAlbumLocationIdsRef.current.add(locationId);
+      clearAlbumSequenceTimers();
+      albumVisitedTimerRef.current = setTimeout(() => {
+        completedAlbumLocationIdsRef.current.add(locationId);
+        activeAlbumSequenceLocationIdRef.current = null;
+        setAlbumCollectingLocationId(null);
 
-      // Keep albumCollectingLocationId set — the pin stays in "collecting"
-      // state (open album with photos visible) until ZOOM_OUT triggers
-      // the close animation.
+        const { currentArrivalLocationId, visitedLocationIds } =
+          useAnimationStore.getState();
+
+        useAnimationStore.setState({
+          currentArrivalLocationId:
+            currentArrivalLocationId === locationId
+              ? null
+              : currentArrivalLocationId,
+          visitedLocationIds: visitedLocationIds.includes(locationId)
+            ? visitedLocationIds
+            : [...visitedLocationIds, locationId],
+        });
+
+        albumVisitedTimerRef.current = null;
+      }, ALBUM_VISITED_HOLD_MS);
     },
-    [
-      clearAlbumSequenceTimers,
-      setAlbumClosedLocationId,
-      setAlbumCollectingLocationId,
-      setShowPhotoOverlay,
-    ],
+    [clearAlbumSequenceTimers, setAlbumCollectingLocationId, setShowPhotoOverlay],
   );
 
   const startAlbumSequence = useCallback(
@@ -242,8 +245,6 @@ function EditorContent() {
       clearAlbumSequenceTimers();
       pendingAlbumCloseLocationIdRef.current = null;
       activeAlbumSequenceLocationIdRef.current = locationId;
-      completedAlbumLocationIdsRef.current.add(locationId);
-      setAlbumClosedLocationId(null);
       setAlbumCollectingLocationId(locationId);
       setVisiblePhotoLocationId(locationId);
       setShowPhotoOverlay(true);
@@ -251,7 +252,6 @@ function EditorContent() {
     },
     [
       clearAlbumSequenceTimers,
-      setAlbumClosedLocationId,
       setAlbumCollectingLocationId,
       setPhotoOverlayOpacity,
       setShowPhotoOverlay,
@@ -624,6 +624,11 @@ function EditorContent() {
               if (t >= albumAppearTime && t < arriveEnd) {
                 newArrival = group.toLoc.id;
               } else if (t >= arriveEnd) {
+                if (completedAlbumLocationIdsRef.current.has(group.toLoc.id)) {
+                  newVisited.push(group.toLoc.id);
+                  continue;
+                }
+
                 // Photos fade out during the next group's HOVER + ZOOM_OUT.
                 // Keep pin as "arrival" until photos are fully gone.
                 const hasPhotos = group.toLoc.photos.length > 0;
@@ -664,10 +669,8 @@ function EditorContent() {
         });
       }
 
-      // Album state machine: collecting → visited (skip closed to avoid race)
-      // When ZOOM_OUT or FLY starts, clear collecting. The chapter pin tracking
-      // block above already marks the location as visited, so the pin will
-      // naturally transition via AnimatePresence.
+      // Album state machine: once the 300ms hold finishes we clear collecting
+      // directly, so later playback phases don't need to force a closed state.
       {
         const currentCollecting = useAnimationStore.getState().albumCollectingLocationId;
         const hasActiveSequence = activeAlbumSequenceLocationIdRef.current !== null;
@@ -859,6 +862,13 @@ function EditorContent() {
   }, [map, setPlaybackState]);
 
   const handlePause = useCallback(() => {
+    if (
+      albumVisitedTimerRef.current &&
+      activeAlbumSequenceLocationIdRef.current !== null
+    ) {
+      pendingAlbumCloseLocationIdRef.current =
+        activeAlbumSequenceLocationIdRef.current;
+    }
     clearAlbumSequenceTimersRef.current();
     engineRef.current?.pause();
     setPlaybackState("paused");
