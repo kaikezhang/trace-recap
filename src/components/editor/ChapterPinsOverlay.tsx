@@ -28,13 +28,6 @@ export default function ChapterPinsOverlay() {
 
   const [positions, setPositions] = useState<PinPosition[]>([]);
 
-  console.log(
-    "[ChapterPins] render, positions:",
-    positions.length,
-    "visited:",
-    visitedLocationIds.length,
-  );
-
   // Use refs to avoid recreating the callback when store data changes
   const locationsRef = useRef(locations);
   locationsRef.current = locations;
