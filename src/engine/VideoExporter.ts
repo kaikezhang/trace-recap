@@ -454,7 +454,11 @@ export class VideoExporter {
     if (!source) return;
 
     const breadcrumbsEnabled = useUIStore.getState().breadcrumbsEnabled;
-    if (!breadcrumbsEnabled || this.exportBreadcrumbs.length === 0) {
+    const chapterPinsEnabled = useUIStore.getState().chapterPinsEnabled;
+    // When chapter pins are enabled, visited locations are drawn on the canvas
+    // by drawChapterPins/drawVisitedChapterPin. Suppress the Mapbox breadcrumb
+    // layer to avoid rendering duplicate circle pins on top of each other.
+    if (!breadcrumbsEnabled || chapterPinsEnabled || this.exportBreadcrumbs.length === 0) {
       source.setData({ type: "FeatureCollection", features: [] });
       return;
     }
