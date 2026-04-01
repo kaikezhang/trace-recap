@@ -110,10 +110,6 @@ function EditorContent() {
   const demoLoadedRef = useRef(false);
   const prevShowPhotosRef = useRef(false);
   const prevPhotoLocationIdRef = useRef<string | null>(null);
-  const prevPhaseRef = useRef<string | null>(null);
-  const activeAlbumSequenceLocationIdRef = useRef<string | null>(null);
-  const albumCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const albumVisitedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setPlaybackState = useAnimationStore((s) => s.setPlaybackState);
   const setCurrentTime = useAnimationStore((s) => s.setCurrentTime);
@@ -133,7 +129,6 @@ function EditorContent() {
   const setCurrentGroupSegmentIndices = useAnimationStore(
     (s) => s.setCurrentGroupSegmentIndices,
   );
-  const setCurrentPhase = useAnimationStore((s) => s.setCurrentPhase);
   const setTimeline = useAnimationStore((s) => s.setTimeline);
   const setSceneTransitionProgress = useAnimationStore(
     (s) => s.setSceneTransitionProgress,
@@ -150,12 +145,9 @@ function EditorContent() {
 
   const setVisitedLocationIds = useAnimationStore((s) => s.setVisitedLocationIds);
   const setCurrentArrivalLocationId = useAnimationStore((s) => s.setCurrentArrivalLocationId);
-  const setAlbumCollectingLocationId = useAnimationStore(
-    (s) => s.setAlbumCollectingLocationId,
-  );
-  const setAlbumClosedLocationId = useAnimationStore((s) => s.setAlbumClosedLocationId);
   const addBreadcrumb = useAnimationStore((s) => s.addBreadcrumb);
   const setBreadcrumbs = useAnimationStore((s) => s.setBreadcrumbs);
+  const clearBreadcrumbs = useAnimationStore((s) => s.clearBreadcrumbs);
   const reset = useAnimationStore((s) => s.reset);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
@@ -180,60 +172,6 @@ function EditorContent() {
       ),
     [availableStageSize.height, availableStageSize.width, viewportRatio],
   );
-
-  const clearAlbumSequenceTimers = useCallback(() => {
-    if (albumCloseTimerRef.current) {
-      clearTimeout(albumCloseTimerRef.current);
-      albumCloseTimerRef.current = null;
-    }
-    if (albumVisitedTimerRef.current) {
-      clearTimeout(albumVisitedTimerRef.current);
-      albumVisitedTimerRef.current = null;
-    }
-  }, []);
-
-  const resetAlbumSequenceState = useCallback(() => {
-    clearAlbumSequenceTimers();
-    activeAlbumSequenceLocationIdRef.current = null;
-    setAlbumCollectingLocationId(null);
-    setAlbumClosedLocationId(null);
-  }, [
-    clearAlbumSequenceTimers,
-    setAlbumClosedLocationId,
-    setAlbumCollectingLocationId,
-  ]);
-
-  const startAlbumSequence = useCallback((locationId: string) => {
-    clearAlbumSequenceTimers();
-    activeAlbumSequenceLocationIdRef.current = locationId;
-    setAlbumClosedLocationId(null);
-    setAlbumCollectingLocationId(locationId);
-    setShowPhotoOverlay(true);
-    setPhotoOverlayOpacity(0);
-
-    albumCloseTimerRef.current = setTimeout(() => {
-      if (activeAlbumSequenceLocationIdRef.current !== locationId) return;
-
-      setShowPhotoOverlay(false);
-      setAlbumCollectingLocationId(null);
-      setAlbumClosedLocationId(locationId);
-      activeAlbumSequenceLocationIdRef.current = null;
-      albumCloseTimerRef.current = null;
-
-      albumVisitedTimerRef.current = setTimeout(() => {
-        if (useAnimationStore.getState().albumClosedLocationId === locationId) {
-          setAlbumClosedLocationId(null);
-        }
-        albumVisitedTimerRef.current = null;
-      }, 300);
-    }, 500);
-  }, [
-    clearAlbumSequenceTimers,
-    setAlbumClosedLocationId,
-    setAlbumCollectingLocationId,
-    setPhotoOverlayOpacity,
-    setShowPhotoOverlay,
-  ]);
 
   useEffect(() => {
     const stageViewport = stageViewportRef.current;
@@ -460,8 +398,6 @@ function EditorContent() {
       engineRef.current = null;
     }
     reset();
-    resetAlbumSequenceState();
-    prevPhaseRef.current = null;
 
     if (!map || segments.length === 0) return;
 
@@ -482,27 +418,10 @@ function EditorContent() {
       setCurrentTime(e.time);
       setCurrentSegmentIndex(e.segmentIndex);
       setCurrentGroupSegmentIndices(e.groupSegmentIndices);
-      setCurrentPhase(e.phase);
       setCurrentCityLabel(e.cityLabel);
       setCurrentCityLabelZh(e.cityLabelZh);
-
-      const previousPhase = prevPhaseRef.current;
-      const previousPhotoLocationId = prevPhotoLocationIdRef.current;
-      const shouldStartAlbumSequence =
-        previousPhase === "ARRIVE" &&
-        e.phase !== "ARRIVE" &&
-        previousPhotoLocationId !== null &&
-        activeAlbumSequenceLocationIdRef.current !== previousPhotoLocationId;
-
-      if (e.showPhotos && e.phase === "ARRIVE") {
-        setShowPhotoOverlay(true);
-        setPhotoOverlayOpacity(1);
-      } else if (shouldStartAlbumSequence) {
-        startAlbumSequence(previousPhotoLocationId);
-      } else if (!e.showPhotos && activeAlbumSequenceLocationIdRef.current === null) {
-        setShowPhotoOverlay(false);
-        setPhotoOverlayOpacity(0);
-      }
+      setShowPhotoOverlay(e.showPhotos);
+      setPhotoOverlayOpacity(e.photoOpacity);
       // Chapter pin tracking: derive visited/arrival state from current time
       // (recomputed from scratch so seek/scrub always produces correct state)
       {
@@ -602,7 +521,6 @@ function EditorContent() {
         const seg = segments[e.segmentIndex];
         prevPhotoLocationIdRef.current = seg?.toId ?? null;
       }
-      prevPhaseRef.current = e.phase;
 
       // Scene transition metadata
       setSceneTransitionProgress(e.sceneTransitionProgress);
@@ -707,38 +625,8 @@ function EditorContent() {
 
     return () => {
       engine.destroy();
-      clearAlbumSequenceTimers();
     };
-  }, [
-    addBreadcrumb,
-    clearAlbumSequenceTimers,
-    locations,
-    map,
-    reset,
-    resetAlbumSequenceState,
-    segmentTimingOverrides,
-    segments,
-    setBloomElapsedTime,
-    setCurrentArrivalLocationId,
-    setCurrentCityLabel,
-    setCurrentCityLabelZh,
-    setCurrentGroupSegmentIndices,
-    setCurrentPhase,
-    setCurrentSegmentIndex,
-    setCurrentTime,
-    setIncomingPhotoLocationId,
-    setIncomingPhotos,
-    setPhotoOverlayOpacity,
-    setPlaybackState,
-    setSceneTransitionProgress,
-    setShowPhotoOverlay,
-    setTimeline,
-    setTotalDuration,
-    setTransitionBearing,
-    setVisiblePhotos,
-    setVisitedLocationIds,
-    startAlbumSequence,
-  ]);
+  }, [map, locations, segments, segmentTimingOverrides]);
 
   const handlePlay = useCallback(() => {
     // Immediately hide all future segment layers on the map
@@ -767,28 +655,15 @@ function EditorContent() {
 
   const handleReset = useCallback(() => {
     engineRef.current?.reset();
-    clearAlbumSequenceTimers();
     reset();
     prevShowPhotosRef.current = false;
     prevPhotoLocationIdRef.current = null;
-    prevPhaseRef.current = null;
-    activeAlbumSequenceLocationIdRef.current = null;
-    setAlbumCollectingLocationId(null);
-    setAlbumClosedLocationId(null);
-  }, [
-    clearAlbumSequenceTimers,
-    reset,
-    setAlbumClosedLocationId,
-    setAlbumCollectingLocationId,
-  ]);
+  }, [reset]);
 
   const handleSeek = useCallback((progress: number) => {
     const engine = engineRef.current;
     if (!engine) return;
 
-    clearAlbumSequenceTimers();
-    setAlbumCollectingLocationId(null);
-    setAlbumClosedLocationId(null);
     engine.seekTo(progress);
 
     // Rebuild breadcrumb state for the seek position
@@ -820,16 +695,7 @@ function EditorContent() {
     // Reset transition tracking refs to match seek state
     prevShowPhotosRef.current = false;
     prevPhotoLocationIdRef.current = null;
-    prevPhaseRef.current = null;
-    activeAlbumSequenceLocationIdRef.current = null;
-  }, [
-    clearAlbumSequenceTimers,
-    setAlbumClosedLocationId,
-    setAlbumCollectingLocationId,
-    setBreadcrumbs,
-  ]);
-
-  useEffect(() => () => clearAlbumSequenceTimers(), [clearAlbumSequenceTimers]);
+  }, [setBreadcrumbs]);
 
   const handleEditLayout = useCallback((locationId: string) => {
     setEditingLocationId(locationId);

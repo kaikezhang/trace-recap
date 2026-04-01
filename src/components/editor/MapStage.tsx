@@ -159,7 +159,6 @@ export default function MapStage({
   const incomingPhotos = useAnimationStore((s) => s.incomingPhotos);
   const incomingPhotoLocationId = useAnimationStore((s) => s.incomingPhotoLocationId);
   const transitionBearing = useAnimationStore((s) => s.transitionBearing);
-  const chapterPinPositions = useAnimationStore((s) => s.chapterPinPositions);
   const visiblePhotoLocation = locations.find((location) => location.id === photoLocationId);
   const incomingLocation = locations.find((location) => location.id === incomingPhotoLocationId);
   const effectiveTransition = resolveSceneTransition(photoLayout, globalSceneTransition);
@@ -240,7 +239,6 @@ export default function MapStage({
         opacity={photoOverlayOpacity}
         bloomOrigin={bloomOrigin}
         bloomElapsedTime={bloomElapsedTime}
-        flyToPosition={photoLocationId ? chapterPinPositions[photoLocationId] ?? null : null}
         sceneTransition={effectiveTransition}
         sceneTransitionProgress={isTransitioning ? sceneTransitionProgress : undefined}
         incomingPhotos={isTransitioning ? incomingPhotos : undefined}

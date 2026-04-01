@@ -21,9 +21,6 @@ export default function ChapterPinsOverlay() {
   const playbackState = useAnimationStore((s) => s.playbackState);
   const visitedLocationIds = useAnimationStore((s) => s.visitedLocationIds);
   const currentArrivalLocationId = useAnimationStore((s) => s.currentArrivalLocationId);
-  const albumCollectingLocationId = useAnimationStore((s) => s.albumCollectingLocationId);
-  const albumClosedLocationId = useAnimationStore((s) => s.albumClosedLocationId);
-  const setChapterPinPositions = useAnimationStore((s) => s.setChapterPinPositions);
   const chapterPinsEnabled = useUIStore((s) => s.chapterPinsEnabled);
 
   const [positions, setPositions] = useState<PinPosition[]>([]);
@@ -35,10 +32,6 @@ export default function ChapterPinsOverlay() {
   visitedRef.current = visitedLocationIds;
   const arrivalRef = useRef(currentArrivalLocationId);
   arrivalRef.current = currentArrivalLocationId;
-  const collectingRef = useRef(albumCollectingLocationId);
-  collectingRef.current = albumCollectingLocationId;
-  const closedRef = useRef(albumClosedLocationId);
-  closedRef.current = albumClosedLocationId;
 
   const computePositions = useRef(() => {
     /* placeholder — replaced below */
@@ -49,8 +42,6 @@ export default function ChapterPinsOverlay() {
     const locs = locationsRef.current;
     const visited = visitedRef.current;
     const arrival = arrivalRef.current;
-    const collecting = collectingRef.current;
-    const closed = closedRef.current;
 
     const newPositions: PinPosition[] = [];
     const seenCoords = new Set<string>();
@@ -58,9 +49,7 @@ export default function ChapterPinsOverlay() {
       if (loc.isWaypoint) continue;
       const isVisited = visited.includes(loc.id);
       const isActive = loc.id === arrival;
-      const isCollecting = loc.id === collecting;
-      const isClosed = loc.id === closed;
-      if (!isVisited && !isActive && !isCollecting && !isClosed) continue;
+      if (!isVisited && !isActive) continue;
 
       // Deduplicate by coordinates — routes that revisit a city
       // (e.g. Seattle→...→Seattle) should show only one pin
@@ -76,14 +65,6 @@ export default function ChapterPinsOverlay() {
       });
     }
     setPositions(newPositions);
-    setChapterPinPositions(
-      Object.fromEntries(
-        newPositions.map((position) => [
-          position.locationId,
-          { x: position.x, y: position.y },
-        ]),
-      ),
-    );
   };
 
   // Update on map movement
@@ -104,19 +85,10 @@ export default function ChapterPinsOverlay() {
     if (!map) return;
     let prevVisited = useAnimationStore.getState().visitedLocationIds;
     let prevArrival = useAnimationStore.getState().currentArrivalLocationId;
-    let prevCollecting = useAnimationStore.getState().albumCollectingLocationId;
-    let prevClosed = useAnimationStore.getState().albumClosedLocationId;
     return useAnimationStore.subscribe((state) => {
-      if (
-        state.visitedLocationIds !== prevVisited ||
-        state.currentArrivalLocationId !== prevArrival ||
-        state.albumCollectingLocationId !== prevCollecting ||
-        state.albumClosedLocationId !== prevClosed
-      ) {
+      if (state.visitedLocationIds !== prevVisited || state.currentArrivalLocationId !== prevArrival) {
         prevVisited = state.visitedLocationIds;
         prevArrival = state.currentArrivalLocationId;
-        prevCollecting = state.albumCollectingLocationId;
-        prevClosed = state.albumClosedLocationId;
         computePositions.current();
       }
     });
@@ -132,12 +104,8 @@ export default function ChapterPinsOverlay() {
           if (!location) return null;
 
           let pinState: ChapterPinState = "future";
-          if (location.id === albumCollectingLocationId) {
-            pinState = "album-collecting";
-          } else if (location.id === albumClosedLocationId) {
-            pinState = "album-closed";
-          } else if (location.id === currentArrivalLocationId) {
-            pinState = "album-open";
+          if (location.id === currentArrivalLocationId) {
+            pinState = "active";
           } else if (visitedLocationIds.includes(location.id)) {
             pinState = "visited";
           }
