@@ -138,7 +138,7 @@ function PhotoGrid({
             {showPhotos ? (
               <PhotoFrame
                 frameStyle={photoFrameStyle}
-                photoIndex={index}
+                photoId={photo.id}
                 caption={albumCaptionsEnabled ? photo.caption : undefined}
                 className="h-full w-full"
               >
