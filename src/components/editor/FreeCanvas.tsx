@@ -7,6 +7,8 @@ import {
   DEFAULT_CAPTION_FONT_FAMILY,
 } from "@/lib/constants";
 import { useHistoryStore } from "@/stores/historyStore";
+import { useUIStore } from "@/stores/uiStore";
+import PhotoFrame from "./PhotoFrame";
 import type { FreePhotoTransform, Photo } from "@/types";
 
 const CAPTION_COLOR_PRESETS = [
@@ -364,6 +366,7 @@ export default function FreeCanvas({
   const [customColorInput, setCustomColorInput] = useState("");
   const [bgExpanded, setBgExpanded] = useState(false);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
+  const photoFrameStyle = useUIStore((s) => s.photoFrameStyle);
   const transformsRef = useRef(transforms);
   const captionElementRefs = useRef(new Map<string, HTMLElement>());
   const marqueeRectRef = useRef<MarqueeRect | null>(null);
@@ -1120,7 +1123,7 @@ export default function FreeCanvas({
       }}
       style={mapSnapshot ? { backgroundImage: `url(${mapSnapshot})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
     >
-      {orderedItems.map(({ transform, photo }) => {
+      {orderedItems.map(({ transform, photo }, photoIndex) => {
         const caption = getCaptionTransform(transform);
         const scaledCaptionFontSize = (caption.fontSize ?? defaultCaptionFontSize) * captionScale;
         const captionText = caption.text ?? photo.caption ?? "";
@@ -1158,16 +1161,22 @@ export default function FreeCanvas({
                 zIndex: transform.zIndex,
               }}
             >
-              <img
-                src={photo.url}
-                alt={photo.caption || "Photo"}
-                className="h-full w-full select-none object-cover shadow-xl"
-                draggable={false}
-                style={{
-                  borderRadius: `${borderRadius}px`,
-                  objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%`,
-                }}
-              />
+              <PhotoFrame
+                frameStyle={photoFrameStyle}
+                photoIndex={photoIndex}
+                className="h-full w-full"
+                mediaStyle={{ borderRadius: `${borderRadius}px` }}
+              >
+                <img
+                  src={photo.url}
+                  alt={photo.caption || "Photo"}
+                  className="h-full w-full select-none object-cover"
+                  draggable={false}
+                  style={{
+                    objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%`,
+                  }}
+                />
+              </PhotoFrame>
               {photoSelected ? (
                 <>
                   <div
