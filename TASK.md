@@ -1,75 +1,67 @@
-# ⚠️ DO NOT MERGE ANY PR. Create the PR and stop. DO NOT MERGE.
+# TASK: Fix All Photo Rotation Issues
 
-## Current Task: Album Redesign Phase 2 — Frame Styles + Settings Reorganization
+## ⚠️ CREATE PR AND STOP. DO NOT MERGE.
 
-### Overview
+## Reference
+Read `docs/audit-rotation.md` for full analysis.
 
-Add 5 photo frame styles to the album system and reorganize the PhotoLayoutEditor settings panel into collapsible groups.
+## Fixes Required (all 4)
 
-### Part A: Photo Frame Styles
+### Fix 1: Rotation coordinate-space bug (Priority 1)
 
-Add a new global setting `photoFrameStyle` (already exists in uiStore from Phase 1) with 5 visual styles applied to photos inside the album grid AND during PhotoOverlay display.
+File: `src/components/editor/FreeCanvas.tsx`
 
-**Frame styles to implement:**
+**Problem**: `beginRotate` computes photo center in canvas-local pixels but compares against `event.clientX/clientY` (viewport coords). Rotation pivots around a phantom point.
 
-1. **Polaroid** (default) — White border: top/left/right 6%, bottom 18% of photo size. Caption area in bottom using Caveat font. Subtle shadow. Slight random rotation ±2° seeded by photo index.
-2. **Borderless** — No border, 4px border-radius. Subtle inner shadow vignette: `inset 0 0 8px rgba(0,0,0,0.06)`.
-3. **Film Strip** — Top and bottom: dark strips with repeating square perforations. CSS `repeating-linear-gradient` on pseudo-elements.
-4. **Classic Border** — Uniform white border: 5% all sides. Clean, no rotation. Subtle shadow.
-5. **Rounded Card** — 12px border-radius, 4% white border, prominent soft shadow.
+**Fix**:
+- In `beginRotate`: get `canvasRef.current.getBoundingClientRect()`, convert photo center to client-space by adding `rect.left` and `rect.top`
+- Store client-space center in the gesture state
+- The move handler already uses `event.clientX/clientY`, so once the center is in the same space, it works
 
-**Where frame styles apply:**
-- `AlbumBook.tsx` — photos in the grid get framed
-- `PhotoOverlay.tsx` — photos during normal display (before collection) also get framed
+### Fix 2: Disable decorative frame rotation in Free mode (Priority 2)
 
-**Implementation approach:**
-- Create `src/lib/frameStyles.ts` — config objects for each frame style (border sizes, shadows, border-radius, etc.)
-- Create `src/components/editor/PhotoFrame.tsx` — wrapper component that applies frame style around a photo `<img>`
-- Use `PhotoFrame` in both `AlbumBook` grid cells and `PhotoOverlay` photo rendering
-- Load Google Font "Caveat" for Polaroid caption area
+Files: `src/components/editor/PhotoFrame.tsx`, `src/components/editor/FreeCanvas.tsx`, `src/components/editor/PhotoOverlay.tsx`
 
-### Part B: Frame Style Selector in PhotoLayoutEditor
+**Problem**: `PhotoFrame` adds a random ±2° polaroid tilt via `getPhotoFrameRotation()`. In Free mode, this stacks with user's manual rotation, making snap-to-0° look crooked.
 
-Add a "Frame Style" selector in the left panel of PhotoLayoutEditor, right after "Photo Style":
-- 5 horizontal pill buttons (same pattern as Photo Style selector)
-- Icons: use Square for Polaroid, Image for Borderless, Film for Film Strip, Camera for Classic Border, Layers for Rounded Card (from lucide-react)
-- Read/write from `useUIStore` `photoFrameStyle` / `setPhotoFrameStyle`
+**Fix**:
+- Add a prop `disableDecorativeRotation?: boolean` to `PhotoFrame`
+- When true, skip the `getPhotoFrameRotation` transform
+- Pass `disableDecorativeRotation={true}` in `FreeCanvas` 
+- Pass `disableDecorativeRotation={displayIsFreeMode}` in `PhotoOverlay` (both bloom and normal paths)
 
-### Part C: Settings Panel Reorganization
+### Fix 3: Stabilize decorative tilt seeding (Priority 3)
 
-The left panel currently has many flat settings. Reorganize into collapsible groups using `<details>`/`<summary>` or a custom collapsible:
+Files: `src/components/editor/PhotoOverlay.tsx`, `src/lib/frameStyles.ts`
 
-**Group 1: Layout** (default open)
-- Layout template selector (grid, collage, etc.)
-- Refresh random button (when applicable)
+**Problem**: Editor uses `stablePhotoIndex` (photos array order) but PhotoOverlay uses render-loop index (zIndex-sorted). Same photo gets different tilt in editor vs playback.
 
-**Group 2: Style** (default open)
-- Photo Style (classic, kenburns, bloom, portal)
-- Frame Style (NEW — polaroid, borderless, film-strip, classic-border, rounded-card)
-- Caption Style (font, size)
+**Fix**:
+- Change `getPhotoFrameRotation` to accept a `photoId: string` instead of `photoIndex: number`, and derive the seed from the id
+- OR: in PhotoOverlay, create a stable index map from photos array (same pattern as FreeCanvas's `stablePhotoIndex`) and use that for `photoIndex`
+- Choose whichever approach is simpler. The id-based approach is more robust.
 
-**Group 3: Animation** (default closed)
-- In Animation
-- Out Animation
-- Scene Transition
+### Fix 4: Soften snap behavior (Priority 4)
 
-Apply the same grouping to mobile layout too.
+File: `src/components/editor/FreeCanvas.tsx`
 
-### Implementation Files
+**Fix**:
+- Reduce `ROTATION_SNAP_THRESHOLD` from `5` to `3`
+- Invert shift-key: make rotation free by default, Shift ENABLES snap (more intuitive for precision work)
+- That means: remove the `if (!event.shiftKey)` guard and change to `if (event.shiftKey)` for snap
 
-**New files:**
-- `src/lib/frameStyles.ts` — frame style configs
-- `src/components/editor/PhotoFrame.tsx` — frame wrapper component
+## Testing
 
-**Modified files:**
-- `src/components/editor/AlbumBook.tsx` — wrap grid photos with `PhotoFrame`
-- `src/components/editor/PhotoOverlay.tsx` — wrap displayed photos with `PhotoFrame`
-- `src/components/editor/PhotoLayoutEditor.tsx` — add Frame Style selector + reorganize into collapsible groups
-- `src/app/layout.tsx` — add Google Font "Caveat" import (or use `next/font/google`)
+After all fixes:
+1. Open Free mode editor
+2. Rotate a photo — should rotate smoothly around its visible center
+3. With Shift held, rotation should snap to 0/90/180/-90
+4. Without Shift, rotation should be completely free
+5. Polaroid frame in Free mode should NOT add extra tilt
+6. Switch to Grid/Collage layout — polaroid tilt should still work there
+7. Play animation — photo angles should match what the editor showed
 
-### Rules
-- ⚠️ **DO NOT MERGE.** Create a PR on `feat/album-redesign-phase2` and stop.
-- Run `npx tsc --noEmit` before committing
-- Commit after each logical unit
-- Keep all existing functionality working
-- Use existing UI patterns (pill buttons, indigo active state, etc.)
+## Constraints
+- Do NOT change any non-rotation logic
+- Build must pass: `npx next build`
+- Create a PR to main when done

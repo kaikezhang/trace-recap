@@ -367,31 +367,36 @@ export default function FreeCanvas({
   const [bgExpanded, setBgExpanded] = useState(false);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
   const photoFrameStyle = useUIStore((s) => s.photoFrameStyle);
+  // Local gesture state: during drag/rotate/resize we update this instead of
+  // calling onTransformsChange every frame. Committed on pointerup.
+  const [liveTransforms, setLiveTransforms] = useState<FreePhotoTransform[] | null>(null);
   const transformsRef = useRef(transforms);
   const captionElementRefs = useRef(new Map<string, HTMLElement>());
   const marqueeRectRef = useRef<MarqueeRect | null>(null);
   const didDragRef = useRef(false);
 
   useEffect(() => {
-    transformsRef.current = transforms;
-  }, [transforms]);
+    transformsRef.current = liveTransforms ?? transforms;
+  }, [liveTransforms, transforms]);
 
   const photoMap = useMemo(
     () => new Map(photos.map((photo) => [photo.id, photo])),
     [photos],
   );
 
+  // Use liveTransforms during gestures, fall back to prop transforms
+  const effectiveTransforms = liveTransforms ?? transforms;
   const orderedItems = useMemo(
     () =>
-      [...transforms]
+      [...effectiveTransforms]
         .filter((transform) => photoMap.has(transform.photoId))
         .sort((a, b) => a.zIndex - b.zIndex)
         .map((transform) => ({ transform, photo: photoMap.get(transform.photoId)! })),
-    [photoMap, transforms],
+    [photoMap, effectiveTransforms],
   );
   const transformMap = useMemo(
-    () => new Map(transforms.map((transform) => [transform.photoId, transform])),
-    [transforms],
+    () => new Map(effectiveTransforms.map((transform) => [transform.photoId, transform])),
+    [effectiveTransforms],
   );
   const emptyIds = useMemo<string[]>(() => [], []);
   const selectedPhotoIds = selection?.photoIds ?? emptyIds;
@@ -449,6 +454,27 @@ export default function FreeCanvas({
     transformMap,
   ]);
 
+  /** Update transforms locally during a gesture — no store write, only local re-render */
+  const updateTransformsLocal = useCallback(
+    (
+      updater: (
+        current: FreePhotoTransform[],
+      ) => FreePhotoTransform[],
+    ) => {
+      const next = updater(transformsRef.current);
+      transformsRef.current = next;
+      setLiveTransforms(next);
+    },
+    [],
+  );
+
+  /** Commit current transforms to the store (call on gesture end) */
+  const commitTransforms = useCallback(() => {
+    onTransformsChange(transformsRef.current);
+    setLiveTransforms(null);
+  }, [onTransformsChange]);
+
+  /** Update transforms and immediately write to store (for non-gesture changes) */
   const updateTransforms = useCallback(
     (
       updater: (
@@ -827,7 +853,7 @@ export default function FreeCanvas({
           );
         }
 
-        updateTransforms((current) =>
+        updateTransformsLocal((current) =>
           current.map((transform) => {
             const photoStart = activeGesture.photoStarts.find(
               (photoTransform) => photoTransform.photoId === transform.photoId,
@@ -876,7 +902,7 @@ export default function FreeCanvas({
           }
         }
 
-        updateTransforms((current) =>
+        updateTransformsLocal((current) =>
           current.map((transform) =>
             transform.photoId === activeGesture.photoId
               ? { ...transform, rotation: nextAngle }
@@ -933,7 +959,7 @@ export default function FreeCanvas({
       const nextX = nextCenterX / containerSize.w - nextWidth / (2 * containerSize.w);
       const nextY = nextCenterY / containerSize.h - nextHeight / (2 * containerSize.h);
 
-      updateTransforms((current) =>
+      updateTransformsLocal((current) =>
         current.map((transform) =>
           transform.photoId === activeGesture.photoId
             ? {
@@ -968,6 +994,11 @@ export default function FreeCanvas({
         setSelection(createSingleSelection(activeGesture.pointerTarget));
       }
 
+      // Commit local transforms to store on gesture end
+      if (activeGesture.type !== "marquee-select") {
+        commitTransforms();
+      }
+
       didDragRef.current = false;
       setActiveGesture(null);
     };
@@ -997,11 +1028,12 @@ export default function FreeCanvas({
     };
   }, [
     activeGesture,
+    commitTransforms,
     containerSize.h,
     containerSize.w,
     getCaptionBounds,
     getSelectionFromMarquee,
-    updateTransforms,
+    updateTransformsLocal,
   ]);
 
   useEffect(() => {
@@ -1091,7 +1123,7 @@ export default function FreeCanvas({
   }, []);
   const effectiveW = measuredSize.w > 0 ? measuredSize.w : containerSize.w;
   const captionScale = effectiveW > 0 ? effectiveW / 1000 : 1;
-  const maxZIndex = transforms.reduce((highest, transform) => Math.max(highest, transform.zIndex), 0);
+  const maxZIndex = effectiveTransforms.reduce((highest, transform) => Math.max(highest, transform.zIndex), 0);
   const showCaptionToolbar = Boolean(selectedCaptionToolbarState) && !editingCaptionId;
 
   return (
