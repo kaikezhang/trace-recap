@@ -224,13 +224,9 @@ function EditorContent() {
       setVisiblePhotoLocationId(null);
       activeAlbumSequenceLocationIdRef.current = null;
 
-      clearAlbumSequenceTimers();
-      albumVisitedTimerRef.current = setTimeout(() => {
-        if (useAnimationStore.getState().albumClosedLocationId === locationId) {
-          setAlbumClosedLocationId(null);
-        }
-        albumVisitedTimerRef.current = null;
-      }, 300);
+      // Don't clear albumClosedLocationId on a timer — it will be cleared
+      // when the next group's FLY phase starts (detected in the progress callback).
+      // This keeps the closed album pin visible during the departure HOVER.
     },
     [
       clearAlbumSequenceTimers,
@@ -638,6 +634,15 @@ function EditorContent() {
 
         setVisitedLocationIds([...new Set(newVisited)]);
         setCurrentArrivalLocationId(newArrival);
+      }
+
+      // Clear album-closed state when we start flying away (after HOVER).
+      // This triggers the album-closed → visited transition at the right moment.
+      if (
+        (e.phase === "ZOOM_OUT" || e.phase === "FLY") &&
+        useAnimationStore.getState().albumClosedLocationId !== null
+      ) {
+        setAlbumClosedLocationId(null);
       }
 
       // Drive bloom elapsed time from engine timeline (not wall-clock)
