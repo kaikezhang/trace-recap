@@ -44,15 +44,19 @@ export default function ChapterPinsOverlay() {
     const arrival = arrivalRef.current;
 
     const newPositions: PinPosition[] = [];
-    const seen = new Set<string>();
+    const seenCoords = new Set<string>();
     for (const loc of locs) {
       if (loc.isWaypoint) continue;
-      if (seen.has(loc.id)) continue;
       const isVisited = visited.includes(loc.id);
       const isActive = loc.id === arrival;
       if (!isVisited && !isActive) continue;
 
-      seen.add(loc.id);
+      // Deduplicate by coordinates — routes that revisit a city
+      // (e.g. Seattle→...→Seattle) should show only one pin
+      const coordKey = `${loc.coordinates[0].toFixed(4)},${loc.coordinates[1].toFixed(4)}`;
+      if (seenCoords.has(coordKey)) continue;
+      seenCoords.add(coordKey);
+
       const point = map.project(loc.coordinates);
       newPositions.push({
         locationId: loc.id,
