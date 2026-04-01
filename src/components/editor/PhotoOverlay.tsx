@@ -783,7 +783,7 @@ export default function PhotoOverlay({
                       <img
                         src={photo.url}
                         alt={photo.caption || ""}
-                        className="h-full w-full object-contain"
+                        className="h-full w-full object-cover"
                         style={{ objectPosition: `${fp.x * 100}% ${fp.y * 100}%` }}
                       />
                     </PhotoFrame>
@@ -945,7 +945,7 @@ export default function PhotoOverlay({
                       <img
                         src={photo.url}
                         alt={photo.caption || ""}
-                        className="h-full w-full object-contain"
+                        className="h-full w-full object-cover"
                         style={{
                           objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
                         }}
@@ -1103,7 +1103,7 @@ export default function PhotoOverlay({
                         <img
                           src={photo.url}
                           alt={photo.caption || ""}
-                          className="h-full w-full object-contain"
+                          className="h-full w-full object-cover"
                           style={{
                             objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
                           }}
