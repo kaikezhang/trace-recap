@@ -153,7 +153,7 @@ export default function TopToolbar() {
         const routeText = await routeFile.async("text");
         const data: ImportRouteData = JSON.parse(routeText);
 
-        // Convert photo file references to blob URLs
+        // Convert photo file references to data URLs for persistence safety
         if (data.locations) {
           for (const loc of data.locations) {
             if (loc.photos) {
@@ -162,7 +162,13 @@ export default function TopToolbar() {
                   const photoFile = zip.file(photo.url);
                   if (photoFile) {
                     const blob = await photoFile.async("blob");
-                    photo.url = URL.createObjectURL(blob);
+                    // Convert to data URL immediately — blob URLs die on page reload
+                    const dataUrl = await new Promise<string>((resolve) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => resolve(reader.result as string);
+                      reader.readAsDataURL(blob);
+                    });
+                    photo.url = dataUrl;
                   }
                 }
               }

@@ -592,15 +592,24 @@ export function invalidateSerializationCache(): void {
   }
 }
 
-/** Convert a non-data URL (blob:, relative path, etc.) to a data: URL for persistence (cached) */
-async function blobUrlToDataUrl(url: string): Promise<string> {
+/** Convert a non-data URL (blob:, relative path, etc.) to a data: URL for persistence (cached).
+ *  Returns null if conversion fails — callers must handle missing photos gracefully
+ *  rather than persisting broken URLs. */
+async function blobUrlToDataUrl(url: string): Promise<string | null> {
   if (url.startsWith("data:")) return url;
   const cached = blobToDataUrlCache.get(url);
   if (cached) return cached;
   try {
     const resp = await fetch(url);
-    if (!resp.ok) return url;
+    if (!resp.ok) {
+      console.warn(`[persist] Failed to fetch photo for persistence (${resp.status}): ${url.slice(0, 80)}`);
+      return null;
+    }
     const blob = await resp.blob();
+    if (blob.size < 100) {
+      console.warn(`[persist] Photo too small (${blob.size}B), likely broken: ${url.slice(0, 80)}`);
+      return null;
+    }
     const dataUrl = await new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
@@ -608,8 +617,9 @@ async function blobUrlToDataUrl(url: string): Promise<string> {
     });
     blobToDataUrlCache.set(url, dataUrl);
     return dataUrl;
-  } catch {
-    return url;
+  } catch (err) {
+    console.warn(`[persist] Failed to convert photo to data URL: ${url.slice(0, 80)}`, err);
+    return null;
   }
 }
 
@@ -621,11 +631,20 @@ async function serializeLocation(loc: Location): Promise<SerializedLocation> {
     isWaypoint: loc.isWaypoint ?? false,
     ...(loc.photos.length > 0
       ? {
-          photos: await Promise.all(loc.photos.map(async (photo) => ({
-            url: await blobUrlToDataUrl(photo.url),
-            caption: photo.caption,
-            ...(photo.focalPoint ? { focalPoint: photo.focalPoint } : {}),
-          }))),
+          photos: (await Promise.all(loc.photos.map(async (photo) => {
+            const persistedUrl = await blobUrlToDataUrl(photo.url);
+            if (!persistedUrl) {
+              // Photo data is not fetchable (blob revoked / relative path 404).
+              // Skip it rather than persisting a broken URL that can never load.
+              console.warn(`[persist] Dropping un-persistable photo ${photo.id} from location ${loc.name}`);
+              return null;
+            }
+            return {
+              url: persistedUrl,
+              caption: photo.caption,
+              ...(photo.focalPoint ? { focalPoint: photo.focalPoint } : {}),
+            };
+          }))).filter((p): p is NonNullable<typeof p> => p !== null),
         }
       : {}),
     ...(loc.photoLayout

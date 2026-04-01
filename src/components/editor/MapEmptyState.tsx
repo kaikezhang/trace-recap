@@ -37,7 +37,13 @@ export default function MapEmptyState({
                   const photoFile = zip.file(photo.url);
                   if (photoFile) {
                     const blob = await photoFile.async("blob");
-                    photo.url = URL.createObjectURL(blob);
+                    // Convert to data URL immediately — blob URLs die on page reload
+                    const dataUrl = await new Promise<string>((resolve) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => resolve(reader.result as string);
+                      reader.readAsDataURL(blob);
+                    });
+                    photo.url = dataUrl;
                   }
                 }
               }

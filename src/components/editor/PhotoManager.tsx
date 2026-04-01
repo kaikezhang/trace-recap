@@ -26,8 +26,13 @@ async function processImageFiles(
     }
     // Compress: resize to max 1920px + JPEG 80% → typically 100-300KB per photo
     const compressed = await compressImage(file);
-    const url = URL.createObjectURL(compressed);
-    addPhoto(locationId, { url });
+    // Convert directly to data URL for persistence safety — blob URLs die on page reload
+    const dataUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(compressed);
+    });
+    addPhoto(locationId, { url: dataUrl });
   }
 }
 
