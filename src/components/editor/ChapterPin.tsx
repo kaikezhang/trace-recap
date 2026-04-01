@@ -329,10 +329,9 @@ export default function ChapterPin({
           {isVisited ? (
             <motion.div
               key="visited"
-              initial={{ opacity: 0, scale: 0.94, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: -4 }}
-              transition={VISITED_TRANSITION}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4 }}
               className="flex flex-col items-center"
             >
               <VisitedPin location={location} />
@@ -342,7 +341,7 @@ export default function ChapterPin({
               key="album"
               initial={{ opacity: 0, scale: 0.94, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.88, y: -6 }}
+              exit={{ opacity: 0, scale: 0.5 }}
               transition={SPRING_TRANSITION}
               className="flex flex-col items-center"
             >
