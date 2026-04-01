@@ -18,6 +18,19 @@ interface AlbumBookProps {
   collecting: boolean;
 }
 
+const ALBUM_ENTRANCE_TRANSITION = {
+  type: "spring" as const,
+  stiffness: 260,
+  damping: 24,
+};
+
+const COLLECTING_MOTION_TRANSITION = {
+  rotate: { duration: 0.5, ease: [0.4, 0, 0.2, 1] as const },
+  y: { duration: 0.5, ease: [0.4, 0, 0.2, 1] as const },
+  scale: ALBUM_ENTRANCE_TRANSITION,
+  opacity: ALBUM_ENTRANCE_TRANSITION,
+};
+
 function Spine({ config }: { config: AlbumStyleConfig }) {
   if (config.spineSpiral) {
     return (
@@ -193,13 +206,11 @@ export default function AlbumBook({
       className="relative"
       animate={
         collecting
-          ? { rotate: -1.5, y: [0, -3, 0], scale: [1, 1.015, 1] }
-          : { rotate: -3, y: 0, scale: 1 }
+          ? { rotate: -1.5, y: [0, -3, 0], scale: 1, opacity: 1 }
+          : { rotate: -3, y: 0, scale: 1, opacity: 1 }
       }
       transition={
-        collecting
-          ? { duration: 0.5, ease: [0.4, 0, 0.2, 1] }
-          : { type: "spring", stiffness: 260, damping: 24 }
+        collecting ? COLLECTING_MOTION_TRANSITION : ALBUM_ENTRANCE_TRANSITION
       }
     >
       <div
