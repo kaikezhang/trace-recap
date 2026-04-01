@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Location } from "@/types";
 
@@ -13,7 +14,7 @@ export type ChapterPinState =
 interface ChapterPinProps {
   location: Location;
   state: ChapterPinState;
-  position: { x: number; y: number };
+  registerRef: (locationId: string, el: HTMLDivElement | null) => void;
 }
 
 const SPRING_TRANSITION = {
@@ -268,59 +269,70 @@ function VisitedPin({ location }: { location: Location }) {
 export default function ChapterPin({
   location,
   state,
-  position,
+  registerRef,
 }: ChapterPinProps) {
   if (state === "future") return null;
 
   const isVisited = state === "visited";
 
+  // Merge the registerRef callback with the DOM element
+  const refCallback = useCallback(
+    (el: HTMLDivElement | null) => {
+      registerRef(location.id, el);
+    },
+    [location.id, registerRef],
+  );
+
   return (
-    <motion.div
-      layout
-      initial={{ scale: 0.85, opacity: 0 }}
-      animate={{
-        scale: isVisited ? 0.72 : 1,
-        opacity: isVisited ? 0.5 : 1,
-        y: isVisited ? 8 : 0,
-      }}
-      transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
-      className="pointer-events-none absolute"
+    <div
+      ref={refCallback}
+      className="pointer-events-none absolute left-0 top-0"
       style={{
-        left: position.x,
-        top: position.y,
-        transform: "translate(-50%, -100%)",
+        /* position is set via transform by ChapterPinsOverlay (DOM-direct) */
+        willChange: "transform",
         zIndex: isVisited ? 5 : 15,
       }}
     >
-      <AnimatePresence mode="sync" initial={false}>
-        <motion.div
-          key={state}
-          initial={{ opacity: 0, scale: 0.94, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.94, y: -4 }}
-          transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
-          className="flex flex-col items-center"
-        >
-          {(state === "album-open" || state === "album-collecting") && (
-            <>
-              <OpenAlbum
-                location={location}
-                collecting={state === "album-collecting"}
-              />
-              <div className="mt-1 h-2 w-px bg-stone-400/55" />
-            </>
-          )}
+      <motion.div
+        layout
+        initial={{ scale: 0.85, opacity: 0 }}
+        animate={{
+          scale: isVisited ? 0.72 : 1,
+          opacity: isVisited ? 0.5 : 1,
+          y: isVisited ? 8 : 0,
+        }}
+        transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
+      >
+        <AnimatePresence mode="sync" initial={false}>
+          <motion.div
+            key={state}
+            initial={{ opacity: 0, scale: 0.94, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: -4 }}
+            transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
+            className="flex flex-col items-center"
+          >
+            {(state === "album-open" || state === "album-collecting") && (
+              <>
+                <OpenAlbum
+                  location={location}
+                  collecting={state === "album-collecting"}
+                />
+                <div className="mt-1 h-2 w-px bg-stone-400/55" />
+              </>
+            )}
 
-          {state === "album-closed" && (
-            <>
-              <ClosedAlbum location={location} />
-              <div className="mt-1 h-2 w-px bg-stone-400/55" />
-            </>
-          )}
+            {state === "album-closed" && (
+              <>
+                <ClosedAlbum location={location} />
+                <div className="mt-1 h-2 w-px bg-stone-400/55" />
+              </>
+            )}
 
-          {state === "visited" && <VisitedPin location={location} />}
-        </motion.div>
-      </AnimatePresence>
-    </motion.div>
+            {state === "visited" && <VisitedPin location={location} />}
+          </motion.div>
+        </AnimatePresence>
+      </motion.div>
+    </div>
   );
 }
