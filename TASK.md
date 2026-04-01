@@ -1,91 +1,77 @@
-# TASK: Deep Audit — WYSIWYG Consistency Across 5 Rendering Surfaces
+# TASK: Export Video Must Render PhotoFrame Styles
 
-## ⚠️ DO NOT MAKE CODE CHANGES. AUDIT AND DOCUMENT ONLY.
+## ⚠️ CREATE PR AND STOP. DO NOT MERGE.
 
-## Context
+## Reference
+Read `docs/audit-wysiwyg.md` — discrepancy #2, #5, #9.
 
-Users see photos rendered in 5 different places. These should look IDENTICAL (WYSIWYG), but there are observable differences. We need to find every source of inconsistency.
+## Problem
 
-## The 5 Rendering Surfaces
+`VideoExporter` does not use `PhotoFrame` or read `photoFrameStyle`. It has its own canvas drawing that only special-cases `layout.template === "polaroid"`. All other frame styles (borderless, film-strip, classic-border, rounded-card) are ignored. This means:
 
-1. **PhotoLayoutEditor Preview** (non-Free modes: Grid/Collage/etc)
-   - Component: `PhotoOverlay` inside `PhotoLayoutEditor`
-   - Props: `containerMode="parent"`, `visible={true}`, `opacity={previewOpacity}`
-   - Container: fitted to preview panel with aspect ratio
+1. Frame padding, background color, shadow, outer border radius are missing in export
+2. Film strip perforations are missing
+3. Polaroid inline caption typography doesn't match the DOM component
+4. Decorative polaroid rotation is missing
+5. Free-mode caption backgrounds and styling are lost
+6. Non-free caption pill styling doesn't match
 
-2. **Free Mode Editor Preview**
-   - Component: `FreeCanvas` inside `PhotoLayoutEditor`
-   - Container: 95% × 88% inset of preview panel
-   - Transforms: `effectiveFreeTransforms` (reconciled from layout + fallback)
+## What to Fix
 
-3. **Scrubber/Paused Preview** (drag progress bar while paused)
-   - Component: `PhotoOverlay` inside `MapStage`/`EditorLayout`
-   - Props: `containerMode="viewport"`, driven by animation timeline
-   - Container: viewport-sized with aspect ratio constraint
+### Step 1: Pass `photoFrameStyle` to VideoExporter
 
-4. **Playing Animation**
-   - Same `PhotoOverlay` as #3 but with live animation (enter/exit/kenburns/bloom/portal)
-   - Transitions between locations with scene transitions
+- `ExportDialog` must read `photoFrameStyle` from `useUIStore` and pass it in export settings
+- Add `photoFrameStyle` to the export settings type in `src/types/index.ts` if needed
+- `VideoExporter` constructor must accept and store it
 
-5. **Video Export**
-   - Component: Server-side frame capture or client-side canvas
-   - File: `src/engine/VideoExporter.ts` or `/api/encode-video/frame/route.ts`
-   - Fixed resolution, may have different pixel density
+### Step 2: Implement frame rendering in canvas
 
-## What to Audit
+In `VideoExporter.drawPhotos()` and `drawSceneTransitionPhotos()`, for each photo:
 
-For EACH of these areas, trace the complete rendering path and document:
+Read the frame config from `PHOTO_FRAME_STYLE_CONFIGS[photoFrameStyle]`:
+- `framePadding` — parse the CSS padding string ("6% 6% 18% 6%") into top/right/bottom/left percentages
+- `frameBackground` — fill rect behind the photo with this color
+- `outerBorderRadius` — clip the outer frame with rounded corners
+- `mediaBorderRadius` — clip the photo media with its own radius
+- `frameShadow` — render shadow (can approximate with canvas shadow APIs)
 
-### A. Container Sizing
-- What determines the container dimensions?
-- How is aspect ratio applied?
-- What is the photo area inset (the 95%×88% area)?
-- Are there rounding differences between surfaces?
+For **film-strip** style:
+- Draw the dark strips at top/bottom with perforation pattern
 
-### B. Layout Computation
-- How are photo rects computed? (computeAutoLayout / computeTemplateLayout / freeTransforms)
-- Are the same inputs (photos, layout, containerAspect, gap, width) used everywhere?
-- Is `containerAspect` computed the same way in all surfaces?
+For **polaroid** style:
+- Draw the off-white frame with thick bottom padding
+- Render inline caption in the bottom area using `inlineCaptionFontFamily`, `inlineCaptionFontSize`, `inlineCaptionColor`
+- Apply decorative rotation via `getPhotoFrameRotation()` (but respect `disableDecorativeRotation` for free mode)
 
-### C. Photo Frame Rendering
-- Which surfaces use PhotoFrame? Which don't?
-- Is `photoFrameStyle` read from the same source?
-- Is `borderRadius` applied consistently?
-- Is decorative rotation (polaroid tilt) handled the same way?
-- Does `disableDecorativeRotation` apply correctly in Free mode across all surfaces?
+For **borderless** style:
+- Minimal padding, add vignette shadow overlay
 
-### D. Caption Rendering
-- Is caption positioning (offsetX/offsetY) normalized the same way?
-- Is caption font scaling (captionScale = containerW / 1000) consistent?
-- Are free-mode caption styles (color, bgColor, fontFamily) preserved across all surfaces?
+For **classic-border** and **rounded-card**:
+- White frame with appropriate padding and border radius
 
-### E. Photo Sizing & Object Fit
-- Is `object-cover` vs `object-contain` used consistently?
-- Is `object-position` (from focalPoint) applied everywhere?
-- Are photos cropped the same way?
+### Step 3: Fix caption rendering in export
 
-### F. Z-Index Ordering
-- Is z-index sorting consistent between FreeCanvas and PhotoOverlay?
-- Does the order match in export?
+- **Free-mode captions**: read `bgColor`, `color`, `fontFamily`, `fontSize`, `rotation` from freeTransform caption data. Draw background rect + styled text.
+- **Non-free captions**: render the same pill-style caption (rounded rect background + white text) that PhotoOverlay uses.
+- **Polaroid inline captions**: let the frame handle it (Step 2), don't double-render.
 
-### G. Animation State at Rest
-- When animation is "at rest" (photo fully visible, no transition), does it look exactly like the editor?
-- Are there residual transforms from enter animation (rotation, scale, offset)?
-- Does `rotate: rotation` in PhotoOverlay match `transform: rotate(${rotation}deg)` in FreeCanvas?
+### Step 4: Apply decorative rotation
 
-### H. Coordinate Normalization
-- Are all positions stored as 0-1 fractions?
-- Are they converted to pixels the same way?
-- Is the reference container size the same?
+- For non-free mode with polaroid frame: apply `getPhotoFrameRotation(photoFrameStyle, photoIndex)` rotation
+- For free mode: skip decorative rotation (user controls rotation directly)
 
-## Deliverable
+## Testing
 
-Write findings to `docs/audit-wysiwyg.md` with:
+After fixes:
+1. Set frame style to Polaroid → export video → frames should have white border with thick bottom
+2. Set frame style to Film Strip → export → should see dark strips with perforations
+3. Set frame style to Borderless → export → minimal frame, vignette visible
+4. Free mode with custom caption colors → export → caption backgrounds preserved
+5. Non-free mode with captions → export → pill-style caption background visible
 
-1. **Comparison matrix**: 5 surfaces × each audit area (A-H), noting match/mismatch
-2. **Specific discrepancies found**: exact code locations, what differs, and why
-3. **Impact assessment**: which mismatches are most user-visible
-4. **Root cause classification**: (a) different code paths, (b) different container math, (c) different props, (d) timing/animation residuals
-5. **Do NOT propose fixes** — just document the problems precisely
+## Constraints
 
-Focus on OBSERVABLE differences, not theoretical ones. If two code paths produce identical output, note that they match even if the code is different.
+- Import `PHOTO_FRAME_STYLE_CONFIGS` and `getPhotoFrameRotation` from `@/lib/frameStyles`
+- Do NOT change PhotoOverlay, FreeCanvas, or PhotoFrame components
+- Build must pass: `npx next build`
+- Create a PR to main when done

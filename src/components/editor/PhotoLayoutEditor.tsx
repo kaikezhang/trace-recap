@@ -57,6 +57,7 @@ import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS, resolvePhotoStyle 
 import { SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
 import { computeAutoLayout, computeTemplateLayout, computedRectsToFreeTransforms, type PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import { CAPTION_FONT_OPTIONS, DEFAULT_CAPTION_FONT_FAMILY } from "@/lib/constants";
+import { getPhotoFrameRotation } from "@/lib/frameStyles";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
 import FreeCanvas, { type FreeCanvasInitialGesture } from "./FreeCanvas";
@@ -1034,7 +1035,27 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       if (!config) return;
       useHistoryStore.getState().pushState();
       if (style === "free") {
-        updateLayout({ mode: "free", freeTransforms: effectiveFreeTransforms });
+        // Bake visual rotation into free transforms so switching to Free mode
+        // doesn't visually change photo positions or tilts.
+        // PhotoOverlay adds a fallback rotation + PhotoFrame adds decorative rotation;
+        // we merge both into transform.rotation so Free mode (which disables
+        // decorative rotation) looks identical to the previous layout.
+        const total = effectiveFreeTransforms.length;
+        const bakedTransforms = effectiveFreeTransforms.map((t, index) => {
+          // Only bake if the transform doesn't already have a user-set rotation
+          // (i.e. it came from computedRectsToFreeTransforms with rect.rotation or 0)
+          const overlayFallback = t.rotation !== 0
+            ? 0 // already has rotation from scatter/polaroid template
+            : total <= 3
+              ? (index === 0 ? -2 : index === total - 1 ? 2 : 0)
+              : (index % 2 === 0 ? -1.5 : 1.5);
+          const frameDecorativeRotation = getPhotoFrameRotation(photoFrameStyle, t.photoId);
+          return {
+            ...t,
+            rotation: t.rotation + overlayFallback + frameDecorativeRotation,
+          };
+        });
+        updateLayout({ mode: "free", freeTransforms: bakedTransforms });
         return;
       }
       if (config.template === "auto") {
@@ -1051,7 +1072,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
         });
       }
     },
-    [effectiveFreeTransforms, layout.layoutSeed, updateLayout]
+    [effectiveFreeTransforms, layout.layoutSeed, photoFrameStyle, updateLayout]
   );
 
   const refreshRandomLayout = useCallback(() => {
@@ -1140,13 +1161,21 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     (gesture: FreeCanvasInitialGesture) => {
       setInitialFreeGesture(gesture);
       if (layout.mode !== "free") {
-        updateLayout({
-          mode: "free",
-          freeTransforms: effectiveFreeTransforms,
+        // Bake visual rotation (same as handleStyleSelect "free" path)
+        const total = effectiveFreeTransforms.length;
+        const bakedTransforms = effectiveFreeTransforms.map((t, index) => {
+          const overlayFallback = t.rotation !== 0
+            ? 0
+            : total <= 3
+              ? (index === 0 ? -2 : index === total - 1 ? 2 : 0)
+              : (index % 2 === 0 ? -1.5 : 1.5);
+          const frameDecorativeRotation = getPhotoFrameRotation(photoFrameStyle, t.photoId);
+          return { ...t, rotation: t.rotation + overlayFallback + frameDecorativeRotation };
         });
+        updateLayout({ mode: "free", freeTransforms: bakedTransforms });
       }
     },
-    [effectiveFreeTransforms, layout.mode, updateLayout],
+    [effectiveFreeTransforms, layout.mode, photoFrameStyle, updateLayout],
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
