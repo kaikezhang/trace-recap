@@ -56,7 +56,7 @@ import { CAPTION_FONT_OPTIONS, DEFAULT_CAPTION_FONT_FAMILY } from "@/lib/constan
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
 import FreeCanvas, { type FreeCanvasInitialGesture } from "./FreeCanvas";
-import type { FreePhotoTransform, Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
+import type { FreePhotoTransform, Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoFrameStyle, PhotoStyle, SceneTransition } from "@/types";
 
 interface PhotoLayoutEditorProps {
   location: Location;
@@ -111,6 +111,14 @@ const PHOTO_STYLE_OPTIONS: { value: PhotoStyle; label: string; icon: typeof Came
   { value: "kenburns", label: "Ken Burns", icon: ScanEye },
   { value: "bloom", label: "Bloom", icon: Flower2 },
   { value: "portal", label: "Portal", icon: Aperture },
+];
+
+const PHOTO_FRAME_STYLE_OPTIONS: { value: PhotoFrameStyle; label: string; icon: typeof Camera }[] = [
+  { value: "polaroid", label: "Polaroid", icon: Square },
+  { value: "borderless", label: "Borderless", icon: ImageIcon },
+  { value: "film-strip", label: "Film Strip", icon: Film },
+  { value: "classic-border", label: "Classic Border", icon: Camera },
+  { value: "rounded-card", label: "Rounded Card", icon: Layers },
 ];
 
 function getOrderedPhotos(photos: Photo[], order: string[]): Photo[] {
@@ -396,12 +404,52 @@ function AnimationSelectorSection({
   );
 }
 
+function FrameStyleSelectorSection({
+  selectedStyle,
+  onSelect,
+}: {
+  selectedStyle: PhotoFrameStyle;
+  onSelect: (style: PhotoFrameStyle) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+        Frame Style
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {PHOTO_FRAME_STYLE_OPTIONS.map(({ value, label, icon: Icon }) => {
+          const isActive = selectedStyle === value;
+
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onSelect(value)}
+              aria-pressed={isActive}
+              className={`flex items-center gap-1.5 h-10 rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                isActive
+                  ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEditorProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const defaultPhotoAnimation = useUIStore((s) => s.photoAnimation);
   const defaultPhotoStyle = useUIStore((s) => s.photoStyle);
+  const photoFrameStyle = useUIStore((s) => s.photoFrameStyle);
   const globalSceneTransition = useUIStore((s) => s.sceneTransition);
   const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
+  const setPhotoFrameStyle = useUIStore((s) => s.setPhotoFrameStyle);
   const setGlobalSceneTransition = useUIStore((s) => s.setSceneTransition);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
   const removePhoto = useProjectStore((s) => s.removePhoto);
@@ -804,6 +852,14 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     [replayEnterPreview, updateLayout]
   );
 
+  const handlePhotoFrameStyleSelect = useCallback(
+    (style: PhotoFrameStyle) => {
+      setPhotoFrameStyle(style);
+      replayEnterPreview();
+    },
+    [replayEnterPreview, setPhotoFrameStyle]
+  );
+
   const handleExitAnimationSelect = useCallback(
     (animation: PhotoAnimationOption) => {
       updateLayout({ exitAnimation: animation === "default" ? undefined : animation });
@@ -1081,6 +1137,10 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                       })}
                     </div>
                   </div>
+                  <FrameStyleSelectorSection
+                    selectedStyle={photoFrameStyle}
+                    onSelect={handlePhotoFrameStyleSelect}
+                  />
                   <AnimationSelectorSection
                     title="In Animation"
                     selectedAnimation={selectedEnterAnimation}
@@ -1274,6 +1334,10 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                     })}
                   </div>
                 </div>
+                <FrameStyleSelectorSection
+                  selectedStyle={photoFrameStyle}
+                  onSelect={handlePhotoFrameStyleSelect}
+                />
                 <AnimationSelectorSection
                   title="In Animation"
                   selectedAnimation={selectedEnterAnimation}
