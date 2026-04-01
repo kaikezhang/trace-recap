@@ -2,6 +2,10 @@ import { create } from "zustand";
 import { useUIStore } from "@/stores/uiStore";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import type {
+  AspectRatio,
+  PhotoAnimation,
+  PhotoStyle,
+  SceneTransition,
   Location,
   Segment,
   Photo,
@@ -36,7 +40,23 @@ import {
 } from "@/lib/imageUtils";
 import { ALLOWED_CAPTION_FONTS } from "@/lib/constants";
 
-export interface ImportRouteData {
+export interface RouteUISettings {
+  viewportRatio?: AspectRatio;
+  cityLabelLang?: "en" | "zh";
+  cityLabelSize?: number;
+  cityLabelTopPercent?: number;
+  routeLabelSize?: number;
+  routeLabelBottomPercent?: number;
+  photoAnimation?: PhotoAnimation;
+  photoStyle?: PhotoStyle;
+  sceneTransition?: SceneTransition;
+  moodColorsEnabled?: boolean;
+  chapterPinsEnabled?: boolean;
+  breadcrumbsEnabled?: boolean;
+  tripStatsEnabled?: boolean;
+}
+
+export interface ImportRouteData extends RouteUISettings {
   name: string;
   locations: {
     name: string;
@@ -397,6 +417,10 @@ const VALID_TRANSPORT_MODES: TransportMode[] = [
   "walk",
   "bicycle",
 ];
+const VALID_VIEWPORT_RATIOS: AspectRatio[] = ["free", "16:9", "9:16", "4:3", "3:4", "1:1"];
+const VALID_PHOTO_ANIMATIONS: PhotoAnimation[] = ["scale", "fade", "slide", "flip", "scatter", "typewriter", "none"];
+const VALID_PHOTO_STYLES: PhotoStyle[] = ["classic", "kenburns", "portal", "bloom"];
+const VALID_SCENE_TRANSITIONS: SceneTransition[] = ["cut", "dissolve", "blur-dissolve", "wipe"];
 
 const generateId = () => String(nextId++);
 
@@ -440,6 +464,7 @@ function createEmptyProjectData(name = DEFAULT_ROUTE_NAME): ImportRouteData {
     locations: [],
     segments: [],
     mapStyle: DEFAULT_MAP_STYLE,
+    ...collectRouteUISettings(),
   };
 }
 
@@ -458,6 +483,91 @@ function isValidCoordinates(value: unknown): value is [number, number] {
     isFiniteCoordinate(value[0]) &&
     isFiniteCoordinate(value[1])
   );
+}
+
+function collectRouteUISettings(): RouteUISettings {
+  const uiState = useUIStore.getState();
+  return {
+    viewportRatio: uiState.viewportRatio,
+    cityLabelLang: uiState.cityLabelLang,
+    cityLabelSize: uiState.cityLabelSize,
+    cityLabelTopPercent: uiState.cityLabelTopPercent,
+    routeLabelSize: uiState.routeLabelSize,
+    routeLabelBottomPercent: uiState.routeLabelBottomPercent,
+    photoAnimation: uiState.photoAnimation,
+    photoStyle: uiState.photoStyle,
+    sceneTransition: uiState.sceneTransition,
+    moodColorsEnabled: uiState.moodColorsEnabled,
+    chapterPinsEnabled: uiState.chapterPinsEnabled,
+    breadcrumbsEnabled: uiState.breadcrumbsEnabled,
+    tripStatsEnabled: uiState.tripStatsEnabled,
+  };
+}
+
+function parseImportedUISettings(data: ImportRouteData): RouteUISettings {
+  return {
+    ...(VALID_VIEWPORT_RATIOS.includes(data.viewportRatio as AspectRatio)
+      ? { viewportRatio: data.viewportRatio }
+      : {}),
+    ...(data.cityLabelLang === "en" || data.cityLabelLang === "zh"
+      ? { cityLabelLang: data.cityLabelLang }
+      : {}),
+    ...(typeof data.cityLabelSize === "number" && Number.isFinite(data.cityLabelSize)
+      ? { cityLabelSize: data.cityLabelSize }
+      : {}),
+    ...(typeof data.cityLabelTopPercent === "number" && Number.isFinite(data.cityLabelTopPercent)
+      ? { cityLabelTopPercent: data.cityLabelTopPercent }
+      : {}),
+    ...(typeof data.routeLabelSize === "number" && Number.isFinite(data.routeLabelSize)
+      ? { routeLabelSize: data.routeLabelSize }
+      : {}),
+    ...(typeof data.routeLabelBottomPercent === "number" && Number.isFinite(data.routeLabelBottomPercent)
+      ? { routeLabelBottomPercent: data.routeLabelBottomPercent }
+      : {}),
+    ...(VALID_PHOTO_ANIMATIONS.includes(data.photoAnimation as PhotoAnimation)
+      ? { photoAnimation: data.photoAnimation }
+      : {}),
+    ...(VALID_PHOTO_STYLES.includes(data.photoStyle as PhotoStyle)
+      ? { photoStyle: data.photoStyle }
+      : {}),
+    ...(VALID_SCENE_TRANSITIONS.includes(data.sceneTransition as SceneTransition)
+      ? { sceneTransition: data.sceneTransition }
+      : {}),
+    ...(typeof data.moodColorsEnabled === "boolean"
+      ? { moodColorsEnabled: data.moodColorsEnabled }
+      : {}),
+    ...(typeof data.chapterPinsEnabled === "boolean"
+      ? { chapterPinsEnabled: data.chapterPinsEnabled }
+      : {}),
+    ...(typeof data.breadcrumbsEnabled === "boolean"
+      ? { breadcrumbsEnabled: data.breadcrumbsEnabled }
+      : {}),
+    ...(typeof data.tripStatsEnabled === "boolean"
+      ? { tripStatsEnabled: data.tripStatsEnabled }
+      : {}),
+  };
+}
+
+function applyImportedUISettings(uiSettings: RouteUISettings): void {
+  const nextState: Partial<ReturnType<typeof useUIStore.getState>> = {};
+
+  if (uiSettings.viewportRatio !== undefined) nextState.viewportRatio = uiSettings.viewportRatio;
+  if (uiSettings.cityLabelLang !== undefined) nextState.cityLabelLang = uiSettings.cityLabelLang;
+  if (uiSettings.cityLabelSize !== undefined) nextState.cityLabelSize = uiSettings.cityLabelSize;
+  if (uiSettings.cityLabelTopPercent !== undefined) nextState.cityLabelTopPercent = uiSettings.cityLabelTopPercent;
+  if (uiSettings.routeLabelSize !== undefined) nextState.routeLabelSize = uiSettings.routeLabelSize;
+  if (uiSettings.routeLabelBottomPercent !== undefined) nextState.routeLabelBottomPercent = uiSettings.routeLabelBottomPercent;
+  if (uiSettings.photoAnimation !== undefined) nextState.photoAnimation = uiSettings.photoAnimation;
+  if (uiSettings.photoStyle !== undefined) nextState.photoStyle = uiSettings.photoStyle;
+  if (uiSettings.sceneTransition !== undefined) nextState.sceneTransition = uiSettings.sceneTransition;
+  if (uiSettings.moodColorsEnabled !== undefined) nextState.moodColorsEnabled = uiSettings.moodColorsEnabled;
+  if (uiSettings.chapterPinsEnabled !== undefined) nextState.chapterPinsEnabled = uiSettings.chapterPinsEnabled;
+  if (uiSettings.breadcrumbsEnabled !== undefined) nextState.breadcrumbsEnabled = uiSettings.breadcrumbsEnabled;
+  if (uiSettings.tripStatsEnabled !== undefined) nextState.tripStatsEnabled = uiSettings.tripStatsEnabled;
+
+  if (Object.keys(nextState).length > 0) {
+    useUIStore.setState(nextState);
+  }
 }
 
 function nextProjectSaveVersion(projectId: string): number {
@@ -591,6 +701,7 @@ async function serializeProjectState(
   return {
     name: name ?? DEFAULT_ROUTE_NAME,
     mapStyle,
+    ...collectRouteUISettings(),
     locations: exportedLocations,
     segments: segments.map((segment) => ({
       fromIndex: locations.findIndex(
@@ -686,6 +797,7 @@ interface ParsedProjectData {
   segments: Segment[];
   mapStyle: MapStyle;
   segmentTimingOverrides: Record<string, number>;
+  uiSettings: RouteUISettings;
 }
 
 function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
@@ -842,6 +954,7 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
     segments,
     mapStyle: data.mapStyle ?? DEFAULT_MAP_STYLE,
     segmentTimingOverrides,
+    uiSettings: parseImportedUISettings(data),
   };
 }
 
@@ -1249,92 +1362,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   exportRoute: async () => {
     const { locations, segments, mapStyle, segmentTimingOverrides, currentProjectName } = get();
-
-    // Convert blob URLs to base64 data URLs for persistence
-    const toDataURL = async (url: string): Promise<string> => {
-      if (url.startsWith("data:")) return url; // already base64
-      try {
-        const resp = await fetch(url);
-        const blob = await resp.blob();
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-      } catch {
-        return url; // fallback to original
-      }
-    };
-
-    const exportedLocations = await Promise.all(
-      locations.map(async (loc) => {
-        const photos = await Promise.all(
-          loc.photos.map(async (p) => ({
-            url: await toDataURL(p.url),
-            caption: p.caption,
-            ...(p.focalPoint ? { focalPoint: p.focalPoint } : {}),
-          })),
-        );
-        return {
-          name: loc.name,
-          nameZh: loc.nameZh,
-          coordinates: loc.coordinates as [number, number],
-          isWaypoint: loc.isWaypoint ?? false,
-          ...(photos.length > 0 ? { photos } : {}),
-          ...(loc.photoLayout
-            ? {
-                photoLayout: {
-                  ...loc.photoLayout,
-                  freeTransforms: serializeFreeTransforms(loc.photoLayout, loc.photos),
-                  // Convert order from photo IDs to indices for portable serialization
-                  order: loc.photoLayout.order
-                    ? loc.photoLayout.order
-                        .map((id) => loc.photos.findIndex((p) => p.id === id))
-                        .filter((idx) => idx >= 0)
-                        .map(String)
-                    : undefined,
-                },
-              }
-            : {}),
-          ...(loc.chapterTitle ? { chapterTitle: loc.chapterTitle } : {}),
-          ...(loc.chapterNote ? { chapterNote: loc.chapterNote } : {}),
-          ...(loc.chapterDate ? { chapterDate: loc.chapterDate } : {}),
-          ...(loc.chapterEmoji ? { chapterEmoji: loc.chapterEmoji } : {}),
-        };
-      }),
-    );
-
-    return {
-      name: currentProjectName,
+    return serializeProjectState(
+      locations,
+      segments,
       mapStyle,
-      locations: exportedLocations,
-      segments: segments.map((seg) => ({
-        fromIndex: locations.findIndex((l) => l.id === seg.fromId),
-        toIndex: locations.findIndex((l) => l.id === seg.toId),
-        transportMode: seg.transportMode,
-        iconStyle: seg.iconStyle,
-        ...(seg.iconVariant ? { iconVariant: seg.iconVariant } : {}),
-      })),
-      ...(Object.keys(segmentTimingOverrides).length > 0
-        ? {
-            timingOverrides: Object.fromEntries(
-              Object.entries(segmentTimingOverrides)
-                .map(([segId, duration]) => {
-                  const idx = segments.findIndex((s) => s.id === segId);
-                  return idx >= 0 ? [String(idx), duration] : null;
-                })
-                .filter(Boolean) as [string, number][],
-            ),
-          }
-        : {}),
-    };
+      segmentTimingOverrides,
+      currentProjectName,
+    );
   },
 
   importRoute: (data) => {
     const parsed = parseImportedProjectData(data);
     useHistoryStore.getState().pushState();
     clearDirtyTracking();
+    applyImportedUISettings(parsed.uiSettings);
     set({
+      currentProjectName: parsed.name,
       locations: parsed.locations,
       segments: parsed.segments,
       mapStyle: parsed.mapStyle,
@@ -1426,6 +1469,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const parsed = parseImportedProjectData(data);
 
       clearDirtyTracking();
+      applyImportedUISettings(parsed.uiSettings);
       set({
         currentProjectId: targetId,
         currentProjectName: meta?.name ?? parsed.name ?? DEFAULT_ROUTE_NAME,
@@ -1558,6 +1602,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const parsed = parseImportedProjectData(data);
 
       clearDirtyTracking();
+      applyImportedUISettings(parsed.uiSettings);
       set({
         currentProjectId: projectId,
         currentProjectName: meta.name ?? parsed.name ?? DEFAULT_ROUTE_NAME,
@@ -1623,6 +1668,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const parsed = parseImportedProjectData(data);
 
       clearDirtyTracking();
+      applyImportedUISettings(parsed.uiSettings);
       set({
         currentProjectId: nextProject.id,
         currentProjectName: nextProject.name,

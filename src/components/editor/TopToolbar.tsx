@@ -46,41 +46,8 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import type { AspectRatio, MapStyle, MapStyleCategory, PhotoLayout } from "@/types";
+import type { AspectRatio, MapStyle, MapStyleCategory } from "@/types";
 import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
-
-function serializePortablePhotoLayout(
-  photoLayout: PhotoLayout | undefined,
-  photos: Array<{ id: string }>,
-): PhotoLayout | undefined {
-  if (!photoLayout) {
-    return undefined;
-  }
-
-  return {
-    ...photoLayout,
-    freeTransforms: photoLayout.freeTransforms
-      ?.map((transform, index) => {
-        const photoIndex = photos.findIndex((photo) => photo.id === transform.photoId);
-        if (photoIndex < 0) {
-          return null;
-        }
-
-        return {
-          ...transform,
-          photoId: String(photoIndex),
-          zIndex: Number.isFinite(transform.zIndex) ? transform.zIndex : index,
-        };
-      })
-      .filter((transform): transform is NonNullable<PhotoLayout["freeTransforms"]>[number] => Boolean(transform)),
-    order: photoLayout.order
-      ? photoLayout.order
-          .map((photoId) => photos.findIndex((photo) => photo.id === photoId))
-          .filter((index) => index >= 0)
-          .map(String)
-      : undefined,
-  };
-}
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -216,64 +183,26 @@ export default function TopToolbar() {
   const handleExportRoute = async () => {
     const JSZip = (await import("jszip")).default;
     const zip = new JSZip();
-    const { locations, segments, mapStyle, segmentTimingOverrides, currentProjectName } = useProjectStore.getState();
-
-    // Store photos as separate files in the zip, reference by filename in JSON
-    const photoFiles: Map<string, string> = new Map(); // photoId → filename
+    const routeData = await exportRoute();
     let photoIndex = 0;
 
-    const exportedLocations = await Promise.all(
-      locations.map(async (loc) => {
-        const photos = await Promise.all(
-          loc.photos.map(async (p) => {
-            const filename = `photos/photo_${photoIndex++}.jpg`;
-            try {
-              const resp = await fetch(p.url);
-              const blob = await resp.blob();
-              zip.file(filename, blob);
-            } catch {
-              // skip failed photos
-            }
-            photoFiles.set(p.id, filename);
-            return {
-              url: filename, // reference to file in zip
-              caption: p.caption,
-              ...(p.focalPoint ? { focalPoint: p.focalPoint } : {}),
-            };
-          }),
-        );
-        return {
-          name: loc.name,
-          nameZh: loc.nameZh,
-          coordinates: loc.coordinates as [number, number],
-          isWaypoint: loc.isWaypoint ?? false,
-          ...(photos.length > 0 ? { photos } : {}),
-          ...(loc.photoLayout ? { photoLayout: serializePortablePhotoLayout(loc.photoLayout, loc.photos) } : {}),
-        };
-      }),
-    );
+    for (const location of routeData.locations) {
+      if (!location.photos) {
+        continue;
+      }
 
-    const routeData = {
-      name: currentProjectName ?? "Untitled",
-      mapStyle,
-      locations: exportedLocations,
-      segments: segments.map((seg) => ({
-        fromIndex: locations.findIndex((l) => l.id === seg.fromId),
-        toIndex: locations.findIndex((l) => l.id === seg.toId),
-        transportMode: seg.transportMode,
-        ...(seg.iconVariant ? { iconVariant: seg.iconVariant } : {}),
-        ...(seg.iconStyle ? { iconStyle: seg.iconStyle } : {}),
-      })),
-      // Convert segment ID-keyed timing to index-keyed for portable export
-      timingOverrides: Object.fromEntries(
-        Object.entries(segmentTimingOverrides)
-          .map(([segId, duration]) => {
-            const idx = segments.findIndex((s) => s.id === segId);
-            return idx >= 0 ? [String(idx), duration] : null;
-          })
-          .filter(Boolean) as [string, number][],
-      ),
-    };
+      for (const photo of location.photos) {
+        const filename = `photos/photo_${photoIndex++}.jpg`;
+        try {
+          const response = await fetch(photo.url);
+          const blob = await response.blob();
+          zip.file(filename, blob);
+          photo.url = filename;
+        } catch {
+          // Keep the serialized URL in route.json if the photo blob cannot be materialized.
+        }
+      }
+    }
 
     zip.file("route.json", JSON.stringify(routeData, null, 2));
 
@@ -281,7 +210,7 @@ export default function TopToolbar() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${currentProjectName ?? "trace-recap"}.zip`;
+    a.download = `${routeData.name || "trace-recap"}.zip`;
     a.click();
     URL.revokeObjectURL(url);
   };
