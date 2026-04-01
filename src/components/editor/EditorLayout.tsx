@@ -157,8 +157,6 @@ function EditorContent() {
   const setBloomOrigin = useAnimationStore((s) => s.setBloomOrigin);
   const setBloomElapsedTime = useAnimationStore((s) => s.setBloomElapsedTime);
 
-  const setVisitedLocationIds = useAnimationStore((s) => s.setVisitedLocationIds);
-  const setCurrentArrivalLocationId = useAnimationStore((s) => s.setCurrentArrivalLocationId);
   const setAlbumCollectingLocationId = useAnimationStore(
     (s) => s.setAlbumCollectingLocationId,
   );
@@ -651,8 +649,10 @@ function EditorContent() {
           }
         }
 
-        setVisitedLocationIds([...new Set(newVisited)]);
-        setCurrentArrivalLocationId(newArrival);
+        useAnimationStore.setState({
+          visitedLocationIds: [...new Set(newVisited)],
+          currentArrivalLocationId: newArrival,
+        });
       }
 
       // Album state machine: collecting → visited (skip closed to avoid race)
