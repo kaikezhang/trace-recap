@@ -175,10 +175,12 @@ export default function TripStatsBar({
   if (!tripStatsEnabled) return null;
 
   const isActive = playbackState === "playing" || playbackState === "paused";
-  const containerStyle =
-    bottomInsetPx > 0
-      ? { bottom: `${Math.max(isCompact ? 32 : 56, bottomInsetPx + (isCompact ? 6 : 12))}px` }
-      : undefined;
+  // Position stats bar just above the playback controls, but never higher than ~18% from bottom
+  // (route label is capped at 25%, stats bar stays below it)
+  const baseBottom = Math.max(isCompact ? 32 : 56, bottomInsetPx + (isCompact ? 6 : 12));
+  const containerStyle: React.CSSProperties = {
+    bottom: `min(${baseBottom}px, 18%)`,
+  };
 
   const textClass = isCompact ? "text-[10px]" : "text-[13px]";
   const emojiClass = isCompact ? "text-[10px]" : "text-[13px]";
@@ -196,7 +198,7 @@ export default function TripStatsBar({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 16 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className={`absolute left-1/2 z-10 -translate-x-1/2 ${isCompact ? "bottom-8" : "bottom-14 md:bottom-16"}`}
+          className="absolute left-1/2 z-10 -translate-x-1/2"
           style={containerStyle}
         >
           <div
