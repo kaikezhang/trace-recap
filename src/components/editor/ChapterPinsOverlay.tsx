@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ChapterPin, {
   getChapterPinTargetOffset,
   type ChapterPinState,
@@ -13,24 +13,19 @@ import {
 } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
 
-interface PinPosition {
+interface PinEntry {
   locationId: string;
-  x: number;
-  y: number;
   state: Exclude<ChapterPinState, "future">;
 }
 
-function arePinPositionsEqual(a: PinPosition[], b: PinPosition[]): boolean {
+function arePinEntriesEqual(a: PinEntry[], b: PinEntry[]): boolean {
   if (a.length !== b.length) return false;
-
-  return a.every((position, index) => {
+  return a.every((entry, index) => {
     const other = b[index];
     return (
       other !== undefined &&
-      position.locationId === other.locationId &&
-      position.x === other.x &&
-      position.y === other.y &&
-      position.state === other.state
+      entry.locationId === other.locationId &&
+      entry.state === other.state
     );
   });
 }
@@ -71,8 +66,11 @@ export default function ChapterPinsOverlay() {
   );
   const chapterPinsEnabled = useUIStore((s) => s.chapterPinsEnabled);
 
-  const [positions, setPositions] = useState<PinPosition[]>([]);
+  // Pin entries track which pins are visible and their state (no x/y — that's DOM-direct)
+  const [pinEntries, setPinEntries] = useState<PinEntry[]>([]);
 
+  // Refs for DOM-direct position updates (bypasses React re-render cycle)
+  const pinElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const locationsRef = useRef(locations);
   locationsRef.current = locations;
   const visitedRef = useRef(visitedLocationIds);
@@ -83,16 +81,59 @@ export default function ChapterPinsOverlay() {
   collectingRef.current = albumCollectingLocationId;
   const closedRef = useRef(albumClosedLocationId);
   closedRef.current = albumClosedLocationId;
+  const pinEntriesRef = useRef(pinEntries);
+  pinEntriesRef.current = pinEntries;
   const targetPositionsRef = useRef(useAnimationStore.getState().chapterPinPositions);
 
-  const computePositions = useRef(() => {
-    /* replaced below */
-  });
+  // Register/unregister pin DOM elements
+  const registerPinRef = useCallback((locationId: string, el: HTMLDivElement | null) => {
+    if (el) {
+      pinElementsRef.current.set(locationId, el);
+    } else {
+      pinElementsRef.current.delete(locationId);
+    }
+  }, []);
 
-  computePositions.current = () => {
+  // Synchronously update pin DOM positions — called directly in map "move" handler
+  const updatePinDOMPositions = useCallback(() => {
     if (!map) return;
 
-    const nextPositions: PinPosition[] = [];
+    const nextTargetPositions: Record<string, ScreenPoint> = {};
+
+    for (const entry of pinEntriesRef.current) {
+      const location = locationsRef.current.find((l) => l.id === entry.locationId);
+      if (!location) continue;
+
+      const projected = map.project(location.coordinates);
+      const x = projected.x;
+      const y = projected.y;
+
+      // Update DOM element position directly (no React re-render)
+      const el = pinElementsRef.current.get(entry.locationId);
+      if (el) {
+        el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+      }
+
+      // Compute target positions for PhotoOverlay fly-to-album
+      if (entry.state !== "visited") {
+        const offset = getChapterPinTargetOffset(entry.state);
+        nextTargetPositions[entry.locationId] = {
+          x: x + offset.x,
+          y: y + offset.y,
+        };
+      }
+    }
+
+    if (!areScreenPointsEqual(targetPositionsRef.current, nextTargetPositions)) {
+      targetPositionsRef.current = nextTargetPositions;
+      setChapterPinPositions(nextTargetPositions);
+    }
+  }, [map, setChapterPinPositions]);
+
+  // Compute which pins should be visible and their states (triggers React re-render only on state changes)
+  const computePinEntries = useRef(() => {});
+  computePinEntries.current = () => {
+    const nextEntries: PinEntry[] = [];
     const seenCoords = new Set<string>();
 
     for (const location of locationsRef.current) {
@@ -115,56 +156,32 @@ export default function ChapterPinsOverlay() {
       if (seenCoords.has(coordKey)) continue;
       seenCoords.add(coordKey);
 
-      const projected = map.project(location.coordinates);
-      nextPositions.push({
-        locationId: location.id,
-        x: projected.x,
-        y: projected.y,
-        state,
-      });
+      nextEntries.push({ locationId: location.id, state });
     }
 
-    setPositions((current) =>
-      arePinPositionsEqual(current, nextPositions) ? current : nextPositions,
+    setPinEntries((current) =>
+      arePinEntriesEqual(current, nextEntries) ? current : nextEntries,
     );
-
-    const nextTargetPositions = Object.fromEntries(
-      nextPositions
-        .filter((position) => position.state !== "visited")
-        .map((position) => {
-          const offset = getChapterPinTargetOffset(position.state);
-          return [
-            position.locationId,
-            {
-              x: position.x + offset.x,
-              y: position.y + offset.y,
-            },
-          ];
-        }),
-    ) satisfies Record<string, ScreenPoint>;
-
-    if (!areScreenPointsEqual(targetPositionsRef.current, nextTargetPositions)) {
-      targetPositionsRef.current = nextTargetPositions;
-      setChapterPinPositions(nextTargetPositions);
-    }
   };
 
+  // Listen to map "move" events — update DOM positions synchronously
   useEffect(() => {
     if (!map) return;
 
-    const update = () => {
-      computePositions.current();
+    const onMove = () => {
+      updatePinDOMPositions();
     };
 
-    update();
-    map.on("move", update);
+    onMove();
+    map.on("move", onMove);
     return () => {
-      map.off("move", update);
+      map.off("move", onMove);
       targetPositionsRef.current = {};
       setChapterPinPositions({});
     };
-  }, [map, setChapterPinPositions]);
+  }, [map, setChapterPinPositions, updatePinDOMPositions]);
 
+  // Listen to animation store state changes — recompute pin entries + update positions
   useEffect(() => {
     if (!map) return;
 
@@ -184,10 +201,20 @@ export default function ChapterPinsOverlay() {
         prevArrival = state.currentArrivalLocationId;
         prevCollecting = state.albumCollectingLocationId;
         prevClosed = state.albumClosedLocationId;
-        computePositions.current();
+        computePinEntries.current();
+        // Also update DOM positions immediately for the new set of pins
+        // (use requestAnimationFrame so new pin elements are mounted first)
+        requestAnimationFrame(() => {
+          updatePinDOMPositions();
+        });
       }
     });
-  }, [map]);
+  }, [map, updatePinDOMPositions]);
+
+  // Initial pin entry computation
+  useEffect(() => {
+    computePinEntries.current();
+  }, [locations]);
 
   const isAnimating =
     playbackState === "playing" || playbackState === "paused";
@@ -195,16 +222,16 @@ export default function ChapterPinsOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[8] overflow-hidden">
-      {positions.map((position) => {
-        const location = locations.find((entry) => entry.id === position.locationId);
+      {pinEntries.map((entry) => {
+        const location = locations.find((l) => l.id === entry.locationId);
         if (!location) return null;
 
         return (
           <ChapterPin
             key={location.id}
             location={location}
-            position={{ x: position.x, y: position.y }}
-            state={position.state}
+            state={entry.state}
+            registerRef={registerPinRef}
           />
         );
       })}
