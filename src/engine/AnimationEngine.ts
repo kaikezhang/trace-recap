@@ -554,7 +554,7 @@ export class AnimationEngine {
     }
   }
 
-  private resolveTimePosition(time: number): {
+  resolveTimePosition(time: number): {
     groupIndex: number;
     phase: AnimationPhase;
     phaseProgress: number;

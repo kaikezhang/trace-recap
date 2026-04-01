@@ -924,8 +924,54 @@ function EditorContent() {
     prevShowPhotosRef.current = false;
     prevPhotoLocationIdRef.current = null;
     prevPhaseRef.current = null;
-    setVisiblePhotoLocationId(null);
-  }, [setBreadcrumbs]);
+
+    // Derive the correct visible photo location from the seek position.
+    // Previously this unconditionally cleared visiblePhotoLocationId, which
+    // detached photos from their photoLayout (losing free transforms, captions,
+    // and manual positioning) while photos remained visible on screen.
+    const { groupIndex: seekGroup, phase: seekPhase } = engine.resolveTimePosition(seekTime);
+    if (seekGroup >= 0) {
+      const seekGroupData = groups[seekGroup];
+      if (seekPhase === "ARRIVE" && seekGroupData?.toLoc.photos.length) {
+        setVisiblePhotos(seekGroupData.toLoc.photos);
+        setVisiblePhotoLocationId(seekGroupData.toLoc.id);
+        setShowPhotoOverlay(true);
+        setPhotoOverlayOpacity(1);
+      } else if (seekPhase === "HOVER" && seekGroup === 0 && seekGroupData?.fromLoc.photos.length) {
+        setVisiblePhotos(seekGroupData.fromLoc.photos);
+        setVisiblePhotoLocationId(seekGroupData.fromLoc.id);
+        setShowPhotoOverlay(true);
+        setPhotoOverlayOpacity(1);
+      } else if (
+        (seekPhase === "HOVER" || seekPhase === "ZOOM_OUT") &&
+        seekGroup > 0
+      ) {
+        // Previous group's photos may still be fading out
+        const prevGroup = groups[seekGroup - 1];
+        if (prevGroup?.toLoc.photos.length) {
+          setVisiblePhotos(prevGroup.toLoc.photos);
+          setVisiblePhotoLocationId(prevGroup.toLoc.id);
+          setShowPhotoOverlay(true);
+          setPhotoOverlayOpacity(seekPhase === "HOVER" ? 1 : 0.3);
+        } else {
+          setVisiblePhotos([]);
+          setVisiblePhotoLocationId(null);
+          setShowPhotoOverlay(false);
+          setPhotoOverlayOpacity(0);
+        }
+      } else {
+        setVisiblePhotos([]);
+        setVisiblePhotoLocationId(null);
+        setShowPhotoOverlay(false);
+        setPhotoOverlayOpacity(0);
+      }
+    } else {
+      setVisiblePhotos([]);
+      setVisiblePhotoLocationId(null);
+      setShowPhotoOverlay(false);
+      setPhotoOverlayOpacity(0);
+    }
+  }, [locations, setBreadcrumbs, setShowPhotoOverlay, setPhotoOverlayOpacity, setVisiblePhotos]);
 
   useEffect(() => () => clearAlbumSequenceTimersRef.current(), []);
 
