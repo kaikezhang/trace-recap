@@ -39,6 +39,7 @@ interface MapStageProps {
   onPlay: () => void;
   onReset: () => void;
   onSeek: (progress: number) => void;
+  onFlyToAlbumComplete: (locationId: string) => void;
   onStopEditingLayout: () => void;
   showEmptyState: boolean;
 }
@@ -135,6 +136,7 @@ export default function MapStage({
   onPlay,
   onReset,
   onSeek,
+  onFlyToAlbumComplete,
   onStopEditingLayout,
   showEmptyState,
 }: MapStageProps) {
@@ -159,6 +161,7 @@ export default function MapStage({
   const incomingPhotos = useAnimationStore((s) => s.incomingPhotos);
   const incomingPhotoLocationId = useAnimationStore((s) => s.incomingPhotoLocationId);
   const transitionBearing = useAnimationStore((s) => s.transitionBearing);
+  const chapterPinPositions = useAnimationStore((s) => s.chapterPinPositions);
   const visiblePhotoLocation = locations.find((location) => location.id === photoLocationId);
   const incomingLocation = locations.find((location) => location.id === incomingPhotoLocationId);
   const effectiveTransition = resolveSceneTransition(photoLayout, globalSceneTransition);
@@ -239,6 +242,9 @@ export default function MapStage({
         opacity={photoOverlayOpacity}
         bloomOrigin={bloomOrigin}
         bloomElapsedTime={bloomElapsedTime}
+        flyToPosition={photoLocationId ? chapterPinPositions[photoLocationId] ?? null : null}
+        photoLocationId={photoLocationId}
+        onFlyToAlbumComplete={onFlyToAlbumComplete}
         sceneTransition={effectiveTransition}
         sceneTransitionProgress={isTransitioning ? sceneTransitionProgress : undefined}
         incomingPhotos={isTransitioning ? incomingPhotos : undefined}

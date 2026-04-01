@@ -110,10 +110,23 @@ function EditorContent() {
   const demoLoadedRef = useRef(false);
   const prevShowPhotosRef = useRef(false);
   const prevPhotoLocationIdRef = useRef<string | null>(null);
+  const prevPhaseRef = useRef<string | null>(null);
+  const activeAlbumSequenceLocationIdRef = useRef<string | null>(null);
+  const pendingAlbumCloseLocationIdRef = useRef<string | null>(null);
+  const albumVisitedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const startAlbumSequenceRef = useRef<(locationId: string) => void>(() => {});
+  const completeAlbumSequenceRef = useRef<(locationId: string) => void>(
+    () => {},
+  );
+  const resetAlbumSequenceStateRef = useRef<() => void>(() => {});
+  const clearAlbumSequenceTimersRef = useRef<() => void>(() => {});
 
   const setPlaybackState = useAnimationStore((s) => s.setPlaybackState);
   const setCurrentTime = useAnimationStore((s) => s.setCurrentTime);
   const setTotalDuration = useAnimationStore((s) => s.setTotalDuration);
+  const setCurrentPhase = useAnimationStore((s) => s.setCurrentPhase);
   const setCurrentCityLabel = useAnimationStore((s) => s.setCurrentCityLabel);
   const setCurrentCityLabelZh = useAnimationStore(
     (s) => s.setCurrentCityLabelZh,
@@ -145,9 +158,12 @@ function EditorContent() {
 
   const setVisitedLocationIds = useAnimationStore((s) => s.setVisitedLocationIds);
   const setCurrentArrivalLocationId = useAnimationStore((s) => s.setCurrentArrivalLocationId);
+  const setAlbumCollectingLocationId = useAnimationStore(
+    (s) => s.setAlbumCollectingLocationId,
+  );
+  const setAlbumClosedLocationId = useAnimationStore((s) => s.setAlbumClosedLocationId);
   const addBreadcrumb = useAnimationStore((s) => s.addBreadcrumb);
   const setBreadcrumbs = useAnimationStore((s) => s.setBreadcrumbs);
-  const clearBreadcrumbs = useAnimationStore((s) => s.clearBreadcrumbs);
   const reset = useAnimationStore((s) => s.reset);
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
@@ -172,6 +188,89 @@ function EditorContent() {
       ),
     [availableStageSize.height, availableStageSize.width, viewportRatio],
   );
+
+  const clearAlbumSequenceTimers = useCallback(() => {
+    if (albumVisitedTimerRef.current) {
+      clearTimeout(albumVisitedTimerRef.current);
+      albumVisitedTimerRef.current = null;
+    }
+  }, []);
+
+  const resetAlbumSequenceState = useCallback(() => {
+    clearAlbumSequenceTimers();
+    activeAlbumSequenceLocationIdRef.current = null;
+    pendingAlbumCloseLocationIdRef.current = null;
+    setAlbumCollectingLocationId(null);
+    setAlbumClosedLocationId(null);
+  }, [
+    clearAlbumSequenceTimers,
+    setAlbumClosedLocationId,
+    setAlbumCollectingLocationId,
+  ]);
+
+  const completeAlbumSequence = useCallback(
+    (locationId: string) => {
+      if (activeAlbumSequenceLocationIdRef.current !== locationId) return;
+
+      if (useAnimationStore.getState().playbackState !== "playing") {
+        pendingAlbumCloseLocationIdRef.current = locationId;
+        return;
+      }
+
+      pendingAlbumCloseLocationIdRef.current = null;
+      setShowPhotoOverlay(false);
+      setAlbumCollectingLocationId(null);
+      setAlbumClosedLocationId(locationId);
+      setVisiblePhotoLocationId(null);
+      activeAlbumSequenceLocationIdRef.current = null;
+
+      clearAlbumSequenceTimers();
+      albumVisitedTimerRef.current = setTimeout(() => {
+        if (useAnimationStore.getState().albumClosedLocationId === locationId) {
+          setAlbumClosedLocationId(null);
+        }
+        albumVisitedTimerRef.current = null;
+      }, 300);
+    },
+    [
+      clearAlbumSequenceTimers,
+      setAlbumClosedLocationId,
+      setAlbumCollectingLocationId,
+      setShowPhotoOverlay,
+    ],
+  );
+
+  const startAlbumSequence = useCallback(
+    (locationId: string) => {
+      clearAlbumSequenceTimers();
+      pendingAlbumCloseLocationIdRef.current = null;
+      activeAlbumSequenceLocationIdRef.current = locationId;
+      setAlbumClosedLocationId(null);
+      setAlbumCollectingLocationId(locationId);
+      setVisiblePhotoLocationId(locationId);
+      setShowPhotoOverlay(true);
+      setPhotoOverlayOpacity(0);
+    },
+    [
+      clearAlbumSequenceTimers,
+      setAlbumClosedLocationId,
+      setAlbumCollectingLocationId,
+      setPhotoOverlayOpacity,
+      setShowPhotoOverlay,
+    ],
+  );
+
+  useEffect(() => {
+    startAlbumSequenceRef.current = startAlbumSequence;
+    completeAlbumSequenceRef.current = completeAlbumSequence;
+    resetAlbumSequenceStateRef.current = resetAlbumSequenceState;
+    clearAlbumSequenceTimersRef.current = clearAlbumSequenceTimers;
+  }, [
+    clearAlbumSequenceTimers,
+    completeAlbumSequence,
+    resetAlbumSequenceState,
+    startAlbumSequence,
+  ]);
 
   useEffect(() => {
     const stageViewport = stageViewportRef.current;
@@ -398,6 +497,11 @@ function EditorContent() {
       engineRef.current = null;
     }
     reset();
+    resetAlbumSequenceStateRef.current();
+    prevPhaseRef.current = null;
+    prevShowPhotosRef.current = false;
+    prevPhotoLocationIdRef.current = null;
+    setVisiblePhotoLocationId(null);
 
     if (!map || segments.length === 0) return;
 
@@ -415,13 +519,48 @@ function EditorContent() {
     setTimeline(engine.getTimeline());
 
     engine.on("progress", (e) => {
+      const seg = segments[e.segmentIndex];
+      const currentArrivalLocation =
+        seg?.toId != null
+          ? locations.find((location) => location.id === seg.toId) ?? null
+          : null;
+      const currentArrivalHasPhotos =
+        (currentArrivalLocation?.photos.length ?? 0) > 0;
+      const previousPhase = prevPhaseRef.current;
+      const previousPhotoLocationId = prevPhotoLocationIdRef.current;
+      const previousPhotoLocation =
+        previousPhotoLocationId != null
+          ? locations.find((location) => location.id === previousPhotoLocationId) ??
+            null
+          : null;
+      const shouldStartAlbumSequence =
+        previousPhase === "ARRIVE" &&
+        e.phase !== "ARRIVE" &&
+        previousPhotoLocationId !== null &&
+        (previousPhotoLocation?.photos.length ?? 0) > 0 &&
+        activeAlbumSequenceLocationIdRef.current !== previousPhotoLocationId;
+
       setCurrentTime(e.time);
       setCurrentSegmentIndex(e.segmentIndex);
       setCurrentGroupSegmentIndices(e.groupSegmentIndices);
+      setCurrentPhase(e.phase);
       setCurrentCityLabel(e.cityLabel);
       setCurrentCityLabelZh(e.cityLabelZh);
-      setShowPhotoOverlay(e.showPhotos);
-      setPhotoOverlayOpacity(e.photoOpacity);
+
+      if (e.showPhotos && e.phase === "ARRIVE") {
+        setShowPhotoOverlay(true);
+        setPhotoOverlayOpacity(1);
+      } else if (shouldStartAlbumSequence) {
+        startAlbumSequenceRef.current(previousPhotoLocationId);
+      } else if (
+        !e.showPhotos &&
+        activeAlbumSequenceLocationIdRef.current === null &&
+        pendingAlbumCloseLocationIdRef.current === null
+      ) {
+        setShowPhotoOverlay(false);
+        setPhotoOverlayOpacity(0);
+      }
+
       // Chapter pin tracking: derive visited/arrival state from current time
       // (recomputed from scratch so seek/scrub always produces correct state)
       {
@@ -486,16 +625,18 @@ function EditorContent() {
       if (e.showPhotos) {
         if (e.phase === "ARRIVE") {
           // During ARRIVE: set current destination's photos
-          const seg = segments[e.segmentIndex];
-          const toLoc = locations.find((l) => l.id === seg?.toId);
-          setVisiblePhotos(toLoc?.photos || []);
-          setVisiblePhotoLocationId(toLoc?.id ?? null);
+          setVisiblePhotos(currentArrivalLocation?.photos ?? []);
+          setVisiblePhotoLocationId(currentArrivalLocation?.id ?? null);
         }
         // During HOVER/ZOOM_OUT fade-out: keep previous photos (don't update)
       } else {
         // Don't clear outgoing photos/location when a scene transition is active —
         // the outgoing location's photoLayout must persist for correct transition resolution
-        if (e.sceneTransitionProgress === undefined) {
+        if (
+          e.sceneTransitionProgress === undefined &&
+          activeAlbumSequenceLocationIdRef.current === null &&
+          pendingAlbumCloseLocationIdRef.current === null
+        ) {
           setVisiblePhotos([]);
           setVisiblePhotoLocationId(null);
         }
@@ -517,10 +658,15 @@ function EditorContent() {
         }
       }
       prevShowPhotosRef.current = e.showPhotos;
-      if (e.showPhotos && e.phase === "ARRIVE") {
-        const seg = segments[e.segmentIndex];
-        prevPhotoLocationIdRef.current = seg?.toId ?? null;
+      if (e.phase === "ARRIVE") {
+        prevPhotoLocationIdRef.current =
+          e.showPhotos && currentArrivalHasPhotos
+            ? currentArrivalLocation?.id ?? null
+            : null;
+      } else if (!e.showPhotos) {
+        prevPhotoLocationIdRef.current = null;
       }
+      prevPhaseRef.current = e.phase;
 
       // Scene transition metadata
       setSceneTransitionProgress(e.sceneTransitionProgress);
@@ -625,8 +771,9 @@ function EditorContent() {
 
     return () => {
       engine.destroy();
+      clearAlbumSequenceTimersRef.current();
     };
-  }, [map, locations, segments, segmentTimingOverrides]);
+  }, [map, locations, segmentTimingOverrides, segments]);
 
   const handlePlay = useCallback(() => {
     // Immediately hide all future segment layers on the map
@@ -645,25 +792,33 @@ function EditorContent() {
     }
     engineRef.current?.play();
     setPlaybackState("playing");
-
+    const pendingAlbumCloseLocationId = pendingAlbumCloseLocationIdRef.current;
+    if (pendingAlbumCloseLocationId) {
+      completeAlbumSequenceRef.current(pendingAlbumCloseLocationId);
+    }
   }, [map, setPlaybackState]);
 
   const handlePause = useCallback(() => {
+    clearAlbumSequenceTimersRef.current();
     engineRef.current?.pause();
     setPlaybackState("paused");
   }, [setPlaybackState]);
 
   const handleReset = useCallback(() => {
     engineRef.current?.reset();
+    resetAlbumSequenceStateRef.current();
     reset();
     prevShowPhotosRef.current = false;
     prevPhotoLocationIdRef.current = null;
+    prevPhaseRef.current = null;
+    setVisiblePhotoLocationId(null);
   }, [reset]);
 
   const handleSeek = useCallback((progress: number) => {
     const engine = engineRef.current;
     if (!engine) return;
 
+    resetAlbumSequenceStateRef.current();
     engine.seekTo(progress);
 
     // Rebuild breadcrumb state for the seek position
@@ -695,7 +850,15 @@ function EditorContent() {
     // Reset transition tracking refs to match seek state
     prevShowPhotosRef.current = false;
     prevPhotoLocationIdRef.current = null;
+    prevPhaseRef.current = null;
+    setVisiblePhotoLocationId(null);
   }, [setBreadcrumbs]);
+
+  useEffect(() => () => clearAlbumSequenceTimersRef.current(), []);
+
+  const handleFlyToAlbumComplete = useCallback((locationId: string) => {
+    completeAlbumSequenceRef.current(locationId);
+  }, []);
 
   const handleEditLayout = useCallback((locationId: string) => {
     setEditingLocationId(locationId);
@@ -935,6 +1098,7 @@ function EditorContent() {
                   onPlay={handlePlay}
                   onReset={handleReset}
                   onSeek={handleSeek}
+                  onFlyToAlbumComplete={handleFlyToAlbumComplete}
                   onStopEditingLayout={() => setEditingLocationId(null)}
                 />
               </div>
@@ -976,6 +1140,7 @@ function EditorContent() {
                     onPlay={handlePlay}
                     onReset={handleReset}
                     onSeek={handleSeek}
+                    onFlyToAlbumComplete={handleFlyToAlbumComplete}
                     onStopEditingLayout={() => setEditingLocationId(null)}
                   />
                 </div>
