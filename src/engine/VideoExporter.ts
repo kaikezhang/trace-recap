@@ -847,8 +847,9 @@ export class VideoExporter {
     const group = groups[progress.groupIndex];
     if (!group) return;
 
-    const fromName = group.fromLoc.name;
-    const toName = group.toLoc.name;
+    const lang = this.settings.cityLabelLang ?? "en";
+    const fromName = lang === "zh" ? (group.fromLoc.nameZh || group.fromLoc.name) : group.fromLoc.name;
+    const toName = lang === "zh" ? (group.toLoc.nameZh || group.toLoc.name) : group.toLoc.name;
     if (!fromName || !toName) return;
 
     const label = `${fromName} → ${toName}`;
@@ -2683,17 +2684,16 @@ export class VideoExporter {
         drawX = innerX + (mediaW - drawW) * options.focalPoint.x;
         drawY = mediaY + (mediaH - drawH) * options.focalPoint.y;
       } else {
+        // Cover mode: fill the frame completely, crop overflow (matches CSS object-cover)
         if (imageAspect > mediaAspect) {
-          drawW = mediaW;
-          drawH = mediaW / imageAspect;
-          drawX = innerX;
-          drawY = mediaY + (mediaH - drawH) / 2;
-        } else {
           drawH = mediaH;
           drawW = mediaH * imageAspect;
-          drawX = innerX + (mediaW - drawW) / 2;
-          drawY = mediaY;
+        } else {
+          drawW = mediaW;
+          drawH = mediaW / imageAspect;
         }
+        drawX = innerX + (mediaW - drawW) * options.focalPoint.x;
+        drawY = mediaY + (mediaH - drawH) * options.focalPoint.y;
       }
 
       ctx.save();
