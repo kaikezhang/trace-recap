@@ -160,7 +160,6 @@ function EditorContent() {
   const setAlbumCollectingLocationId = useAnimationStore(
     (s) => s.setAlbumCollectingLocationId,
   );
-  const setAlbumClosedLocationId = useAnimationStore((s) => s.setAlbumClosedLocationId);
   const addBreadcrumb = useAnimationStore((s) => s.addBreadcrumb);
   const setBreadcrumbs = useAnimationStore((s) => s.setBreadcrumbs);
   const reset = useAnimationStore((s) => s.reset);
@@ -201,12 +200,7 @@ function EditorContent() {
     pendingAlbumCloseLocationIdRef.current = null;
     completedAlbumLocationIdsRef.current.clear();
     setAlbumCollectingLocationId(null);
-    setAlbumClosedLocationId(null);
-  }, [
-    clearAlbumSequenceTimers,
-    setAlbumClosedLocationId,
-    setAlbumCollectingLocationId,
-  ]);
+  }, [clearAlbumSequenceTimers, setAlbumCollectingLocationId]);
 
   const completeAlbumSequence = useCallback(
     (locationId: string) => {
@@ -229,12 +223,7 @@ function EditorContent() {
       // state (open album with photos visible) until ZOOM_OUT triggers
       // the close animation.
     },
-    [
-      clearAlbumSequenceTimers,
-      setAlbumClosedLocationId,
-      setAlbumCollectingLocationId,
-      setShowPhotoOverlay,
-    ],
+    [setShowPhotoOverlay],
   );
 
   const startAlbumSequence = useCallback(
@@ -243,7 +232,6 @@ function EditorContent() {
       pendingAlbumCloseLocationIdRef.current = null;
       activeAlbumSequenceLocationIdRef.current = locationId;
       completedAlbumLocationIdsRef.current.add(locationId);
-      setAlbumClosedLocationId(null);
       setAlbumCollectingLocationId(locationId);
       setVisiblePhotoLocationId(locationId);
       setShowPhotoOverlay(true);
@@ -251,7 +239,6 @@ function EditorContent() {
     },
     [
       clearAlbumSequenceTimers,
-      setAlbumClosedLocationId,
       setAlbumCollectingLocationId,
       setPhotoOverlayOpacity,
       setShowPhotoOverlay,

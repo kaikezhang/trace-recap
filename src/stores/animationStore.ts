@@ -45,8 +45,6 @@ interface AnimationState {
   currentArrivalLocationId: string | null;
   /** ID of the location whose album is currently collecting flying photos */
   albumCollectingLocationId: string | null;
-  /** ID of the location whose album has snapped shut after collecting photos */
-  albumClosedLocationId: string | null;
   /** Screen-space positions for chapter pins that the photo overlay can target */
   chapterPinPositions: Record<string, ScreenPoint>;
   /** Breadcrumb thumbnails left at visited locations */
@@ -74,7 +72,6 @@ interface AnimationState {
   addVisitedLocationId: (id: string) => void;
   setCurrentArrivalLocationId: (id: string | null) => void;
   setAlbumCollectingLocationId: (id: string | null) => void;
-  setAlbumClosedLocationId: (id: string | null) => void;
   setChapterPinPositions: (positions: Record<string, ScreenPoint>) => void;
   addBreadcrumb: (b: Breadcrumb) => void;
   setBreadcrumbs: (breadcrumbs: Breadcrumb[]) => void;
@@ -104,7 +101,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   visitedLocationIds: [],
   currentArrivalLocationId: null,
   albumCollectingLocationId: null,
-  albumClosedLocationId: null,
   chapterPinPositions: {},
   breadcrumbs: [],
 
@@ -136,8 +132,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setCurrentArrivalLocationId: (currentArrivalLocationId) => set({ currentArrivalLocationId }),
   setAlbumCollectingLocationId: (albumCollectingLocationId) =>
     set({ albumCollectingLocationId }),
-  setAlbumClosedLocationId: (albumClosedLocationId) =>
-    set({ albumClosedLocationId }),
   setChapterPinPositions: (chapterPinPositions) => set({ chapterPinPositions }),
   addBreadcrumb: (b) =>
     set((state) => {
@@ -168,7 +162,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       visitedLocationIds: [],
       currentArrivalLocationId: null,
       albumCollectingLocationId: null,
-      albumClosedLocationId: null,
       chapterPinPositions: {},
       breadcrumbs: [],
     }),
