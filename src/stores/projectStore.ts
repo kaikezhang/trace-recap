@@ -592,13 +592,14 @@ export function invalidateSerializationCache(): void {
   }
 }
 
-/** Convert a blob: URL to a data: URL for persistence (cached) */
+/** Convert a non-data URL (blob:, relative path, etc.) to a data: URL for persistence (cached) */
 async function blobUrlToDataUrl(url: string): Promise<string> {
-  if (!url.startsWith("blob:")) return url;
+  if (url.startsWith("data:")) return url;
   const cached = blobToDataUrlCache.get(url);
   if (cached) return cached;
   try {
     const resp = await fetch(url);
+    if (!resp.ok) return url;
     const blob = await resp.blob();
     const dataUrl = await new Promise<string>((resolve) => {
       const reader = new FileReader();
