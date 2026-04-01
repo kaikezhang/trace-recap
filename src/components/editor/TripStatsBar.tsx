@@ -175,12 +175,10 @@ export default function TripStatsBar({
   if (!tripStatsEnabled) return null;
 
   const isActive = playbackState === "playing" || playbackState === "paused";
-  // Position stats bar above playback controls. On short containers (16:9 portrait)
-  // cap at 8% so it doesn't float too high. On tall containers (free/9:16) just use px.
+  // Position stats bar just above the playback controls.
+  // The bottomInsetPx is already capped by MapStage so this won't push too high.
   const baseBottom = Math.max(isCompact ? 32 : 56, bottomInsetPx + (isCompact ? 6 : 12));
-  const containerStyle: React.CSSProperties = isCompact
-    ? { bottom: `min(${baseBottom}px, 8%)` }
-    : { bottom: `${baseBottom}px` };
+  const containerStyle: React.CSSProperties = { bottom: `${baseBottom}px` };
 
   const textClass = isCompact ? "text-[10px]" : "text-[13px]";
   const emojiClass = isCompact ? "text-[10px]" : "text-[13px]";

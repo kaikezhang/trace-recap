@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import MapCanvas from "./MapCanvas";
 import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
@@ -180,9 +180,13 @@ export default function MapStage({
 
   const isPlaying = playbackState === "playing";
   const [playbackBarInsetPx, setPlaybackBarInsetPx] = useState(0);
-  const effectiveBottomInsetPx = stageBottomInsetPx + playbackBarInsetPx;
-  // Route label sits above stats bar — capped at 20% of container height from bottom
-  // so it stays in the lower quarter. Stats bar sits below it.
+  const stageRef = useRef<HTMLDivElement>(null);
+  // Cap the bottom inset so overlays (stats bar, route label) don't get pushed
+  // into the middle of the map on short containers (e.g. 16:9 on portrait phone).
+  // The inset should never exceed 15% of the container height.
+  const stageHeight = stageRef.current?.clientHeight ?? 0;
+  const maxInset = stageHeight > 0 ? Math.round(stageHeight * 0.15) : Infinity;
+  const effectiveBottomInsetPx = Math.min(stageBottomInsetPx + playbackBarInsetPx, maxInset);
   const routeLabelBottomPx = Math.max(80, effectiveBottomInsetPx + 60);
   const currentSegment = segments[currentSegmentIndex];
   const fromLoc = currentSegment
@@ -199,7 +203,7 @@ export default function MapStage({
     : null;
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={stageRef} className="relative h-full w-full">
       <MapCanvas />
       <ChapterPinsOverlay />
       <BreadcrumbTrail />
