@@ -1,100 +1,37 @@
-# TASK — Photo-to-Album Pin Animation ("Memory Collection")
+# ⚠️ DO NOT MERGE ANY PR. Create the PR and stop.
 
-⚠️ CREATE PR AND STOP. DO NOT MERGE.
+## Current Task: Album Redesign Phase 1
 
-## Overview
-Redesign the photo exit animation and chapter pin to create a "memory collection" effect:
-photos fly into an album-style pin, the album closes with a cover photo, then
-slowly transitions to a small visited map pin after leaving the city.
+**Read the full implementation plan:** `docs/superpowers/plans/2026-04-01-album-redesign-phase1.md`
 
-## Animation Flow (4 phases)
+**Read the design spec:** `docs/superpowers/specs/2026-04-01-album-redesign-design.md`
 
-### Phase 1: Photos Displayed
-- Current behavior: photos shown with PhotoOverlay, active ChapterPin visible
-- **Change**: Replace current active ChapterPin card with a larger "open album" visual
+### Summary
 
-### Phase 2: Photos Fly Into Album (0.5s)
-- All photos shrink simultaneously and fly toward the ChapterPin position on the map
-- The album pin shows photos landing inside it (visual: pages being filled)
-- This replaces the current photo exit animation in PhotoOverlay
-- Duration: 0.5 seconds
-- Easing: ease-in (accelerating toward the pin)
+Replace the current flat white album pin with a textured, multi-style album book featuring:
 
-### Phase 3: Album Closes
-- After all photos arrive, the album "closes" with a satisfying animation
-- The first photo becomes the album cover
-- Visual: like a photo book snapping shut
-- Duration: ~0.3s
-- Result: a compact album icon showing the cover photo + city name
+1. **4 album style skins** — Vintage Leather, Japanese Minimal, Classic Hardcover, Travel Scrapbook
+2. **SVG noise paper textures** (zero external image assets, all CSS + inline SVG)
+3. **Grid-based photo layout** within album pages (left/right pages, responsive grid)
+4. **Simplified state flow** — remove `album-closed` state, go directly from collecting → 300ms hold → visited
+5. **Album Style selector** in TopToolbar Settings panel
+6. **New types**: `AlbumStyle`, `PhotoFrameStyle` (frame style visuals are Phase 2, just add the type now)
 
-### Phase 4: Album → Visited Pin (slow, async)
-- When the route moves away from this city (HOVER/ZOOM_OUT phase begins)
-- The album slowly shrinks and fades to the small visited pin style (circular photo thumbnail, 0.5 opacity)
-- Duration: 1-2 seconds (slow, doesn't block the route animation)
-- This is purely visual polish, happens in the background
+### Implementation Order
 
-## Technical Implementation
+Follow the plan step by step:
+1. Type definitions + album style configs (`src/types/index.ts`, `src/lib/albumStyles.ts`)
+2. PaperTexture component (`src/components/editor/PaperTexture.tsx`)
+3. State management — uiStore + animationStore updates
+4. AlbumBook component (`src/components/editor/AlbumBook.tsx`)
+5. Update ChapterPin + ChapterPinsOverlay (integrate AlbumBook, remove album-closed)
+6. Settings UI — Album Style in TopToolbar
+7. Update animation engine timing (skip closed, direct to visited)
+8. Final integration + create PR
 
-### ChapterPin.tsx — Complete Redesign
-Replace current active/visited states with 4 states:
-```typescript
-type ChapterPinState = "future" | "album-open" | "album-collecting" | "album-closed" | "visited";
-```
-
-**album-open**: Large album visual (like an open photo book). Shows city name.
-- Size: ~80x60px book shape with subtle 3D perspective
-- Color: white/cream with soft shadow
-- City name below
-
-**album-collecting**: Photos flying in. Show a stack effect as photos arrive.
-- Same album visual but with a "filling" animation
-- Each photo that arrives adds to the visual stack
-
-**album-closed**: Closed album with cover photo.
-- Size: ~48x48px
-- Shows first photo as cover, rounded corners, slight book spine shadow
-- City name below
-- Emoji if set
-
-**visited**: Current small circular thumbnail (existing style but keep it)
-- Size: 32x32px circular photo
-- Opacity: 0.5
-- City name below in small text
-
-### PhotoOverlay.tsx — New Exit Animation
-When photos exit (opacity going from 1→0), instead of current fade/scale/slide:
-1. Calculate the ChapterPin screen position (need to pass pin coordinates)
-2. Each photo shrinks (scale: 1→0.15) and translates toward the pin position
-3. All photos move simultaneously
-4. Duration: 0.5s, easing: cubic-bezier(0.4, 0, 0.2, 1)
-5. Photos should slightly rotate during flight for visual flair (~5-10deg)
-6. On arrival, photos disappear (opacity: 0)
-
-### EditorLayout.tsx — State Coordination
-Need to coordinate between PhotoOverlay exit and ChapterPin state:
-1. When photo exit begins → ChapterPin state = "album-collecting"
-2. When photo exit completes (0.5s later) → ChapterPin state = "album-closed"
-3. When leaving city (HOVER phase) → ChapterPin state = "visited" (slow transition)
-
-This may require new animation store fields:
-- `albumCollectingLocationId: string | null` — which pin is currently collecting
-- Pass the pin's screen position to PhotoOverlay for the fly-to target
-
-### Key Constraints
-- Must work with ALL photo styles (classic, kenburns, bloom, portal)
-- The bloom style already has its own exit — the fly-to-album should replace it or integrate
-- Must work on both mobile and desktop
-- Pin screen position comes from `map.project(coordinates)` — same as current ChapterPinsOverlay
-- The animation timing must not extend the total route duration — phase 4 runs async
-
-## Files to Modify
-- `src/components/editor/ChapterPin.tsx` — complete redesign
-- `src/components/editor/ChapterPinsOverlay.tsx` — new state management
-- `src/components/editor/PhotoOverlay.tsx` — new exit animation targeting pin position
-- `src/components/editor/EditorLayout.tsx` — coordination between overlay and pins
-- `src/stores/animationStore.ts` — possibly new state fields
-
-## Verification
-- `npx tsc --noEmit` must pass
-- `npm run build` must pass
-- Test with demo route: Seattle → Honolulu → Tokyo → ... (has varying photo counts)
+### Key Rules
+- ⚠️ **DO NOT MERGE.** Create the PR and stop.
+- Run `npx tsc --noEmit` after each task to verify compilation
+- Create feature branch `feat/album-redesign-phase1`
+- Commit after each task with descriptive messages
+- Keep all existing functionality working — this is additive
