@@ -611,7 +611,10 @@ function EditorContent() {
             );
             if (arrive) {
               const arriveEnd = arrive.startTime + arrive.duration;
-              if (t >= arrive.startTime && t < arriveEnd) {
+              // Only show album pin in the last 20% of ARRIVE phase
+              // (when photos are about to start fading out), not at the start
+              const albumAppearTime = arrive.startTime + arrive.duration * 0.8;
+              if (t >= albumAppearTime && t < arriveEnd) {
                 newArrival = group.toLoc.id;
               } else if (t >= arriveEnd) {
                 // Photos fade out during the next group's HOVER + ZOOM_OUT.
