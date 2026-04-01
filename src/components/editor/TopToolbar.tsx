@@ -82,6 +82,8 @@ export default function TopToolbar() {
   const setMoodColorsEnabled = useUIStore((s) => s.setMoodColorsEnabled);
   const albumStyle = useUIStore((s) => s.albumStyle);
   const setAlbumStyle = useUIStore((s) => s.setAlbumStyle);
+  const albumCaptionsEnabled = useUIStore((s) => s.albumCaptionsEnabled);
+  const setAlbumCaptionsEnabled = useUIStore((s) => s.setAlbumCaptionsEnabled);
 
   const setProjectListOpen = useUIStore((s) => s.setProjectListOpen);
   const currentProjectName = useProjectStore((s) => s.currentProjectName);
@@ -384,6 +386,8 @@ export default function TopToolbar() {
                   setMoodColorsEnabled={setMoodColorsEnabled}
                   albumStyle={albumStyle}
                   setAlbumStyle={setAlbumStyle}
+                  albumCaptionsEnabled={albumCaptionsEnabled}
+                  setAlbumCaptionsEnabled={setAlbumCaptionsEnabled}
                 />
               </div>
             )}
@@ -433,6 +437,8 @@ export default function TopToolbar() {
                     setMoodColorsEnabled={setMoodColorsEnabled}
                     albumStyle={albumStyle}
                     setAlbumStyle={setAlbumStyle}
+                    albumCaptionsEnabled={albumCaptionsEnabled}
+                    setAlbumCaptionsEnabled={setAlbumCaptionsEnabled}
                   />
                 </div>
               </div>
@@ -546,6 +552,8 @@ interface SettingsContentProps {
   setMoodColorsEnabled: (v: boolean) => void;
   albumStyle: AlbumStyle;
   setAlbumStyle: (v: AlbumStyle) => void;
+  albumCaptionsEnabled: boolean;
+  setAlbumCaptionsEnabled: (v: boolean) => void;
 }
 
 function SettingsContent({
@@ -565,6 +573,8 @@ function SettingsContent({
   setMoodColorsEnabled,
   albumStyle,
   setAlbumStyle,
+  albumCaptionsEnabled,
+  setAlbumCaptionsEnabled,
 }: SettingsContentProps) {
   return (
     <>
@@ -746,6 +756,31 @@ function SettingsContent({
                 />
               </div>
               <span className="w-full truncate text-center">{config.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Album Captions toggle */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground">Album Captions</label>
+        <p className="text-[11px] text-muted-foreground/70">
+          Show photo captions inside the album book
+        </p>
+        <div className="flex gap-2">
+          {([
+            { value: true, label: "On" },
+            { value: false, label: "Off" },
+          ] as const).map((opt) => (
+            <button
+              key={String(opt.value)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                albumCaptionsEnabled === opt.value
+                  ? "bg-indigo-500 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              onClick={() => setAlbumCaptionsEnabled(opt.value)}
+            >
+              {opt.label}
             </button>
           ))}
         </div>

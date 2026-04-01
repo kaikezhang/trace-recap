@@ -24,6 +24,7 @@ interface PersistedUISettings {
   sceneTransition: SceneTransition;
   albumStyle: AlbumStyle;
   photoFrameStyle: PhotoFrameStyle;
+  albumCaptionsEnabled: boolean;
   moodColorsEnabled: boolean;
   chapterPinsEnabled: boolean;
   breadcrumbsEnabled: boolean;
@@ -73,6 +74,7 @@ interface UIState {
   sceneTransition: SceneTransition; // Scene transition style between locations
   albumStyle: AlbumStyle; // Album visual style for chapter pins
   photoFrameStyle: PhotoFrameStyle; // Phase 2 photo frame style selection
+  albumCaptionsEnabled: boolean; // Show captions on photos inside album
   moodColorsEnabled: boolean; // Use photo-extracted colors for route lines
   chapterPinsEnabled: boolean; // Show chapter pins at visited cities
   breadcrumbsEnabled: boolean; // Show breadcrumb thumbnails at visited locations
@@ -96,6 +98,7 @@ interface UIState {
   setSceneTransition: (transition: SceneTransition) => void;
   setAlbumStyle: (style: AlbumStyle) => void;
   setPhotoFrameStyle: (style: PhotoFrameStyle) => void;
+  setAlbumCaptionsEnabled: (enabled: boolean) => void;
   setMoodColorsEnabled: (enabled: boolean) => void;
   setChapterPinsEnabled: (enabled: boolean) => void;
   setBreadcrumbsEnabled: (enabled: boolean) => void;
@@ -120,6 +123,7 @@ export const useUIStore = create<UIState>((set) => ({
   sceneTransition: saved.sceneTransition ?? "dissolve",
   albumStyle: saved.albumStyle ?? "vintage-leather",
   photoFrameStyle: saved.photoFrameStyle ?? "polaroid",
+  albumCaptionsEnabled: saved.albumCaptionsEnabled ?? false,
   moodColorsEnabled: saved.moodColorsEnabled ?? true,
   chapterPinsEnabled: saved.chapterPinsEnabled ?? true,
   breadcrumbsEnabled: saved.breadcrumbsEnabled ?? true,
@@ -144,6 +148,7 @@ export const useUIStore = create<UIState>((set) => ({
   setSceneTransition: (sceneTransition) => set({ sceneTransition }),
   setAlbumStyle: (albumStyle) => set({ albumStyle }),
   setPhotoFrameStyle: (photoFrameStyle) => set({ photoFrameStyle }),
+  setAlbumCaptionsEnabled: (albumCaptionsEnabled) => set({ albumCaptionsEnabled }),
   setMoodColorsEnabled: (moodColorsEnabled) => set({ moodColorsEnabled }),
   setChapterPinsEnabled: (chapterPinsEnabled) => set({ chapterPinsEnabled }),
   setBreadcrumbsEnabled: (breadcrumbsEnabled) => set({ breadcrumbsEnabled }),
@@ -167,6 +172,7 @@ useUIStore.subscribe((state) => {
       sceneTransition: state.sceneTransition,
       albumStyle: state.albumStyle,
       photoFrameStyle: state.photoFrameStyle,
+      albumCaptionsEnabled: state.albumCaptionsEnabled,
       moodColorsEnabled: state.moodColorsEnabled,
       chapterPinsEnabled: state.chapterPinsEnabled,
       breadcrumbsEnabled: state.breadcrumbsEnabled,

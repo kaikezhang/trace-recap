@@ -92,6 +92,7 @@ function PhotoGrid({
 }) {
   const grid = useMemo(() => computeAlbumPageGrid(photos.length), [photos.length]);
   const photoFrameStyle = useUIStore((state) => state.photoFrameStyle);
+  const albumCaptionsEnabled = useUIStore((state) => state.albumCaptionsEnabled);
 
   if (photos.length === 0) {
     return (
@@ -138,7 +139,7 @@ function PhotoGrid({
               <PhotoFrame
                 frameStyle={photoFrameStyle}
                 photoIndex={index}
-                caption={photo.caption}
+                caption={albumCaptionsEnabled ? photo.caption : undefined}
                 className="h-full w-full"
               >
                 <motion.img
