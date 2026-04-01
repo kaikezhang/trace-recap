@@ -1,7 +1,16 @@
 import { lineString } from "@turf/helpers";
 import { length } from "@turf/length";
 import type mapboxgl from "mapbox-gl";
-import type { ExportSettings, FreePhotoTransform, Photo, PhotoAnimation, PhotoLayout, PhotoStyle, SceneTransition } from "@/types";
+import type {
+  ExportSettings,
+  FreePhotoTransform,
+  Photo,
+  PhotoAnimation,
+  PhotoFrameStyle,
+  PhotoLayout,
+  PhotoStyle,
+  SceneTransition,
+} from "@/types";
 import { AnimationEngine } from "./AnimationEngine";
 import type { AnimationEvent } from "./AnimationEngine";
 import {
@@ -39,6 +48,12 @@ import { resolveSceneTransition, computeDissolveOpacity, computeBlurDissolve, co
 import { computePortalLayout, computePortalPhaseProgress } from "@/lib/portalLayout";
 import { computeTripStats, getSortedTransportModes, TRANSPORT_MODE_EMOJI } from "@/lib/tripStats";
 import { computeCityLabelTopPercent } from "@/lib/cityLabelPosition";
+import { DEFAULT_CAPTION_BG_COLOR } from "@/lib/constants";
+import {
+  frameStyleUsesInlineCaption,
+  getPhotoFrameRotation,
+  getPhotoFrameStyleConfig,
+} from "@/lib/frameStyles";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -53,6 +68,32 @@ interface PreloadedPhoto {
   img: HTMLImageElement;
   aspect: number; // naturalWidth / naturalHeight
   failed?: boolean; // true if the original image failed to load (placeholder)
+}
+
+interface ExportCaptionDisplay {
+  text: string;
+  fontFamily: string;
+  fontSizePx: number;
+  color: string;
+  bgColor: string;
+  offsetX: number;
+  offsetY: number;
+  rotation: number;
+}
+
+interface BoxSpacing {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+interface ParsedShadow {
+  inset: boolean;
+  offsetX: number;
+  offsetY: number;
+  blur: number;
+  color: string;
 }
 
 function getFreeTransformMap(layout?: PhotoLayout): Map<string, FreePhotoTransform> {
@@ -1426,10 +1467,6 @@ export class VideoExporter {
     }
     if (loaded.length === 0) return;
 
-    const pad = 6 * scaleX;
-    const radius = borderRadiusPx * scaleX;
-    const shadowOffX = 2 * scaleX;
-    const shadowOffY = 2 * scaleX;
     const insetW = canvasWidth * 0.95;
     const insetH = canvasHeight * 0.88;
     const insetX = (canvasWidth - insetW) / 2;
@@ -1437,7 +1474,6 @@ export class VideoExporter {
 
     const captionScale = insetW / 1000;
     const captionFontSizeVal = (layout?.captionFontSize ?? 14) * captionScale;
-    const captionH = captionFontSizeVal * 2;
     const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
 
     const containerAspect = insetW / insetH;
@@ -1475,7 +1511,7 @@ export class VideoExporter {
 
     const count = loaded.length;
     const isFreeMode = layout?.mode === "free";
-    const isPolaroid = !isFreeMode && layout?.template === "polaroid";
+    const frameStyle = this.settings.photoFrameStyle ?? "polaroid";
 
     // --- Photo animation timing ---
     const {
@@ -1752,14 +1788,13 @@ export class VideoExporter {
       const rect = effectiveRects[i];
       const { photo, preloaded } = loaded[i];
       const freeTransform = freeTransformMap.get(photo.id);
-      const captionText = freeTransform?.caption?.text ?? photo.caption ?? "";
-      const hasCaption = Boolean(captionText);
-      const captionFontFamily = freeTransform?.caption?.fontFamily ?? captionFontFamilyVal;
-      const captionFontSize = (freeTransform?.caption?.fontSize ?? (layout?.captionFontSize ?? 14)) * captionScale;
-      const captionColor = freeTransform?.caption?.color ?? "#ffffff";
-      const captionOffsetX = freeTransform?.caption?.offsetX ?? 0;
-      const captionOffsetY = freeTransform?.caption?.offsetY ?? (rect.height / 2 + 0.04);
-      const captionRotation = freeTransform?.caption?.rotation ?? 0;
+      const captionDisplay = this.getCaptionDisplay(
+        photo,
+        freeTransform,
+        captionFontFamilyVal,
+        captionFontSizeVal,
+        captionScale,
+      );
       const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
 
       const rx = insetX + rect.x * insetW;
@@ -1769,8 +1804,6 @@ export class VideoExporter {
 
       const frameW = rw;
       const frameH = rh;
-      const imgW = frameW - pad * 2;
-      const imgH = frameH - pad * 2 - (hasCaption ? captionH : 0);
 
       // Use scatter rotation if provided, otherwise default tilts
       let rotation: number;
@@ -1832,201 +1865,41 @@ export class VideoExporter {
       ctx.translate(centerX + animTransform.translateX * scaleX, centerY + animTransform.translateY * scaleX);
       ctx.rotate((rotation + animTransform.rotate) * Math.PI / 180);
       ctx.scale(animTransform.scaleX, animTransform.scaleY);
+      const kbStagger = this.getStaggerDelay(enterAnimStyle, i);
+      const kenBurnsProgress = photoStyle === "kenburns"
+        ? Math.max(0, Math.min(1, (kenBurnsElapsed - kbStagger) / KEN_BURNS_DURATION_SEC))
+        : null;
 
-      if (isPolaroid) {
-        // Polaroid: white card with thicker bottom padding and shadow
-        const polPadSide = frameW * 0.04;
-        const polPadBottom = frameH * 0.10;
-        const polPadTop = frameW * 0.04;
-        const polRadius = 4 * scaleX;
-
-        // Drop shadow for the white frame
-        ctx.shadowColor = "rgba(0,0,0,0.25)";
-        ctx.shadowBlur = 16 * scaleX;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 4 * scaleX;
-
-        // White frame
-        ctx.fillStyle = "white";
-        ctx.beginPath();
-        ctx.roundRect(-frameW / 2, -frameH / 2, frameW, frameH, polRadius);
-        ctx.fill();
-
-        // Reset shadow before drawing image
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-
-        // Image area inside the white frame
-        const imgAreaX = -frameW / 2 + polPadSide;
-        const imgAreaY = -frameH / 2 + polPadTop;
-        const imgAreaW = frameW - polPadSide * 2;
-        const imgAreaH = frameH - polPadTop - polPadBottom;
-
-        // Fit image within the area
-        const imgAspect = preloaded.aspect;
-        const areaAspect = imgAreaW / imgAreaH;
-        let drawW: number, drawH: number, drawX: number, drawY: number;
-
-        if (photoStyle === "kenburns") {
-          // Ken Burns: "cover" — fill area, may crop, focal-aware positioning
-          if (imgAspect > areaAspect) {
-            drawH = imgAreaH;
-            drawW = imgAreaH * imgAspect;
-          } else {
-            drawW = imgAreaW;
-            drawH = imgAreaW / imgAspect;
-          }
-          drawX = imgAreaX + (imgAreaW - drawW) * fp.x;
-          drawY = imgAreaY + (imgAreaH - drawH) * fp.y;
-        } else {
-          // Classic: "contain" — fit entire image
-          if (imgAspect > areaAspect) {
-            drawW = imgAreaW;
-            drawH = imgAreaW / imgAspect;
-            drawX = imgAreaX;
-            drawY = imgAreaY + (imgAreaH - drawH) / 2;
-          } else {
-            drawH = imgAreaH;
-            drawW = imgAreaH * imgAspect;
-            drawX = imgAreaX + (imgAreaW - drawW) / 2;
-            drawY = imgAreaY;
-          }
-        }
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(imgAreaX, imgAreaY, imgAreaW, imgAreaH);
-        ctx.clip();
-        if (photoStyle === "kenburns") {
-          const kbStagger = this.getStaggerDelay(enterAnimStyle, i);
-          const kbProgress = Math.max(0, Math.min(1, (kenBurnsElapsed - kbStagger) / KEN_BURNS_DURATION_SEC));
-          const kb = getKenBurnsTransform(kbProgress, i, fp);
-          const areaCX = imgAreaX + imgAreaW / 2;
-          const areaCY = imgAreaY + imgAreaH / 2;
-          ctx.translate(areaCX, areaCY);
-          ctx.translate(kb.translateX * imgAreaW / 100, kb.translateY * imgAreaH / 100);
-          ctx.scale(kb.scale, kb.scale);
-          ctx.translate(-areaCX, -areaCY);
-        }
-        ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
-        ctx.restore();
-
-        if (!isFreeMode && hasCaption) {
-          ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
-          ctx.fillStyle = "#374151";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(
-            captionText,
-            0,
-            imgAreaY + imgAreaH + (polPadBottom - polPadTop) / 2,
-            imgAreaW
-          );
-        }
-      } else {
-        // Default: direct image with rounded corners
-        const availH = hasCaption ? frameH - captionH : frameH;
-        const imgAspect = preloaded.aspect;
-        const targetAspect = frameW / availH;
-        let drawW: number, drawH: number, drawX: number, drawY: number;
-
-        if (photoStyle === "kenburns") {
-          // Ken Burns: use "cover" (fill area, may crop) + focal-aware positioning
-          if (imgAspect > targetAspect) {
-            drawH = availH;
-            drawW = availH * imgAspect;
-          } else {
-            drawW = frameW;
-            drawH = frameW / imgAspect;
-          }
-          drawX = -frameW / 2 + (frameW - drawW) * fp.x;
-          drawY = -frameH / 2 + (availH - drawH) * fp.y;
-        } else {
-          // Classic: use "contain" (fit entire image, no crop)
-          if (imgAspect > targetAspect) {
-            drawW = frameW;
-            drawH = frameW / imgAspect;
-            drawX = -frameW / 2;
-            drawY = -frameH / 2 + (availH - drawH) / 2;
-          } else {
-            drawH = availH;
-            drawW = availH * imgAspect;
-            drawX = -drawW / 2;
-            drawY = -frameH / 2;
-          }
-        }
-
-        // Drop shadow
-        ctx.shadowColor = "rgba(0,0,0,0.3)";
-        ctx.shadowBlur = 12 * scaleX;
-        ctx.shadowOffsetX = shadowOffX;
-        ctx.shadowOffsetY = shadowOffY;
-
-        // Clip to rounded rect and draw
-        ctx.save();
-        ctx.beginPath();
-        if (photoStyle === "kenburns") {
-          // Clip to frame bounds for Ken Burns (image overflows due to cover+zoom)
-          ctx.roundRect(-frameW / 2, -frameH / 2, frameW, availH, radius);
-        } else {
-          ctx.roundRect(drawX, drawY, drawW, drawH, radius);
-        }
-        ctx.clip();
-
-        if (photoStyle === "kenburns") {
-          // Apply Ken Burns zoom+pan transform (per-photo progress with stagger)
-          const kbStagger = this.getStaggerDelay(enterAnimStyle, i);
-          const kbProgress = Math.max(0, Math.min(1, (kenBurnsElapsed - kbStagger) / KEN_BURNS_DURATION_SEC));
-          const kb = getKenBurnsTransform(kbProgress, i, fp);
-          ctx.translate(kb.translateX * frameW / 100, kb.translateY * availH / 100);
-          ctx.scale(kb.scale, kb.scale);
-        }
-        ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
-        ctx.restore();
-
-        // Reset shadow
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-
-        if (!isFreeMode && hasCaption) {
-          ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
-          ctx.fillStyle = "#374151";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(
-            captionText,
-            0,
-            -frameH / 2 + availH + captionH / 2,
-            drawW
-          );
-        }
-      }
+      this.drawResolvedPhotoFrame(ctx, {
+        photo,
+        photoIndex: i,
+        preloaded,
+        photoStyle,
+        frameStyle,
+        frameW,
+        frameH,
+        borderRadiusPx,
+        caption: captionDisplay,
+        scaleX,
+        canvasWidth,
+        canvasHeight,
+        isFreeMode,
+        kenBurnsProgress,
+        focalPoint: fp,
+      });
 
       ctx.restore();
 
-      if (isFreeMode && hasCaption) {
-        ctx.save();
-        ctx.globalAlpha = animTransform.opacity * transitionOutgoingAlpha;
-        if (transitionOutgoingBlur > 0) {
-          ctx.filter = `blur(${transitionOutgoingBlur * scaleX}px)`;
-        }
-        ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
-        ctx.fillStyle = captionColor;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.shadowColor = "rgba(0,0,0,0.35)";
-        ctx.shadowBlur = 6 * scaleX;
-        ctx.translate(
-          insetX + (rect.x + rect.width / 2 + captionOffsetX) * insetW + animTransform.translateX * scaleX,
-          insetY + (rect.y + rect.height / 2 + captionOffsetY) * insetH + animTransform.translateY * scaleX,
-        );
-        ctx.rotate(captionRotation * Math.PI / 180);
-        ctx.fillText(captionText, 0, 0, Math.max(frameW, 160 * scaleX));
-        ctx.restore();
+      if (isFreeMode && captionDisplay.text.trim().length > 0) {
+        this.drawFreeCaption(ctx, {
+          caption: captionDisplay,
+          x: insetX + (rect.x + rect.width / 2 + captionDisplay.offsetX) * insetW + animTransform.translateX * scaleX,
+          y: insetY + (rect.y + rect.height / 2 + captionDisplay.offsetY) * insetH + animTransform.translateY * scaleX,
+          opacity: animTransform.opacity * transitionOutgoingAlpha,
+          blurPx: transitionOutgoingBlur * scaleX,
+          maxWidth: Math.max(frameW, 160 * scaleX),
+          scaleX,
+        });
       }
     }
 
@@ -2129,10 +2002,6 @@ export class VideoExporter {
     }
     if (loaded.length === 0) return;
 
-    const pad = 6 * scaleX;
-    const radius = borderRadiusPx * scaleX;
-    const shadowOffX = 2 * scaleX;
-    const shadowOffY = 2 * scaleX;
     const insetW = canvasWidth * 0.95;
     const insetH = canvasHeight * 0.88;
     const insetX = (canvasWidth - insetW) / 2;
@@ -2140,7 +2009,6 @@ export class VideoExporter {
 
     const captionScale = insetW / 1000;
     const captionFontSizeVal = (layout?.captionFontSize ?? 14) * captionScale;
-    const captionH = captionFontSizeVal * 2;
     const captionFontFamilyVal = layout?.captionFontFamily ?? "system-ui";
 
     const containerAspect = insetW / insetH;
@@ -2169,7 +2037,7 @@ export class VideoExporter {
         : computeAutoLayout(layoutMetas, containerAspect, gapPx, widthPx);
     const count = loaded.length;
     const isFreeMode = layout?.mode === "free";
-    const isPolaroid = !isFreeMode && layout?.template === "polaroid";
+    const frameStyle = this.settings.photoFrameStyle ?? "polaroid";
     const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
     if (photoStyle === "portal") {
       const portalProgress = computePortalPhaseProgress(transitionProgress);
@@ -2221,14 +2089,13 @@ export class VideoExporter {
       const rect = rects[i];
       const { photo, preloaded } = loaded[i];
       const freeTransform = freeTransformMap.get(photo.id);
-      const captionText = freeTransform?.caption?.text ?? photo.caption ?? "";
-      const hasCaption = Boolean(captionText);
-      const captionFontFamily = freeTransform?.caption?.fontFamily ?? captionFontFamilyVal;
-      const captionFontSize = (freeTransform?.caption?.fontSize ?? (layout?.captionFontSize ?? 14)) * captionScale;
-      const captionColor = freeTransform?.caption?.color ?? "#ffffff";
-      const captionOffsetX = freeTransform?.caption?.offsetX ?? 0;
-      const captionOffsetY = freeTransform?.caption?.offsetY ?? (rect.height / 2 + 0.04);
-      const captionRotation = freeTransform?.caption?.rotation ?? 0;
+      const captionDisplay = this.getCaptionDisplay(
+        photo,
+        freeTransform,
+        captionFontFamilyVal,
+        captionFontSizeVal,
+        captionScale,
+      );
       const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
 
       const rx = insetX + rect.x * insetW;
@@ -2259,124 +2126,36 @@ export class VideoExporter {
       }
       ctx.translate(centerX, centerY);
       ctx.rotate(rotation * Math.PI / 180);
-
-      if (isPolaroid) {
-        const polPadSide = frameW * 0.04;
-        const polPadBottom = frameH * 0.10;
-        const polPadTop = frameW * 0.04;
-        const polRadius = 4 * scaleX;
-
-        ctx.shadowColor = "rgba(0,0,0,0.25)";
-        ctx.shadowBlur = 16 * scaleX;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 4 * scaleX;
-        ctx.fillStyle = "white";
-        ctx.beginPath();
-        ctx.roundRect(-frameW / 2, -frameH / 2, frameW, frameH, polRadius);
-        ctx.fill();
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-
-        const imgAreaX = -frameW / 2 + polPadSide;
-        const imgAreaY = -frameH / 2 + polPadTop;
-        const imgAreaW = frameW - polPadSide * 2;
-        const imgAreaH = frameH - polPadTop - polPadBottom;
-
-        const imgAspect = preloaded.aspect;
-        const areaAspect = imgAreaW / imgAreaH;
-        let drawW: number, drawH: number, drawX: number, drawY: number;
-
-        if (photoStyle === "kenburns") {
-          if (imgAspect > areaAspect) { drawH = imgAreaH; drawW = imgAreaH * imgAspect; }
-          else { drawW = imgAreaW; drawH = imgAreaW / imgAspect; }
-          drawX = imgAreaX + (imgAreaW - drawW) * fp.x;
-          drawY = imgAreaY + (imgAreaH - drawH) * fp.y;
-        } else {
-          if (imgAspect > areaAspect) { drawW = imgAreaW; drawH = imgAreaW / imgAspect; drawX = imgAreaX; drawY = imgAreaY + (imgAreaH - drawH) / 2; }
-          else { drawH = imgAreaH; drawW = imgAreaH * imgAspect; drawX = imgAreaX + (imgAreaW - drawW) / 2; drawY = imgAreaY; }
-        }
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(imgAreaX, imgAreaY, imgAreaW, imgAreaH);
-        ctx.clip();
-        ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
-        ctx.restore();
-
-        if (!isFreeMode && hasCaption) {
-          ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
-          ctx.fillStyle = "#374151";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(captionText, 0, imgAreaY + imgAreaH + (polPadBottom - polPadTop) / 2, imgAreaW);
-        }
-      } else {
-        const availH = hasCaption ? frameH - captionH : frameH;
-        const imgAspect = preloaded.aspect;
-        const targetAspect = frameW / availH;
-        let drawW: number, drawH: number, drawX: number, drawY: number;
-
-        if (photoStyle === "kenburns") {
-          if (imgAspect > targetAspect) { drawH = availH; drawW = availH * imgAspect; }
-          else { drawW = frameW; drawH = frameW / imgAspect; }
-          drawX = -frameW / 2 + (frameW - drawW) * fp.x;
-          drawY = -frameH / 2 + (availH - drawH) * fp.y;
-        } else {
-          if (imgAspect > targetAspect) { drawW = frameW; drawH = frameW / imgAspect; drawX = -frameW / 2; drawY = -frameH / 2 + (availH - drawH) / 2; }
-          else { drawH = availH; drawW = availH * imgAspect; drawX = -drawW / 2; drawY = -frameH / 2; }
-        }
-
-        ctx.shadowColor = "rgba(0,0,0,0.3)";
-        ctx.shadowBlur = 12 * scaleX;
-        ctx.shadowOffsetX = shadowOffX;
-        ctx.shadowOffsetY = shadowOffY;
-
-        ctx.save();
-        ctx.beginPath();
-        if (photoStyle === "kenburns") {
-          ctx.roundRect(-frameW / 2, -frameH / 2, frameW, availH, radius);
-        } else {
-          ctx.roundRect(drawX, drawY, drawW, drawH, radius);
-        }
-        ctx.clip();
-        ctx.drawImage(preloaded.img, drawX, drawY, drawW, drawH);
-        ctx.restore();
-
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-
-        if (!isFreeMode && hasCaption) {
-          ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
-          ctx.fillStyle = "#374151";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(captionText, 0, -frameH / 2 + availH + captionH / 2, drawW);
-        }
-      }
+      this.drawResolvedPhotoFrame(ctx, {
+        photo,
+        photoIndex: i,
+        preloaded,
+        photoStyle,
+        frameStyle,
+        frameW,
+        frameH,
+        borderRadiusPx,
+        caption: captionDisplay,
+        scaleX,
+        canvasWidth,
+        canvasHeight,
+        isFreeMode,
+        kenBurnsProgress: null,
+        focalPoint: fp,
+      });
 
       ctx.restore();
 
-      if (isFreeMode && hasCaption) {
-        ctx.save();
-        ctx.globalAlpha = incomingOpacity;
-        if (incomingBlur > 0) {
-          ctx.filter = `blur(${incomingBlur * scaleX}px)`;
-        }
-        ctx.font = `${captionFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
-        ctx.fillStyle = captionColor;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.shadowColor = "rgba(0,0,0,0.35)";
-        ctx.shadowBlur = 6 * scaleX;
-        ctx.translate(
-          insetX + (rect.x + rect.width / 2 + captionOffsetX) * insetW,
-          insetY + (rect.y + rect.height / 2 + captionOffsetY) * insetH,
-        );
-        ctx.rotate(captionRotation * Math.PI / 180);
-        ctx.fillText(captionText, 0, 0, Math.max(frameW, 160 * scaleX));
-        ctx.restore();
+      if (isFreeMode && captionDisplay.text.trim().length > 0) {
+        this.drawFreeCaption(ctx, {
+          caption: captionDisplay,
+          x: insetX + (rect.x + rect.width / 2 + captionDisplay.offsetX) * insetW,
+          y: insetY + (rect.y + rect.height / 2 + captionDisplay.offsetY) * insetH,
+          opacity: incomingOpacity,
+          blurPx: incomingBlur * scaleX,
+          maxWidth: Math.max(frameW, 160 * scaleX),
+          scaleX,
+        });
       }
     }
 
@@ -2384,6 +2163,628 @@ export class VideoExporter {
     if (clipPath) {
       ctx.restore();
     }
+  }
+
+  private getCaptionDisplay(
+    photo: Photo,
+    transform: FreePhotoTransform | undefined,
+    defaultFontFamily: string,
+    defaultFontSizePx: number,
+    scale: number,
+  ): ExportCaptionDisplay {
+    return {
+      text: transform?.caption?.text ?? photo.caption ?? "",
+      fontFamily: transform?.caption?.fontFamily ?? defaultFontFamily,
+      fontSizePx: (transform?.caption?.fontSize ?? defaultFontSizePx / Math.max(scale, 0.0001)) * scale,
+      color: transform?.caption?.color ?? "#ffffff",
+      bgColor: transform?.caption?.bgColor ?? DEFAULT_CAPTION_BG_COLOR,
+      offsetX: transform?.caption?.offsetX ?? 0,
+      offsetY: transform?.caption?.offsetY ?? ((transform?.height ?? 0) / 2 + 0.04),
+      rotation: transform?.caption?.rotation ?? 0,
+    };
+  }
+
+  private getCanvasFontFamily(fontFamily: string): string {
+    const normalized = fontFamily
+      .replace(/var\([^)]+\)\s*,?\s*/g, "")
+      .replace(/\s*,\s*,/g, ",")
+      .trim()
+      .replace(/^,\s*/, "");
+
+    return normalized.length > 0 ? normalized : "system-ui";
+  }
+
+  private parseCssLengthToPx(
+    value: string | undefined,
+    options: {
+      scale: number;
+      relativeTo: number;
+      canvasWidth: number;
+      canvasHeight: number;
+    },
+  ): number {
+    if (!value) return 0;
+
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+
+    if (trimmed.startsWith("clamp(") && trimmed.endsWith(")")) {
+      const inner = trimmed.slice(6, -1);
+      const parts = inner.split(",").map((part) => part.trim());
+      if (parts.length === 3) {
+        const min = this.parseCssLengthToPx(parts[0], options);
+        const preferred = this.parseCssLengthToPx(parts[1], options);
+        const max = this.parseCssLengthToPx(parts[2], options);
+        return Math.min(max, Math.max(min, preferred));
+      }
+    }
+
+    if (trimmed.endsWith("%")) {
+      const numeric = Number.parseFloat(trimmed.slice(0, -1));
+      return Number.isFinite(numeric) ? (options.relativeTo * numeric) / 100 : 0;
+    }
+
+    if (trimmed.endsWith("vw")) {
+      const numeric = Number.parseFloat(trimmed.slice(0, -2));
+      return Number.isFinite(numeric) ? (options.canvasWidth * numeric) / 100 : 0;
+    }
+
+    if (trimmed.endsWith("vh")) {
+      const numeric = Number.parseFloat(trimmed.slice(0, -2));
+      return Number.isFinite(numeric) ? (options.canvasHeight * numeric) / 100 : 0;
+    }
+
+    if (trimmed.endsWith("rem")) {
+      const numeric = Number.parseFloat(trimmed.slice(0, -3));
+      return Number.isFinite(numeric) ? numeric * 16 * options.scale : 0;
+    }
+
+    if (trimmed.endsWith("px")) {
+      const numeric = Number.parseFloat(trimmed.slice(0, -2));
+      return Number.isFinite(numeric) ? numeric * options.scale : 0;
+    }
+
+    const numeric = Number.parseFloat(trimmed);
+    return Number.isFinite(numeric) ? numeric * options.scale : 0;
+  }
+
+  private parseBoxSpacing(
+    value: string | undefined,
+    options: {
+      scale: number;
+      relativeTo: number;
+      canvasWidth: number;
+      canvasHeight: number;
+    },
+  ): BoxSpacing {
+    const tokens = value?.trim().split(/\s+/).filter(Boolean) ?? [];
+    const resolved = tokens.length > 0 ? tokens : ["0"];
+    const lengths = resolved.map((token) => this.parseCssLengthToPx(token, options));
+
+    switch (lengths.length) {
+      case 1:
+        return { top: lengths[0], right: lengths[0], bottom: lengths[0], left: lengths[0] };
+      case 2:
+        return { top: lengths[0], right: lengths[1], bottom: lengths[0], left: lengths[1] };
+      case 3:
+        return { top: lengths[0], right: lengths[1], bottom: lengths[2], left: lengths[1] };
+      default:
+        return {
+          top: lengths[0],
+          right: lengths[1],
+          bottom: lengths[2],
+          left: lengths[3],
+        };
+    }
+  }
+
+  private parseShadow(
+    value: string | undefined,
+    options: {
+      scale: number;
+      relativeTo: number;
+      canvasWidth: number;
+      canvasHeight: number;
+    },
+  ): ParsedShadow | null {
+    if (!value || value === "none") return null;
+
+    const inset = value.includes("inset");
+    const colorMatch = value.match(/(rgba?\([^)]+\)|#[0-9a-fA-F]{3,8})/);
+    const color = colorMatch?.[0] ?? "rgba(0,0,0,0.18)";
+    const remainder = value
+      .replace(color, "")
+      .replace(/\binset\b/g, "")
+      .trim();
+    const parts = remainder.split(/\s+/).filter(Boolean);
+
+    return {
+      inset,
+      offsetX: this.parseCssLengthToPx(parts[0] ?? "0", options),
+      offsetY: this.parseCssLengthToPx(parts[1] ?? "0", options),
+      blur: this.parseCssLengthToPx(parts[2] ?? "0", options),
+      color,
+    };
+  }
+
+  private getWrappedTextLines(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+    maxLines: number,
+  ): string[] {
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+    if (maxWidth <= 0) return [trimmed];
+
+    const words = trimmed.split(/\s+/);
+    if (words.length === 1) {
+      return [this.ellipsizeText(ctx, trimmed, maxWidth)];
+    }
+
+    const lines: string[] = [];
+    let current = "";
+
+    for (let index = 0; index < words.length; index += 1) {
+      const word = words[index];
+      const candidate = current.length > 0 ? `${current} ${word}` : word;
+      if (ctx.measureText(candidate).width <= maxWidth || current.length === 0) {
+        current = candidate;
+        continue;
+      }
+
+      lines.push(current);
+      if (lines.length === maxLines - 1) {
+        const remaining = words.slice(index).join(" ");
+        lines.push(this.ellipsizeText(ctx, remaining, maxWidth));
+        return lines;
+      }
+      current = word;
+    }
+
+    if (current.length > 0) {
+      lines.push(lines.length === maxLines - 1 ? this.ellipsizeText(ctx, current, maxWidth) : current);
+    }
+
+    return lines.slice(0, maxLines);
+  }
+
+  private ellipsizeText(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+  ): string {
+    if (ctx.measureText(text).width <= maxWidth) return text;
+
+    let candidate = text.trim();
+    while (candidate.length > 1 && ctx.measureText(`${candidate}...`).width > maxWidth) {
+      candidate = candidate.slice(0, -1).trimEnd();
+    }
+
+    return candidate.length > 0 ? `${candidate}...` : text.slice(0, 1);
+  }
+
+  private drawRoundedRectPath(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+  ): void {
+    const safeRadius = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, safeRadius);
+  }
+
+  private drawFilmStrip(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: string,
+    perforationColor: string,
+    scaleX: number,
+  ): void {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, width, height);
+
+    const bandTop = y + height * 0.22;
+    const bandHeight = height * 0.56;
+    const step = 22 * scaleX;
+    const slotWidth = 6 * scaleX;
+
+    ctx.fillStyle = perforationColor;
+    for (let cursor = x + 8 * scaleX; cursor < x + width - slotWidth; cursor += step) {
+      ctx.fillRect(cursor, bandTop, slotWidth, bandHeight);
+    }
+  }
+
+  private drawBorderlessVignette(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+    color: string,
+  ): void {
+    ctx.save();
+    this.drawRoundedRectPath(ctx, x, y, width, height, radius);
+    ctx.clip();
+
+    const gradient = ctx.createRadialGradient(
+      x + width / 2,
+      y + height / 2,
+      Math.min(width, height) * 0.2,
+      x + width / 2,
+      y + height / 2,
+      Math.max(width, height) * 0.78,
+    );
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, color);
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, width, height);
+    ctx.restore();
+  }
+
+  private drawFreeCaption(
+    ctx: CanvasRenderingContext2D,
+    options: {
+      caption: ExportCaptionDisplay;
+      x: number;
+      y: number;
+      opacity: number;
+      blurPx: number;
+      maxWidth: number;
+      scaleX: number;
+    },
+  ): void {
+    const text = options.caption.text.trim();
+    if (!text) return;
+
+    const fontFamily = this.getCanvasFontFamily(options.caption.fontFamily);
+    const fontSize = options.caption.fontSizePx;
+    const lineHeight = fontSize * 1.2;
+    const paddingX = 8 * options.scaleX;
+    const paddingY = 4 * options.scaleX;
+
+    ctx.save();
+    ctx.globalAlpha = options.opacity;
+    if (options.blurPx > 0) {
+      ctx.filter = `blur(${options.blurPx}px)`;
+    }
+
+    ctx.font = `${fontSize}px ${fontFamily}, -apple-system, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const rendered = this.ellipsizeText(ctx, text, Math.max(options.maxWidth - paddingX * 2, fontSize));
+    const boxWidth = Math.min(options.maxWidth, ctx.measureText(rendered).width + paddingX * 2);
+    const boxHeight = lineHeight + paddingY * 2;
+
+    ctx.translate(options.x, options.y);
+    ctx.rotate((options.caption.rotation * Math.PI) / 180);
+
+    this.drawRoundedRectPath(ctx, -boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, 6 * options.scaleX);
+    ctx.fillStyle = options.caption.bgColor;
+    ctx.shadowColor = "rgba(0,0,0,0.2)";
+    ctx.shadowBlur = 6 * options.scaleX;
+    ctx.fill();
+
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = options.caption.color;
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 6 * options.scaleX;
+    ctx.fillText(rendered, 0, 0, Math.max(boxWidth - paddingX * 2, fontSize));
+    ctx.restore();
+  }
+
+  private drawResolvedPhotoFrame(
+    ctx: CanvasRenderingContext2D,
+    options: {
+      photo: Photo;
+      photoIndex: number;
+      preloaded: PreloadedPhoto;
+      photoStyle: PhotoStyle;
+      frameStyle: PhotoFrameStyle;
+      frameW: number;
+      frameH: number;
+      borderRadiusPx: number;
+      caption: ExportCaptionDisplay;
+      scaleX: number;
+      canvasWidth: number;
+      canvasHeight: number;
+      isFreeMode: boolean;
+      kenBurnsProgress: number | null;
+      focalPoint: { x: number; y: number };
+    },
+  ): void {
+    const frameConfig = getPhotoFrameStyleConfig(options.frameStyle);
+    const decorativeRotation = options.isFreeMode
+      ? 0
+      : getPhotoFrameRotation(options.frameStyle, options.photo.id);
+    const parseOptions = {
+      scale: options.scaleX,
+      relativeTo: options.frameW,
+      canvasWidth: options.canvasWidth,
+      canvasHeight: options.canvasHeight,
+    };
+    const framePadding = this.parseBoxSpacing(frameConfig.framePadding, parseOptions);
+    const outerRadius = this.parseCssLengthToPx(frameConfig.outerBorderRadius, parseOptions);
+    const configuredMediaRadius = this.parseCssLengthToPx(frameConfig.mediaBorderRadius, parseOptions);
+    const mediaRadius = Math.max(configuredMediaRadius, options.borderRadiusPx * options.scaleX);
+    const frameShadow = this.parseShadow(frameConfig.frameShadow, parseOptions);
+    const hasInlineCaption = !options.isFreeMode
+      && frameStyleUsesInlineCaption(options.frameStyle)
+      && options.caption.text.trim().length > 0;
+    const hasFooterCaption = !options.isFreeMode
+      && !frameStyleUsesInlineCaption(options.frameStyle)
+      && options.caption.text.trim().length > 0;
+
+    const innerX = -options.frameW / 2 + framePadding.left;
+    const innerY = -options.frameH / 2 + framePadding.top;
+    const innerW = Math.max(0, options.frameW - framePadding.left - framePadding.right);
+
+    let inlineCaptionHeight = 0;
+    let inlineCaptionLines: string[] = [];
+    let inlineCaptionFontSize = 0;
+    let inlineCaptionLineHeight = 0;
+    let inlineCaptionPadding: BoxSpacing = { top: 0, right: 0, bottom: 0, left: 0 };
+    let inlineCaptionFontFamily = "system-ui";
+    let inlineCaptionColor = frameConfig.inlineCaptionColor ?? "rgba(15, 23, 42, 0.82)";
+
+    if (hasInlineCaption) {
+      inlineCaptionPadding = this.parseBoxSpacing(frameConfig.inlineCaptionPadding, {
+        ...parseOptions,
+        relativeTo: innerW,
+      });
+      inlineCaptionFontSize = this.parseCssLengthToPx(frameConfig.inlineCaptionFontSize, {
+        ...parseOptions,
+        relativeTo: innerW,
+      });
+      inlineCaptionFontFamily = this.getCanvasFontFamily(
+        frameConfig.inlineCaptionFontFamily ?? options.caption.fontFamily,
+      );
+      inlineCaptionLineHeight = inlineCaptionFontSize * 1.05;
+      const inlineMinHeight = this.parseCssLengthToPx(frameConfig.inlineCaptionMinHeight, {
+        ...parseOptions,
+        relativeTo: options.frameH,
+      });
+
+      ctx.save();
+      ctx.font = `${inlineCaptionFontSize}px ${inlineCaptionFontFamily}, -apple-system, sans-serif`;
+      inlineCaptionLines = this.getWrappedTextLines(
+        ctx,
+        options.caption.text,
+        Math.max(innerW - inlineCaptionPadding.left - inlineCaptionPadding.right, inlineCaptionFontSize),
+        2,
+      );
+      ctx.restore();
+
+      inlineCaptionHeight = Math.max(
+        inlineMinHeight,
+        inlineCaptionLines.length * inlineCaptionLineHeight + inlineCaptionPadding.top + inlineCaptionPadding.bottom,
+      );
+    }
+
+    let footerHeight = 0;
+    let footerLines: string[] = [];
+    let footerLineHeight = 0;
+    const footerPaddingX = 8 * options.scaleX;
+    const footerPaddingY = 4 * options.scaleX;
+    const footerMinHeight = options.caption.fontSizePx * 2;
+    const captionFontFamily = this.getCanvasFontFamily(options.caption.fontFamily);
+
+    if (hasFooterCaption) {
+      footerLineHeight = options.caption.fontSizePx * 1.2;
+      ctx.save();
+      ctx.font = `${options.caption.fontSizePx}px ${captionFontFamily}, -apple-system, sans-serif`;
+      footerLines = this.getWrappedTextLines(
+        ctx,
+        options.caption.text,
+        Math.max(innerW - footerPaddingX * 2, options.caption.fontSizePx),
+        2,
+      );
+      ctx.restore();
+
+      footerHeight = Math.max(
+        footerMinHeight,
+        footerLines.length * footerLineHeight + footerPaddingY * 2,
+      );
+    }
+
+    const mediaY = innerY;
+    const mediaW = innerW;
+    const mediaH = Math.max(0, options.frameH - framePadding.top - framePadding.bottom - inlineCaptionHeight - footerHeight);
+
+    ctx.save();
+    if (decorativeRotation !== 0) {
+      ctx.rotate((decorativeRotation * Math.PI) / 180);
+    }
+
+    if (frameShadow && !frameShadow.inset) {
+      ctx.save();
+      ctx.shadowColor = frameShadow.color;
+      ctx.shadowBlur = frameShadow.blur;
+      ctx.shadowOffsetX = frameShadow.offsetX;
+      ctx.shadowOffsetY = frameShadow.offsetY;
+      this.drawRoundedRectPath(ctx, -options.frameW / 2, -options.frameH / 2, options.frameW, options.frameH, outerRadius);
+      ctx.fillStyle = frameConfig.frameBackground === "transparent" ? "rgba(255,255,255,0.01)" : frameConfig.frameBackground;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (frameConfig.frameBackground !== "transparent") {
+      this.drawRoundedRectPath(ctx, -options.frameW / 2, -options.frameH / 2, options.frameW, options.frameH, outerRadius);
+      ctx.fillStyle = frameConfig.frameBackground;
+      ctx.fill();
+    }
+
+    if (
+      options.frameStyle === "film-strip"
+      && frameConfig.filmStripHeight
+      && frameConfig.filmStripInset
+      && frameConfig.filmStripColor
+      && frameConfig.filmPerforation
+    ) {
+      const stripHeight = this.parseCssLengthToPx(frameConfig.filmStripHeight, {
+        ...parseOptions,
+        relativeTo: options.frameH,
+      });
+      const stripInset = this.parseCssLengthToPx(frameConfig.filmStripInset, {
+        ...parseOptions,
+        relativeTo: options.frameW,
+      });
+      const perforationMatch = frameConfig.filmPerforation.match(/rgba?\([^)]+\)/);
+      const perforationColor = perforationMatch?.[0] ?? "rgba(248,250,252,0.92)";
+
+      this.drawFilmStrip(
+        ctx,
+        -options.frameW / 2 + stripInset,
+        -options.frameH / 2,
+        Math.max(options.frameW - stripInset * 2, 0),
+        stripHeight,
+        frameConfig.filmStripColor,
+        perforationColor,
+        options.scaleX,
+      );
+      this.drawFilmStrip(
+        ctx,
+        -options.frameW / 2 + stripInset,
+        options.frameH / 2 - stripHeight,
+        Math.max(options.frameW - stripInset * 2, 0),
+        stripHeight,
+        frameConfig.filmStripColor,
+        perforationColor,
+        options.scaleX,
+      );
+    }
+
+    if (mediaW > 0 && mediaH > 0) {
+      const mediaAspect = mediaW / mediaH;
+      const imageAspect = options.preloaded.aspect;
+      let drawW: number;
+      let drawH: number;
+      let drawX: number;
+      let drawY: number;
+
+      if (options.photoStyle === "kenburns") {
+        if (imageAspect > mediaAspect) {
+          drawH = mediaH;
+          drawW = mediaH * imageAspect;
+        } else {
+          drawW = mediaW;
+          drawH = mediaW / imageAspect;
+        }
+        drawX = innerX + (mediaW - drawW) * options.focalPoint.x;
+        drawY = mediaY + (mediaH - drawH) * options.focalPoint.y;
+      } else {
+        if (imageAspect > mediaAspect) {
+          drawW = mediaW;
+          drawH = mediaW / imageAspect;
+          drawX = innerX;
+          drawY = mediaY + (mediaH - drawH) / 2;
+        } else {
+          drawH = mediaH;
+          drawW = mediaH * imageAspect;
+          drawX = innerX + (mediaW - drawW) / 2;
+          drawY = mediaY;
+        }
+      }
+
+      ctx.save();
+      this.drawRoundedRectPath(ctx, innerX, mediaY, mediaW, mediaH, mediaRadius);
+      ctx.clip();
+
+      if (options.photoStyle === "kenburns" && options.kenBurnsProgress !== null) {
+        const kb = getKenBurnsTransform(options.kenBurnsProgress, options.photoIndex, options.focalPoint);
+        const areaCX = innerX + mediaW / 2;
+        const areaCY = mediaY + mediaH / 2;
+        ctx.translate(areaCX, areaCY);
+        ctx.translate((kb.translateX * mediaW) / 100, (kb.translateY * mediaH) / 100);
+        ctx.scale(kb.scale, kb.scale);
+        ctx.translate(-areaCX, -areaCY);
+      }
+
+      ctx.drawImage(options.preloaded.img, drawX, drawY, drawW, drawH);
+      ctx.restore();
+
+      if (frameConfig.vignetteShadow) {
+        const vignetteShadow = this.parseShadow(frameConfig.vignetteShadow, {
+          ...parseOptions,
+          relativeTo: mediaW,
+        });
+        this.drawBorderlessVignette(
+          ctx,
+          innerX,
+          mediaY,
+          mediaW,
+          mediaH,
+          mediaRadius,
+          vignetteShadow?.color ?? "rgba(0,0,0,0.06)",
+        );
+      }
+    }
+
+    if (hasInlineCaption && inlineCaptionHeight > 0) {
+      const captionTop = mediaY + mediaH;
+      ctx.save();
+      ctx.font = `${inlineCaptionFontSize}px ${inlineCaptionFontFamily}, -apple-system, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = inlineCaptionColor;
+
+      const textStartY =
+        captionTop
+        + Math.max(inlineCaptionHeight - inlineCaptionLines.length * inlineCaptionLineHeight, 0) / 2
+        + inlineCaptionLineHeight / 2;
+
+      inlineCaptionLines.forEach((line, index) => {
+        ctx.fillText(
+          line,
+          innerX + mediaW / 2,
+          textStartY + index * inlineCaptionLineHeight,
+          Math.max(mediaW - inlineCaptionPadding.left - inlineCaptionPadding.right, inlineCaptionFontSize),
+        );
+      });
+      ctx.restore();
+    }
+
+    if (hasFooterCaption && footerHeight > 0) {
+      const footerY = mediaY + mediaH;
+      this.drawRoundedRectPath(ctx, innerX, footerY, innerW, footerHeight, 6 * options.scaleX);
+      ctx.fillStyle = DEFAULT_CAPTION_BG_COLOR;
+      ctx.fill();
+
+      ctx.save();
+      ctx.font = `${options.caption.fontSizePx}px ${captionFontFamily}, -apple-system, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 3 * options.scaleX;
+
+      const textStartY =
+        footerY
+        + Math.max(footerHeight - footerLines.length * footerLineHeight, 0) / 2
+        + footerLineHeight / 2;
+
+      footerLines.forEach((line, index) => {
+        ctx.fillText(
+          line,
+          innerX + innerW / 2,
+          textStartY + index * footerLineHeight,
+          Math.max(innerW - footerPaddingX * 2, options.caption.fontSizePx),
+        );
+      });
+      ctx.restore();
+    }
+
+    ctx.restore();
   }
 
   /** Draw a filled rounded rectangle */
