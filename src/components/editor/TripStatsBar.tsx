@@ -158,7 +158,7 @@ export default function TripStatsBar() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 16 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="absolute bottom-16 left-1/2 z-10 -translate-x-1/2"
+          className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 md:bottom-16"
         >
           <div className="flex items-center gap-2.5 rounded-t-lg bg-black/50 px-4 py-1.5 backdrop-blur-sm"
             style={{ height: "36px" }}

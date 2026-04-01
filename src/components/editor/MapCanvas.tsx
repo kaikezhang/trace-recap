@@ -522,9 +522,11 @@ export default memo(function MapCanvas() {
     });
   }, [segmentColors, moodColorsEnabled, segments]);
 
+  const isActive = playbackState === "playing" || playbackState === "paused";
+
   return (
     <div className="relative w-full h-full">
-      <div ref={containerRef} className="w-full h-full" />
+      <div ref={containerRef} className={`w-full h-full ${isActive ? "hide-map-controls" : ""}`} />
       <AnimatePresence>
         {!mapLoaded && (
           <motion.div

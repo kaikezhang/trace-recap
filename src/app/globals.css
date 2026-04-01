@@ -129,6 +129,13 @@
   }
 }
 
+/* Hide Mapbox navigation controls during playback */
+.hide-map-controls .mapboxgl-ctrl-top-right {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
 @layer utilities {
   .gradient-mesh {
     background: radial-gradient(at 40% 20%, hsla(239, 84%, 67%, .15) 0px, transparent 50%), radial-gradient(at 80% 0%, hsla(189, 100%, 56%, .1) 0px, transparent 50%), radial-gradient(at 0% 50%, hsla(340, 100%, 76%, .1) 0px, transparent 50%), radial-gradient(at 80% 50%, hsla(266, 100%, 70%, .1) 0px, transparent 50%), radial-gradient(at 0% 100%, hsla(22, 100%, 67%, .1) 0px, transparent 50%), #f8f9fc;
