@@ -194,6 +194,8 @@ export class VideoExporter {
   private photoShowStartFrame: Map<number, number> = new Map();
   /** Track visited location IDs during export for chapter pin rendering */
   private exportVisitedLocationIds: Set<string> = new Set();
+  /** Track the frame index when each location first became visited (for pop-in animation) */
+  private visitedPinFirstFrame: Map<string, number> = new Map();
   /** Current arrival location ID during export */
   private exportCurrentArrivalId: string | null = null;
   /** Breadcrumbs accumulated during export (mirrors preview behavior) */
@@ -756,6 +758,7 @@ export class VideoExporter {
     progress: AnimationEvent | null,
     renderTime: number,
     exportDuration: number,
+    frameIndex?: number,
   ): void {
     if (!progress) return;
     const groups = this.engine.getGroups();
@@ -806,6 +809,15 @@ export class VideoExporter {
         }
       }
     }
+
+    // Track when each location first became visited (for pop-in animation)
+    if (frameIndex !== undefined) {
+      for (const locId of this.exportVisitedLocationIds) {
+        if (!this.visitedPinFirstFrame.has(locId)) {
+          this.visitedPinFirstFrame.set(locId, frameIndex);
+        }
+      }
+    }
   }
 
   /** Draw chapter pins on the export canvas */
@@ -815,11 +827,14 @@ export class VideoExporter {
     scaleY: number,
     renderTime: number,
     exportDuration: number,
+    frameIndex?: number,
+    fps?: number,
   ): void {
     if (!useUIStore.getState().chapterPinsEnabled) return;
 
     const locations = this.engine.getLocations();
     const albumState = this.getActiveAlbumState(renderTime, exportDuration);
+    const animDurationFrames = fps ? Math.round(0.3 * fps) : 9; // ~300ms pop-in
 
     for (const loc of locations) {
       if (loc.isWaypoint) continue;
@@ -836,7 +851,20 @@ export class VideoExporter {
       } else if (isActive) {
         this.drawActiveChapterPin(ctx, loc, px, py, scaleX);
       } else {
-        this.drawVisitedChapterPin(ctx, loc, px, py, scaleX);
+        // Pop-in animation: scale from 2→1 and opacity from 1→0.7 (matching preview breadcrumb)
+        const firstFrame = this.visitedPinFirstFrame.get(loc.id);
+        let popScale = 1;
+        let popOpacity = 0.7;
+        if (firstFrame !== undefined && frameIndex !== undefined && frameIndex - firstFrame < animDurationFrames) {
+          const t = Math.min(1, animDurationFrames > 0 ? (frameIndex - firstFrame) / animDurationFrames : 1);
+          const ease = 1 - Math.pow(1 - t, 3); // cubic ease-out
+          popScale = 2 - ease; // 2 → 1
+          popOpacity = 1 - ease * 0.3; // 1 → 0.7
+        }
+        this.drawVisitedChapterPin(ctx, loc, px, py, scaleX, {
+          opacity: popOpacity,
+          scaleMultiplier: popScale,
+        });
       }
     }
   }
@@ -3417,6 +3445,7 @@ export class VideoExporter {
     this.abortController = new AbortController();
     this.photoShowStartFrame.clear();
     this.exportVisitedLocationIds.clear();
+    this.visitedPinFirstFrame.clear();
     this.exportCurrentArrivalId = null;
     this.exportBreadcrumbs = [];
     this.prevExportShowPhotos = false;
@@ -3576,8 +3605,8 @@ export class VideoExporter {
     );
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
     // Chapter pins: update tracking and draw BEFORE photos (pins behind photos, matching preview z-order)
-    this.updateChapterPinState(captured.progress, time, totalDuration);
-    this.drawChapterPins(offCtx, scaleX, scaleY, time, totalDuration);
+    this.updateChapterPinState(captured.progress, time, totalDuration, frameIndex);
+    this.drawChapterPins(offCtx, scaleX, scaleY, time, totalDuration, frameIndex, fps);
 
     this.drawTripStats(offCtx, offscreen.width, offscreen.height, scaleX, captured);
     this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps, time, totalDuration);
