@@ -1031,7 +1031,7 @@ export class VideoExporter {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(scaleMultiplier, scaleMultiplier);
-    ctx.globalAlpha = 0.5 * opacity;
+    ctx.globalAlpha = opacity;
 
     // Photo circle
     const coverUrl = loc.photos[0]?.url;
