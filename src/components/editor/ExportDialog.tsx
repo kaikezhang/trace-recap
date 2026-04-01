@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Download,
   X,
@@ -19,8 +19,42 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { VideoExporter, type ExportProgress } from "@/engine/VideoExporter";
-import type { ExportSettings } from "@/types";
+import { getExportViewportSize } from "@/lib/viewportRatio";
 import { FPS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import type { ExportResolution, ExportSettings } from "@/types";
+
+const RESOLUTION_OPTIONS: Array<{
+  value: ExportResolution;
+  label: string;
+}> = [
+  { value: "720p", label: "720p" },
+  { value: "1080p", label: "1080p" },
+  { value: "4K", label: "4K" },
+];
+
+function estimateExportSizeBytes(
+  width: number,
+  height: number,
+  totalDuration: number,
+): number {
+  const bitrate = Math.min(
+    4_000_000,
+    Math.max(1_000_000, ((width * height) / (1920 * 1080)) * 2_000_000),
+  );
+  return (bitrate * totalDuration) / 8;
+}
+
+function formatEstimatedSize(bytes: number): string {
+  const megabytes = bytes / (1024 * 1024);
+  if (megabytes >= 1024) {
+    return `~${(megabytes / 1024).toFixed(1)} GB`;
+  }
+  if (megabytes >= 10) {
+    return `~${Math.round(megabytes)} MB`;
+  }
+  return `~${megabytes.toFixed(1)} MB`;
+}
 
 function CircularProgress({ percent }: { percent: number }) {
   const r = 45;
@@ -83,7 +117,23 @@ export default function ExportDialog() {
   const [downloadExt, setDownloadExt] = useState<"mp4" | "webm">("mp4");
   const [exportError, setExportError] = useState<string | null>(null);
   const [encodingMethod, setEncodingMethod] = useState<"webcodecs" | "mediarecorder" | "server" | null>(null);
+  const [resolution, setResolution] = useState<ExportResolution>("1080p");
+  const [estimatedDuration, setEstimatedDuration] = useState<number | null>(null);
   const exporterRef = useRef<VideoExporter | null>(null);
+
+  useEffect(() => {
+    if (!open || !map || segments.length === 0 || isExporting || downloadUrl) {
+      setEstimatedDuration(null);
+      return;
+    }
+
+    const engine = new AnimationEngine(map, locations, segments, segmentTimingOverrides);
+    setEstimatedDuration(engine.getTotalDuration());
+
+    return () => {
+      engine.destroy();
+    };
+  }, [open, map, locations, segments, segmentTimingOverrides, isExporting, downloadUrl]);
 
   const startExport = useCallback(async (settings: ExportSettings) => {
     if (!map || segments.length === 0) return;
@@ -143,18 +193,18 @@ export default function ExportDialog() {
       setIsExporting(false);
       exporterRef.current = null;
     }
-  }, [map, locations, segments, cityLabelSize, cityLabelLang, cityLabelTopPercent, viewportRatio, routeLabelSize, routeLabelBottomPercent, photoAnimation, photoStyle, photoFrameStyle]);
+  }, [map, locations, segments, segmentTimingOverrides, cityLabelSize, cityLabelLang, cityLabelTopPercent, viewportRatio, routeLabelSize, routeLabelBottomPercent, photoAnimation, photoStyle, photoFrameStyle]);
 
   const handleQuickExport = () => {
     void startExport({
       fps: FPS,
+      resolution,
     });
   };
 
   const handleCancel = () => {
     exporterRef.current?.cancel();
     setExportError(null);
-    setIsExporting(false);
   };
 
   const handleClose = (newOpen: boolean) => {
@@ -165,6 +215,10 @@ export default function ExportDialog() {
     setDownloadExt("mp4");
     setProgress(null);
     setExportError(null);
+    if (!newOpen) {
+      setResolution("1080p");
+      setEstimatedDuration(null);
+    }
     setOpen(newOpen);
   };
 
@@ -172,6 +226,27 @@ export default function ExportDialog() {
     progress && progress.total > 0
       ? Math.round((progress.current / progress.total) * 100)
       : 0;
+
+  const canvas = map?.getCanvas();
+  const estimatedViewport = canvas
+    ? getExportViewportSize(
+        viewportRatio,
+        canvas.width,
+        canvas.height,
+        resolution,
+      )
+    : null;
+  const estimatedSize = estimatedViewport && estimatedDuration !== null
+    ? formatEstimatedSize(
+        estimateExportSizeBytes(
+          estimatedViewport.width,
+          estimatedViewport.height,
+          estimatedDuration,
+        ),
+      )
+    : null;
+  const estimatedSizeLabel =
+    estimatedSize ?? (!canvas || segments.length === 0 ? "Unavailable" : "Calculating...");
 
   const phaseLabel = (phase: ExportProgress["phase"]) => {
     switch (phase) {
@@ -269,7 +344,43 @@ export default function ExportDialog() {
             Exports exactly what you see — the viewport ratio controls the video dimensions.
           </p>
 
-          {/* Quick Export button */}
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Resolution</p>
+              <div className="grid grid-cols-3 gap-2">
+                {RESOLUTION_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={resolution === option.value}
+                    className={cn(
+                      "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                      resolution === option.value
+                        ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                        : "border-border bg-background text-foreground hover:bg-muted/60",
+                    )}
+                    onClick={() => setResolution(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              Estimated size:{" "}
+              <span className="font-medium text-foreground">
+                {estimatedSizeLabel}
+              </span>
+            </p>
+
+            {resolution === "4K" && (
+              <p className="text-xs text-amber-600">
+                4K export may be slow on some devices
+              </p>
+            )}
+          </div>
+
           <Button
             className="w-full h-12 bg-indigo-500 hover:bg-indigo-600 text-base font-medium"
             onClick={handleQuickExport}

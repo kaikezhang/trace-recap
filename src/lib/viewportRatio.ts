@@ -1,11 +1,15 @@
-import type { AspectRatio } from "@/types";
+import type { AspectRatio, ExportResolution } from "@/types";
 
 export interface ViewportDimensions {
   width: number;
   height: number;
 }
 
-const EXPORT_HEIGHT_CANDIDATES = [1080, 720] as const;
+const RESOLUTION_HEIGHTS: Record<ExportResolution, number> = {
+  "720p": 720,
+  "1080p": 1080,
+  "4K": 2160,
+};
 
 export function parseViewportRatio(
   viewportRatio: AspectRatio,
@@ -56,21 +60,19 @@ export function getExportViewportSize(
   viewportRatio: AspectRatio,
   canvasWidth: number,
   canvasHeight: number,
+  resolution: ExportResolution = "1080p",
 ): ViewportDimensions {
   const ratio = parseViewportRatio(viewportRatio);
   if (!ratio) {
-    return { width: canvasWidth, height: canvasHeight };
+    const targetHeight = RESOLUTION_HEIGHTS[resolution];
+    const scale = targetHeight / Math.max(canvasHeight, 1);
+    return {
+      width: Math.round(canvasWidth * scale),
+      height: targetHeight,
+    };
   }
 
-  for (const exportHeight of EXPORT_HEIGHT_CANDIDATES) {
-    const exportWidth = Math.round(exportHeight * (ratio.width / ratio.height));
-    if (Number.isFinite(exportWidth) && exportWidth > 0) {
-      return {
-        width: exportWidth,
-        height: exportHeight,
-      };
-    }
-  }
-
-  return { width: canvasWidth, height: canvasHeight };
+  const exportHeight = RESOLUTION_HEIGHTS[resolution];
+  const exportWidth = Math.round(exportHeight * (ratio.width / ratio.height));
+  return { width: exportWidth, height: exportHeight };
 }
