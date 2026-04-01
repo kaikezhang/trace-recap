@@ -311,7 +311,7 @@ export default function PhotoOverlay({
       return { width: "95%", height: "88%" };
     }
     if (viewportRatio === "free") {
-      return { width: "95%", height: "88%" };
+      return { width: "95%", height: "82%" };
     }
     return { width: "95%", height: "88%" };
   }, [viewportRatio, containerMode, usesPortalLayout]);
