@@ -24,24 +24,24 @@ const SPRING_TRANSITION = {
 };
 
 const VISITED_TRANSITION = {
-  duration: 1.35,
+  duration: 1.8,
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
 const OPEN_ALBUM_GEOMETRY = {
-  bodyHeight: 60,
-  labelGap: 6,
-  labelHeight: 16,
+  bodyHeight: 180,
+  labelGap: 8,
+  labelHeight: 18,
   tailGap: 4,
-  tailHeight: 8,
+  tailHeight: 10,
 };
 
 const CLOSED_ALBUM_GEOMETRY = {
-  bodyHeight: 48,
-  labelGap: 6,
-  labelHeight: 16,
+  bodyHeight: 180,
+  labelGap: 8,
+  labelHeight: 18,
   tailGap: 4,
-  tailHeight: 8,
+  tailHeight: 10,
 };
 
 const VISITED_GEOMETRY = {
@@ -88,16 +88,20 @@ function PinLabel({
 }) {
   return (
     <span
-      className={`flex max-w-[112px] items-center justify-center gap-1 text-center font-medium text-stone-700 drop-shadow-sm ${
-        compact ? "text-[10px]" : "text-[11px]"
+      className={`flex max-w-[160px] items-center justify-center gap-1 text-center font-medium text-stone-700 drop-shadow-sm ${
+        compact ? "text-[10px]" : "text-[13px]"
       }`}
     >
-      {emoji && <span className="shrink-0 text-xs leading-none">{emoji}</span>}
+      {emoji && <span className="shrink-0 text-sm leading-none">{emoji}</span>}
       <span className="truncate">{title}</span>
     </span>
   );
 }
 
+/**
+ * Open Album — 3x larger (252×180).
+ * Starts blank, photos appear on pages during/after collecting.
+ */
 function OpenAlbum({
   location,
   collecting,
@@ -105,23 +109,25 @@ function OpenAlbum({
   location: Location;
   collecting: boolean;
 }) {
-  const coverPhoto = location.photos[0]?.url;
-  const stackCount = Math.min(Math.max(location.photos.length, 1), 4);
+  const photos = location.photos;
+  const leftPhoto = photos[0]?.url;
+  const rightPhoto = photos[1]?.url ?? photos[0]?.url;
+  const stackCount = Math.min(Math.max(photos.length, 1), 5);
 
   return (
-    <div className="relative flex flex-col items-center gap-1.5">
+    <div className="relative flex flex-col items-center gap-2">
       <motion.div
         layout
         className="relative"
         animate={
           collecting
             ? {
-                rotate: -2,
-                y: [0, -2, 0],
-                scale: [1, 1.02, 1],
+                rotate: -1.5,
+                y: [0, -3, 0],
+                scale: [1, 1.015, 1],
               }
             : {
-                rotate: -4,
+                rotate: -3,
                 y: 0,
                 scale: 1,
               }
@@ -135,37 +141,52 @@ function OpenAlbum({
             : SPRING_TRANSITION
         }
       >
-        <div className="relative h-[60px] w-[84px] rounded-[20px] bg-gradient-to-br from-stone-100 via-white to-stone-200 shadow-[0_18px_30px_rgba(28,25,23,0.18)]">
-          <div className="absolute inset-y-[9px] left-[10px] right-1/2 rounded-[14px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner" />
-          <div className="absolute inset-y-[9px] left-1/2 right-[10px] rounded-[14px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner" />
-          <div className="absolute inset-y-[5px] left-1/2 w-[8px] -translate-x-1/2 rounded-full bg-gradient-to-b from-stone-300 via-stone-200 to-stone-400 opacity-80" />
+        <div className="relative h-[180px] w-[252px] rounded-[28px] bg-gradient-to-br from-stone-100 via-white to-stone-200 shadow-[0_24px_48px_rgba(28,25,23,0.22)]">
+          {/* Left page */}
+          <div className="absolute inset-y-[14px] left-[16px] right-1/2 rounded-[18px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner overflow-hidden">
+            {/* Photo on left page — fades in when collecting */}
+            {leftPhoto && collecting && (
+              <motion.img
+                src={leftPhoto}
+                alt=""
+                className="h-full w-full object-cover"
+                initial={{ opacity: 0, scale: 1.15 }}
+                animate={{ opacity: 0.85, scale: 1 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+              />
+            )}
+          </div>
+          {/* Right page */}
+          <div className="absolute inset-y-[14px] left-1/2 right-[16px] rounded-[18px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner overflow-hidden">
+            {/* Photo on right page — fades in when collecting */}
+            {rightPhoto && collecting && (
+              <motion.img
+                src={rightPhoto}
+                alt=""
+                className="h-full w-full object-cover"
+                initial={{ opacity: 0, scale: 1.15 }}
+                animate={{ opacity: 0.85, scale: 1 }}
+                transition={{ duration: 0.5, delay: 0.35 }}
+              />
+            )}
+          </div>
+          {/* Spine */}
+          <div className="absolute inset-y-[8px] left-1/2 w-[10px] -translate-x-1/2 rounded-full bg-gradient-to-b from-stone-300 via-stone-200 to-stone-400 opacity-80 z-10" />
 
-          {coverPhoto ? (
+          {/* Blank state: decorative lines + emoji (hidden when collecting) */}
+          {!collecting && (
             <>
-              <div className="absolute left-[16px] top-[16px] h-[22px] w-[20px] overflow-hidden rounded-[7px] border border-white/90 bg-white shadow-sm">
-                <img
-                  src={coverPhoto}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              </div>
-              <div className="absolute right-[16px] top-[14px] h-[26px] w-[24px] overflow-hidden rounded-[8px] border border-white/90 bg-white shadow-sm">
-                <img
-                  src={coverPhoto}
-                  alt=""
-                  className="h-full w-full object-cover opacity-90"
-                />
+              <div className="absolute bottom-[24px] left-[24px] right-[140px] h-[2.5px] rounded-full bg-stone-200/70" />
+              <div className="absolute bottom-[34px] left-[24px] right-[160px] h-[2.5px] rounded-full bg-stone-200/60" />
+              <div className="absolute bottom-[24px] left-[140px] right-[24px] h-[2.5px] rounded-full bg-stone-200/70" />
+              <div className="absolute bottom-[34px] left-[140px] right-[40px] h-[2.5px] rounded-full bg-stone-200/60" />
+              <div className="absolute inset-x-0 top-[50px] text-center text-4xl leading-none opacity-40">
+                {location.chapterEmoji || "📍"}
               </div>
             </>
-          ) : (
-            <div className="absolute inset-x-0 top-[18px] text-center text-lg leading-none">
-              {location.chapterEmoji || "📍"}
-            </div>
           )}
 
-          <div className="absolute bottom-[10px] left-[15px] right-[15px] h-[2px] rounded-full bg-stone-200/90" />
-          <div className="absolute bottom-[16px] left-[15px] right-[24px] h-[2px] rounded-full bg-stone-200/80" />
-
+          {/* Collecting animation — photo sheets flying in */}
           <AnimatePresence initial={false}>
             {collecting &&
               Array.from({ length: stackCount }).map((_, index) => (
@@ -173,25 +194,25 @@ function OpenAlbum({
                   key={`collecting-sheet-${index}`}
                   initial={{
                     opacity: 0,
-                    scale: 0.6,
-                    x: 12 + index * 4,
-                    y: -10 - index * 2,
-                    rotate: index % 2 === 0 ? -8 : 8,
+                    scale: 0.5,
+                    x: 30 + index * 10,
+                    y: -20 - index * 5,
+                    rotate: index % 2 === 0 ? -12 : 12,
                   }}
                   animate={{
-                    opacity: 0.88 - index * 0.14,
+                    opacity: 0.9 - index * 0.12,
                     scale: 1,
-                    x: 7 + index * 4,
-                    y: 3 + index * 2,
+                    x: 18 + index * 10,
+                    y: 10 + index * 5,
                     rotate: index % 2 === 0 ? -6 : 6,
                   }}
-                  exit={{ opacity: 0, scale: 0.7 }}
+                  exit={{ opacity: 0, scale: 0.6 }}
                   transition={{
-                    duration: 0.28,
-                    delay: index * 0.06,
+                    duration: 0.32,
+                    delay: index * 0.07,
                     ease: [0.2, 0.9, 0.2, 1],
                   }}
-                  className="absolute top-[8px] h-[18px] w-[14px] rounded-[5px] border border-white/90 bg-white/85 shadow-sm"
+                  className="absolute top-[16px] h-[40px] w-[32px] rounded-[8px] border border-white/90 bg-white/85 shadow-sm"
                 />
               ))}
           </AnimatePresence>
@@ -205,35 +226,46 @@ function OpenAlbum({
   );
 }
 
+/**
+ * Closed Album — book snapping shut with cover photo visible.
+ * Brief appearance (200ms) before morphing to visited pin.
+ */
 function ClosedAlbum({ location }: { location: Location }) {
   const coverPhoto = location.photos[0]?.url;
 
   return (
-    <div className="relative flex flex-col items-center gap-1.5">
+    <div className="relative flex flex-col items-center gap-2">
+      {/* Same size as OpenAlbum (252×180) — book closing effect */}
       <motion.div
         layout
-        className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/75 bg-stone-100 shadow-[0_16px_28px_rgba(15,23,42,0.22)]"
-        initial={{ scale: 0.88, rotate: -8, y: -4 }}
-        animate={{ scale: 1, rotate: -3, y: 0 }}
-        transition={{ duration: 0.3, ease: [0.34, 1.56, 0.64, 1] }}
+        className="relative h-[180px] w-[252px] overflow-hidden rounded-[28px] border-2 border-white/80 bg-stone-100 shadow-[0_24px_48px_rgba(15,23,42,0.25)]"
+        initial={{ scaleX: 0.1, scaleY: 1.05, rotate: -4, opacity: 0.8 }}
+        animate={{ scaleX: 1, scaleY: 1, rotate: -2, opacity: 1 }}
+        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       >
         {coverPhoto ? (
-          <img src={coverPhoto} alt="" className="h-full w-full object-cover" />
+          <img
+            src={coverPhoto}
+            alt=""
+            className="h-full w-full object-cover"
+          />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-stone-200 via-stone-50 to-stone-300 text-lg">
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-stone-200 via-stone-50 to-stone-300 text-4xl">
             {location.chapterEmoji || "📍"}
           </div>
         )}
-        <div className="absolute inset-y-0 left-0 w-[8px] bg-gradient-to-r from-stone-900/28 to-transparent" />
-        <div className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/60" />
+        {/* Spine shadow */}
+        <div className="absolute inset-y-0 left-0 w-[14px] bg-gradient-to-r from-stone-900/30 to-transparent" />
+        {/* Inner ring */}
+        <div className="absolute inset-0 rounded-[28px] ring-1 ring-inset ring-white/50" />
+        {/* Emoji badge */}
         {location.chapterEmoji && (
-          <div className="absolute bottom-1.5 right-1.5 rounded-full bg-black/45 px-1 py-0.5 text-[10px] leading-none text-white shadow-sm">
+          <div className="absolute bottom-3 right-3 rounded-full bg-black/50 px-2 py-1 text-base leading-none text-white shadow-sm">
             {location.chapterEmoji}
           </div>
         )}
       </motion.div>
       <PinLabel
-        compact
         emoji={location.chapterEmoji}
         title={location.chapterTitle || location.name}
       />
@@ -275,7 +307,6 @@ export default function ChapterPin({
 
   const isVisited = state === "visited";
 
-  // Merge the registerRef callback with the DOM element
   const refCallback = useCallback(
     (el: HTMLDivElement | null) => {
       registerRef(location.id, el);
@@ -288,7 +319,6 @@ export default function ChapterPin({
       ref={refCallback}
       className="pointer-events-none absolute left-0 top-0"
       style={{
-        /* position is set via transform by ChapterPinsOverlay (DOM-direct) */
         willChange: "transform",
         zIndex: isVisited ? 5 : 15,
       }}
@@ -304,33 +334,45 @@ export default function ChapterPin({
         transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
       >
         <AnimatePresence mode="sync" initial={false}>
-          <motion.div
-            key={state}
-            initial={{ opacity: 0, scale: 0.94, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: -4 }}
-            transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
-            className="flex flex-col items-center"
-          >
-            {(state === "album-open" || state === "album-collecting") && (
-              <>
-                <OpenAlbum
-                  location={location}
-                  collecting={state === "album-collecting"}
-                />
-                <div className="mt-1 h-2 w-px bg-stone-400/55" />
-              </>
-            )}
-
-            {state === "album-closed" && (
-              <>
-                <ClosedAlbum location={location} />
-                <div className="mt-1 h-2 w-px bg-stone-400/55" />
-              </>
-            )}
-
-            {state === "visited" && <VisitedPin location={location} />}
-          </motion.div>
+          {/* Group album states under one key so open→collecting→closed
+              morphs smoothly without exit/enter bounce animations.
+              Only album→visited triggers the full exit/enter. */}
+          {isVisited ? (
+            <motion.div
+              key="visited"
+              initial={{ opacity: 0, scale: 0.94, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: -4 }}
+              transition={VISITED_TRANSITION}
+              className="flex flex-col items-center"
+            >
+              <VisitedPin location={location} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="album"
+              initial={{ opacity: 0, scale: 0.94, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.88, y: -6 }}
+              transition={SPRING_TRANSITION}
+              className="flex flex-col items-center"
+            >
+              {state === "album-closed" ? (
+                <>
+                  <ClosedAlbum location={location} />
+                  <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
+                </>
+              ) : (
+                <>
+                  <OpenAlbum
+                    location={location}
+                    collecting={state === "album-collecting"}
+                  />
+                  <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
+                </>
+              )}
+            </motion.div>
+          )}
         </AnimatePresence>
       </motion.div>
     </div>

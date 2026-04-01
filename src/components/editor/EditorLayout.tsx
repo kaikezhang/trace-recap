@@ -112,6 +112,7 @@ function EditorContent() {
   const prevPhotoLocationIdRef = useRef<string | null>(null);
   const prevPhaseRef = useRef<string | null>(null);
   const activeAlbumSequenceLocationIdRef = useRef<string | null>(null);
+  const completedAlbumLocationIdsRef = useRef<Set<string>>(new Set());
   const pendingAlbumCloseLocationIdRef = useRef<string | null>(null);
   const albumVisitedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -200,6 +201,7 @@ function EditorContent() {
     clearAlbumSequenceTimers();
     activeAlbumSequenceLocationIdRef.current = null;
     pendingAlbumCloseLocationIdRef.current = null;
+    completedAlbumLocationIdsRef.current.clear();
     setAlbumCollectingLocationId(null);
     setAlbumClosedLocationId(null);
   }, [
@@ -219,18 +221,15 @@ function EditorContent() {
 
       pendingAlbumCloseLocationIdRef.current = null;
       setShowPhotoOverlay(false);
-      setAlbumCollectingLocationId(null);
-      setAlbumClosedLocationId(locationId);
       setVisiblePhotoLocationId(null);
       activeAlbumSequenceLocationIdRef.current = null;
+      // Mark this location as having completed its album sequence
+      // so shouldStartAlbumSequence won't re-trigger it.
+      completedAlbumLocationIdsRef.current.add(locationId);
 
-      clearAlbumSequenceTimers();
-      albumVisitedTimerRef.current = setTimeout(() => {
-        if (useAnimationStore.getState().albumClosedLocationId === locationId) {
-          setAlbumClosedLocationId(null);
-        }
-        albumVisitedTimerRef.current = null;
-      }, 300);
+      // Keep albumCollectingLocationId set — the pin stays in "collecting"
+      // state (open album with photos visible) until ZOOM_OUT triggers
+      // the close animation.
     },
     [
       clearAlbumSequenceTimers,
@@ -538,7 +537,8 @@ function EditorContent() {
         e.phase !== "ARRIVE" &&
         previousPhotoLocationId !== null &&
         (previousPhotoLocation?.photos.length ?? 0) > 0 &&
-        activeAlbumSequenceLocationIdRef.current !== previousPhotoLocationId;
+        activeAlbumSequenceLocationIdRef.current !== previousPhotoLocationId &&
+        !completedAlbumLocationIdsRef.current.has(previousPhotoLocationId);
 
       setCurrentTime(e.time);
       setCurrentSegmentIndex(e.segmentIndex);
@@ -638,6 +638,39 @@ function EditorContent() {
 
         setVisitedLocationIds([...new Set(newVisited)]);
         setCurrentArrivalLocationId(newArrival);
+      }
+
+      // Album state machine driven by animation phases:
+      // collecting (open with photos) → closed (cover, 200ms) → visited
+      // Only trigger close when there's NO active fly-to-album animation.
+      {
+        const currentCollecting = useAnimationStore.getState().albumCollectingLocationId;
+        const currentClosed = useAnimationStore.getState().albumClosedLocationId;
+        const hasActiveSequence = activeAlbumSequenceLocationIdRef.current !== null;
+
+        // ZOOM_OUT means we've moved past the departure HOVER — safe to close
+        if (e.phase === "ZOOM_OUT" && currentCollecting !== null && !hasActiveSequence) {
+          setAlbumCollectingLocationId(null);
+          setAlbumClosedLocationId(currentCollecting);
+          // Show closed album for 200ms then transition to visited
+          clearAlbumSequenceTimers();
+          albumVisitedTimerRef.current = setTimeout(() => {
+            if (useAnimationStore.getState().albumClosedLocationId === currentCollecting) {
+              setAlbumClosedLocationId(null);
+            }
+            albumVisitedTimerRef.current = null;
+          }, 200);
+        }
+
+        // Safety: FLY phase force-clears any lingering album state
+        if (e.phase === "FLY") {
+          if (currentCollecting !== null && !hasActiveSequence) {
+            setAlbumCollectingLocationId(null);
+          }
+          if (currentClosed !== null) {
+            setAlbumClosedLocationId(null);
+          }
+        }
       }
 
       // Drive bloom elapsed time from engine timeline (not wall-clock)
