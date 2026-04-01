@@ -37,7 +37,7 @@ const OPEN_ALBUM_GEOMETRY = {
 };
 
 const CLOSED_ALBUM_GEOMETRY = {
-  bodyHeight: 144,
+  bodyHeight: 180,
   labelGap: 8,
   labelHeight: 18,
   tailGap: 4,
@@ -235,9 +235,10 @@ function ClosedAlbum({ location }: { location: Location }) {
 
   return (
     <div className="relative flex flex-col items-center gap-2">
+      {/* Same size as OpenAlbum (252×180) — book closing effect */}
       <motion.div
         layout
-        className="relative h-36 w-36 overflow-hidden rounded-3xl border-2 border-white/80 bg-stone-100 shadow-[0_20px_40px_rgba(15,23,42,0.25)]"
+        className="relative h-[180px] w-[252px] overflow-hidden rounded-[28px] border-2 border-white/80 bg-stone-100 shadow-[0_24px_48px_rgba(15,23,42,0.25)]"
         initial={{ scaleX: 0.1, scaleY: 1.05, rotate: -4, opacity: 0.8 }}
         animate={{ scaleX: 1, scaleY: 1, rotate: -2, opacity: 1 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
@@ -254,12 +255,12 @@ function ClosedAlbum({ location }: { location: Location }) {
           </div>
         )}
         {/* Spine shadow */}
-        <div className="absolute inset-y-0 left-0 w-[12px] bg-gradient-to-r from-stone-900/30 to-transparent" />
+        <div className="absolute inset-y-0 left-0 w-[14px] bg-gradient-to-r from-stone-900/30 to-transparent" />
         {/* Inner ring */}
-        <div className="absolute inset-0 rounded-3xl ring-1 ring-inset ring-white/50" />
+        <div className="absolute inset-0 rounded-[28px] ring-1 ring-inset ring-white/50" />
         {/* Emoji badge */}
         {location.chapterEmoji && (
-          <div className="absolute bottom-2.5 right-2.5 rounded-full bg-black/50 px-1.5 py-1 text-sm leading-none text-white shadow-sm">
+          <div className="absolute bottom-3 right-3 rounded-full bg-black/50 px-2 py-1 text-base leading-none text-white shadow-sm">
             {location.chapterEmoji}
           </div>
         )}
