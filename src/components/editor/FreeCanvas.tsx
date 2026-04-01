@@ -107,6 +107,8 @@ type GestureState =
       photoId: string;
       centerX: number;
       centerY: number;
+      startAngle: number;
+      startRotation: number;
     }
   | {
       type: "resize-photo";
@@ -639,9 +641,13 @@ export default function FreeCanvas({
     [bringSelectionToFront, selection, startSelectionDrag],
   );
 
-  const beginRotate = useCallback((photoId: string) => {
+  const beginRotate = useCallback((photoId: string, clientX: number, clientY: number) => {
     const transform = transformsRef.current.find((item) => item.photoId === photoId);
     if (!transform || containerSize.w <= 0 || containerSize.h <= 0) return;
+
+    const centerX = (transform.x + transform.width / 2) * containerSize.w;
+    const centerY = (transform.y + transform.height / 2) * containerSize.h;
+    const startAngle = (Math.atan2(clientY - centerY, clientX - centerX) * 180) / Math.PI + 90;
 
     setEditingCaptionId(null);
     const nextSelection = createSingleSelection({ kind: "photo", photoId });
@@ -650,8 +656,10 @@ export default function FreeCanvas({
     setActiveGesture({
       type: "rotate-photo",
       photoId,
-      centerX: (transform.x + transform.width / 2) * containerSize.w,
-      centerY: (transform.y + transform.height / 2) * containerSize.h,
+      centerX,
+      centerY,
+      startAngle,
+      startRotation: transform.rotation,
     });
   }, [bringSelectionToFront, containerSize.h, containerSize.w]);
 
@@ -831,11 +839,12 @@ export default function FreeCanvas({
       }
 
       if (activeGesture.type === "rotate-photo") {
-        const rawAngle =
+        const currentAngle =
           (Math.atan2(event.clientY - activeGesture.centerY, event.clientX - activeGesture.centerX) * 180) /
             Math.PI +
           90;
-        let nextAngle = normalizeRotation(rawAngle);
+        const angleDelta = currentAngle - activeGesture.startAngle;
+        let nextAngle = normalizeRotation(activeGesture.startRotation + angleDelta);
         if (!event.shiftKey) {
           const snapTarget = getRotationSnapTarget(nextAngle);
           if (snapTarget !== undefined) {
@@ -1149,10 +1158,11 @@ export default function FreeCanvas({
                       <div className="pointer-events-none absolute left-1/2 top-0 h-7 -translate-x-1/2 -translate-y-full border-l border-indigo-500" />
                       <button
                         type="button"
-                        className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-[150%] rounded-full border-2 border-white bg-indigo-500 shadow-sm"
+                        className="absolute left-1/2 top-0 h-5 w-5 -translate-x-1/2 -translate-y-[150%] rounded-full border-2 border-white bg-indigo-500 shadow-sm cursor-grab active:cursor-grabbing transition-transform hover:scale-125"
+                        style={{ touchAction: "none" }}
                         onPointerDown={(event) => {
                           event.stopPropagation();
-                          beginRotate(photo.id);
+                          beginRotate(photo.id, event.clientX, event.clientY);
                         }}
                         aria-label="Rotate photo"
                       />
@@ -1165,8 +1175,8 @@ export default function FreeCanvas({
                         <button
                           key={`${photo.id}-${handle}`}
                           type="button"
-                          className={`absolute h-4 w-4 rounded-full border-2 border-white bg-indigo-500 shadow-sm ${className}`}
-                          style={{ cursor: getHandleCursor(handle) }}
+                          className={`absolute h-4 w-4 rounded-full border-2 border-white bg-indigo-500 shadow-sm transition-transform hover:scale-150 ${className}`}
+                          style={{ cursor: getHandleCursor(handle), touchAction: "none" }}
                           onPointerDown={(event) => {
                             event.stopPropagation();
                             beginResize(photo.id, handle);
