@@ -1,46 +1,100 @@
-# TASK — Free Mode Multi-Select & Caption Toolbar Improvements
+# TASK — Photo-to-Album Pin Animation ("Memory Collection")
 
-⚠️ DO NOT MERGE. Create a PR targeting `main` and stop.
+⚠️ CREATE PR AND STOP. DO NOT MERGE.
 
-## Context
-Free Mode (FreeCanvas) lets users drag photos and captions freely. Currently only single-select is supported. We need multi-select + batch operations + caption toolbar overflow fix.
+## Overview
+Redesign the photo exit animation and chapter pin to create a "memory collection" effect:
+photos fly into an album-style pin, the album closes with a cover photo, then
+slowly transitions to a small visited map pin after leaving the city.
 
-## Requirements
+## Animation Flow (4 phases)
 
-### 1. Multi-Select in FreeCanvas
-- **Shift+Click** or **Ctrl/Cmd+Click** on photos/captions to add/remove from selection
-- **Drag-select (marquee/lasso)**: click empty area + drag → draw selection rectangle → all photos/captions inside get selected
-- Visual indicator: all selected items get selection ring (not just one)
-- **Multi-drag**: dragging any selected item moves ALL selected items together (preserving relative positions)
-- Pressing Escape or clicking empty area clears multi-selection
+### Phase 1: Photos Displayed
+- Current behavior: photos shown with PhotoOverlay, active ChapterPin visible
+- **Change**: Replace current active ChapterPin card with a larger "open album" visual
 
-### 2. Caption Batch Style Apply
-- When multiple captions are selected, the caption toolbar should appear and apply styles to ALL selected captions simultaneously
-- Font family, font size, text color, background color — all should batch-apply
-- Toolbar should show current values from the first selected caption (or "mixed" indicator if values differ)
+### Phase 2: Photos Fly Into Album (0.5s)
+- All photos shrink simultaneously and fly toward the ChapterPin position on the map
+- The album pin shows photos landing inside it (visual: pages being filled)
+- This replaces the current photo exit animation in PhotoOverlay
+- Duration: 0.5 seconds
+- Easing: ease-in (accelerating toward the pin)
 
-### 3. Caption Toolbar Overflow Fix
-The caption style toolbar (`FreeCanvas.tsx`, the floating div with font/color/fill controls) can overflow the container when caption is near edges. Fix:
-- Detect when toolbar would overflow the container bounds (top/bottom/left/right)
-- Reposition toolbar to stay within bounds (flip above↔below caption, or shift horizontally)
-- The toolbar positioning logic is in `getCaptionToolbarPosition()` — update it to clamp within container
-- Currently toolbar uses `transform: translateX(-50%)` which doesn't account for left/right edges
+### Phase 3: Album Closes
+- After all photos arrive, the album "closes" with a satisfying animation
+- The first photo becomes the album cover
+- Visual: like a photo book snapping shut
+- Duration: ~0.3s
+- Result: a compact album icon showing the cover photo + city name
 
-## Key Files
-- `src/components/editor/FreeCanvas.tsx` — main file, all changes go here
-- Selection state: `selection` state (currently `{ kind: "photo" | "caption", photoId: string } | null`)
-  - Change to support array: `{ kind: "photo" | "caption", photoIds: string[] } | null` or similar
-- Drag logic: `beginPhotoDrag`, `beginCaptionDrag`, pointer move handler
-- Toolbar: `getCaptionToolbarPosition()` function + the toolbar JSX near bottom of file
+### Phase 4: Album → Visited Pin (slow, async)
+- When the route moves away from this city (HOVER/ZOOM_OUT phase begins)
+- The album slowly shrinks and fades to the small visited pin style (circular photo thumbnail, 0.5 opacity)
+- Duration: 1-2 seconds (slow, doesn't block the route animation)
+- This is purely visual polish, happens in the background
 
-## Constraints
-- Keep all coordinates as 0-1 ratio values (relative to container)
-- Don't break single-select behavior — it should still work naturally
-- Don't change PhotoOverlay.tsx or any other file unless absolutely necessary
-- Keep existing keyboard shortcuts working (Enter to commit caption edit, Escape to deselect)
-- TypeScript strict mode, no `any` types
-- Run `npx tsc --noEmit` to verify no type errors before committing
+## Technical Implementation
 
-## Testing
+### ChapterPin.tsx — Complete Redesign
+Replace current active/visited states with 4 states:
+```typescript
+type ChapterPinState = "future" | "album-open" | "album-collecting" | "album-closed" | "visited";
+```
+
+**album-open**: Large album visual (like an open photo book). Shows city name.
+- Size: ~80x60px book shape with subtle 3D perspective
+- Color: white/cream with soft shadow
+- City name below
+
+**album-collecting**: Photos flying in. Show a stack effect as photos arrive.
+- Same album visual but with a "filling" animation
+- Each photo that arrives adds to the visual stack
+
+**album-closed**: Closed album with cover photo.
+- Size: ~48x48px
+- Shows first photo as cover, rounded corners, slight book spine shadow
+- City name below
+- Emoji if set
+
+**visited**: Current small circular thumbnail (existing style but keep it)
+- Size: 32x32px circular photo
+- Opacity: 0.5
+- City name below in small text
+
+### PhotoOverlay.tsx — New Exit Animation
+When photos exit (opacity going from 1→0), instead of current fade/scale/slide:
+1. Calculate the ChapterPin screen position (need to pass pin coordinates)
+2. Each photo shrinks (scale: 1→0.15) and translates toward the pin position
+3. All photos move simultaneously
+4. Duration: 0.5s, easing: cubic-bezier(0.4, 0, 0.2, 1)
+5. Photos should slightly rotate during flight for visual flair (~5-10deg)
+6. On arrival, photos disappear (opacity: 0)
+
+### EditorLayout.tsx — State Coordination
+Need to coordinate between PhotoOverlay exit and ChapterPin state:
+1. When photo exit begins → ChapterPin state = "album-collecting"
+2. When photo exit completes (0.5s later) → ChapterPin state = "album-closed"
+3. When leaving city (HOVER phase) → ChapterPin state = "visited" (slow transition)
+
+This may require new animation store fields:
+- `albumCollectingLocationId: string | null` — which pin is currently collecting
+- Pass the pin's screen position to PhotoOverlay for the fly-to target
+
+### Key Constraints
+- Must work with ALL photo styles (classic, kenburns, bloom, portal)
+- The bloom style already has its own exit — the fly-to-album should replace it or integrate
+- Must work on both mobile and desktop
+- Pin screen position comes from `map.project(coordinates)` — same as current ChapterPinsOverlay
+- The animation timing must not extend the total route duration — phase 4 runs async
+
+## Files to Modify
+- `src/components/editor/ChapterPin.tsx` — complete redesign
+- `src/components/editor/ChapterPinsOverlay.tsx` — new state management
+- `src/components/editor/PhotoOverlay.tsx` — new exit animation targeting pin position
+- `src/components/editor/EditorLayout.tsx` — coordination between overlay and pins
+- `src/stores/animationStore.ts` — possibly new state fields
+
+## Verification
 - `npx tsc --noEmit` must pass
 - `npm run build` must pass
+- Test with demo route: Seattle → Honolulu → Tokyo → ... (has varying photo counts)
