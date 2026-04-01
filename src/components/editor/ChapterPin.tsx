@@ -333,33 +333,45 @@ export default function ChapterPin({
         transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
       >
         <AnimatePresence mode="sync" initial={false}>
-          <motion.div
-            key={state}
-            initial={{ opacity: 0, scale: 0.94, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: -4 }}
-            transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
-            className="flex flex-col items-center"
-          >
-            {(state === "album-open" || state === "album-collecting") && (
-              <>
-                <OpenAlbum
-                  location={location}
-                  collecting={state === "album-collecting"}
-                />
-                <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
-              </>
-            )}
-
-            {state === "album-closed" && (
-              <>
-                <ClosedAlbum location={location} />
-                <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
-              </>
-            )}
-
-            {state === "visited" && <VisitedPin location={location} />}
-          </motion.div>
+          {/* Group album states under one key so open→collecting→closed
+              morphs smoothly without exit/enter bounce animations.
+              Only album→visited triggers the full exit/enter. */}
+          {isVisited ? (
+            <motion.div
+              key="visited"
+              initial={{ opacity: 0, scale: 0.94, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: -4 }}
+              transition={VISITED_TRANSITION}
+              className="flex flex-col items-center"
+            >
+              <VisitedPin location={location} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="album"
+              initial={{ opacity: 0, scale: 0.94, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.88, y: -6 }}
+              transition={SPRING_TRANSITION}
+              className="flex flex-col items-center"
+            >
+              {state === "album-closed" ? (
+                <>
+                  <ClosedAlbum location={location} />
+                  <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
+                </>
+              ) : (
+                <>
+                  <OpenAlbum
+                    location={location}
+                    collecting={state === "album-collecting"}
+                  />
+                  <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
+                </>
+              )}
+            </motion.div>
+          )}
         </AnimatePresence>
       </motion.div>
     </div>

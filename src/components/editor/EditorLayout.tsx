@@ -636,16 +636,18 @@ function EditorContent() {
       }
 
       // Album state machine driven by animation phases:
-      // collecting (open album with photos) → closed (book with cover, 200ms) → visited
+      // collecting (open with photos) → closed (cover, 200ms) → visited
+      // Only trigger close when there's NO active fly-to-album animation.
       {
         const currentCollecting = useAnimationStore.getState().albumCollectingLocationId;
         const currentClosed = useAnimationStore.getState().albumClosedLocationId;
+        const hasActiveSequence = activeAlbumSequenceLocationIdRef.current !== null;
 
-        // When HOVER starts and album is still in collecting state → close it
-        if (e.phase === "HOVER" && currentCollecting !== null) {
+        // ZOOM_OUT means we've moved past the departure HOVER — safe to close
+        if (e.phase === "ZOOM_OUT" && currentCollecting !== null && !hasActiveSequence) {
           setAlbumCollectingLocationId(null);
           setAlbumClosedLocationId(currentCollecting);
-          // After 200ms showing the closed album, clear it → becomes visited
+          // Show closed album for 200ms then transition to visited
           clearAlbumSequenceTimers();
           albumVisitedTimerRef.current = setTimeout(() => {
             if (useAnimationStore.getState().albumClosedLocationId === currentCollecting) {
@@ -655,14 +657,14 @@ function EditorContent() {
           }, 200);
         }
 
-        // Safety: if we reach FLY with album still open, force close it
-        if (e.phase === "FLY" && currentCollecting !== null) {
-          setAlbumCollectingLocationId(null);
-          setAlbumClosedLocationId(null);
-        }
-        // Safety: clear closed state if somehow still set during FLY
-        if (e.phase === "FLY" && currentClosed !== null) {
-          setAlbumClosedLocationId(null);
+        // Safety: FLY phase force-clears any lingering album state
+        if (e.phase === "FLY") {
+          if (currentCollecting !== null && !hasActiveSequence) {
+            setAlbumCollectingLocationId(null);
+          }
+          if (currentClosed !== null) {
+            setAlbumClosedLocationId(null);
+          }
         }
       }
 
