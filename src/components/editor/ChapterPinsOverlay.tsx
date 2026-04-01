@@ -99,7 +99,7 @@ export default function ChapterPinsOverlay() {
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[8]">
-        {positions.map((pos) => {
+        {positions.filter((pos, idx, arr) => arr.findIndex((p) => p.locationId === pos.locationId) === idx).map((pos) => {
           const location = locations.find((l) => l.id === pos.locationId);
           if (!location) return null;
 
