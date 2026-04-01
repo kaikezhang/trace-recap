@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Location } from "@/types";
 
@@ -109,6 +109,12 @@ function OpenAlbum({
   location: Location;
   collecting: boolean;
 }) {
+  // Once collecting becomes true, photos stay visible even if collecting
+  // flips back to false (prevents flash to blank album on state race)
+  const hasCollectedRef = useRef(false);
+  if (collecting) hasCollectedRef.current = true;
+  const showPhotos = hasCollectedRef.current;
+
   const photos = location.photos;
   const leftPhoto = photos[0]?.url;
   const rightPhoto = photos[1]?.url ?? photos[0]?.url;
@@ -144,8 +150,8 @@ function OpenAlbum({
         <div className="relative h-[180px] w-[252px] rounded-[28px] bg-gradient-to-br from-stone-100 via-white to-stone-200 shadow-[0_24px_48px_rgba(28,25,23,0.22)]">
           {/* Left page */}
           <div className="absolute inset-y-[14px] left-[16px] right-1/2 rounded-[18px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner overflow-hidden">
-            {/* Photo on left page — fades in when collecting */}
-            {leftPhoto && collecting && (
+            {/* Photo on left page — stays once shown */}
+            {leftPhoto && showPhotos && (
               <motion.img
                 src={leftPhoto}
                 alt=""
@@ -158,8 +164,8 @@ function OpenAlbum({
           </div>
           {/* Right page */}
           <div className="absolute inset-y-[14px] left-1/2 right-[16px] rounded-[18px] border border-stone-200/80 bg-gradient-to-br from-white via-stone-50 to-stone-100 shadow-inner overflow-hidden">
-            {/* Photo on right page — fades in when collecting */}
-            {rightPhoto && collecting && (
+            {/* Photo on right page — stays once shown */}
+            {rightPhoto && showPhotos && (
               <motion.img
                 src={rightPhoto}
                 alt=""
@@ -173,8 +179,8 @@ function OpenAlbum({
           {/* Spine */}
           <div className="absolute inset-y-[8px] left-1/2 w-[10px] -translate-x-1/2 rounded-full bg-gradient-to-b from-stone-300 via-stone-200 to-stone-400 opacity-80 z-10" />
 
-          {/* Blank state: decorative lines + emoji (hidden when collecting) */}
-          {!collecting && (
+          {/* Blank state: decorative lines + emoji (hidden once photos shown) */}
+          {!showPhotos && (
             <>
               <div className="absolute bottom-[24px] left-[24px] right-[140px] h-[2.5px] rounded-full bg-stone-200/70" />
               <div className="absolute bottom-[34px] left-[24px] right-[160px] h-[2.5px] rounded-full bg-stone-200/60" />
