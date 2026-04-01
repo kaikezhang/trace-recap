@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useEffect, useRef, useMemo } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, type Transition, type TargetAndTransition } from "framer-motion";
 import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
 import {
@@ -185,6 +185,29 @@ function getExitValues(
   }
 }
 
+function getFlyToAlbumValues(
+  rect: PhotoRect,
+  containerSize: { w: number; h: number },
+  overlayOffset: { x: number; y: number },
+  targetPosition: { x: number; y: number },
+  index: number,
+) {
+  const photoCenterX = (rect.x + rect.width / 2) * containerSize.w;
+  const photoCenterY = (rect.y + rect.height / 2) * containerSize.h;
+  const targetX = targetPosition.x - overlayOffset.x;
+  const targetY = targetPosition.y - overlayOffset.y;
+
+  return {
+    exitOpacity: 0,
+    exitScale: 0.15,
+    exitX: targetX - photoCenterX,
+    exitY: targetY - photoCenterY,
+    exitBlur: 2,
+    exitRotate: index % 2 === 0 ? -8 : 8,
+    exitRotateY: 0,
+  };
+}
+
 interface PhotoOverlayProps {
   photos: Photo[];
   visible: boolean;
@@ -201,6 +224,12 @@ interface PhotoOverlayProps {
   bloomOrigin?: { x: number; y: number } | null;
   /** Timeline-driven elapsed time (seconds) since bloom enter started */
   bloomElapsedTime?: number;
+  /** Current album collection target in screen space */
+  flyToPosition?: { x: number; y: number } | null;
+  /** Location whose photos are being displayed or collected */
+  photoLocationId?: string | null;
+  /** Invoked after the fly-to-album animation actually completes */
+  onFlyToAlbumComplete?: (locationId: string) => void;
   /** Active scene transition type */
   sceneTransition?: SceneTransition;
   /** Scene transition progress (0-1): 0 = fully outgoing, 1 = fully incoming */
@@ -274,6 +303,9 @@ export default function PhotoOverlay({
   portalProgressOverride,
   bloomOrigin,
   bloomElapsedTime = 0,
+  flyToPosition,
+  photoLocationId,
+  onFlyToAlbumComplete,
   sceneTransition,
   sceneTransitionProgress,
   incomingPhotos,
@@ -302,6 +334,14 @@ export default function PhotoOverlay({
   const { enterAnimation, exitAnimation } = resolvePhotoAnimations(displayLayout, photoAnimation);
   const photoStyle = resolvePhotoStyle(displayLayout, globalPhotoStyle);
   const incomingPhotoStyleResolved = resolvePhotoStyle(incomingPhotoLayout, globalPhotoStyle);
+  const isActiveTransition = Boolean(
+    sceneTransition && sceneTransition !== "cut" && sceneTransitionProgress !== undefined,
+  );
+  const overlayExitProgress = isActiveTransition ? 0 : 1 - opacity;
+  const shouldFlyToAlbum =
+    overlayExitProgress > 0 &&
+    flyToPosition != null &&
+    photoLocationId != null;
   const usesPortalLayout = photoStyle === "portal" || incomingPhotoStyleResolved === "portal";
 
   const containerStyle = useMemo(() => {
@@ -326,6 +366,7 @@ export default function PhotoOverlay({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
+  const completedFlyLocationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -337,6 +378,21 @@ export default function PhotoOverlay({
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!shouldFlyToAlbum) {
+      completedFlyLocationIdRef.current = null;
+    }
+  }, [shouldFlyToAlbum]);
+
+  const handleFlyToAlbumComplete = useCallback(
+    (locationId: string) => {
+      if (completedFlyLocationIdRef.current === locationId) return;
+      completedFlyLocationIdRef.current = locationId;
+      onFlyToAlbumComplete?.(locationId);
+    },
+    [onFlyToAlbumComplete],
+  );
 
   // ── Bloom animation progress (timeline-driven, not wall-clock) ──
   const isBloom = photoStyle === "bloom";
@@ -440,7 +496,6 @@ export default function PhotoOverlay({
   const incomingIsFreeMode = incomingPhotoLayout?.mode === "free";
 
   // Scene transition: compute outgoing wrapper styles
-  const isActiveTransition = sceneTransition && sceneTransition !== "cut" && sceneTransitionProgress !== undefined;
   const transitionOutgoingStyle = useMemo<React.CSSProperties>(() => {
     if (!isActiveTransition || sceneTransitionProgress === undefined) return {};
     switch (sceneTransition) {
@@ -598,7 +653,7 @@ export default function PhotoOverlay({
       }}
     >
       <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionOutgoingStyle }}>
-        {hasDisplayPhotos && photoStyle === "portal" ? (
+        {hasDisplayPhotos && photoStyle === "portal" && !shouldFlyToAlbum ? (
           <PortalPhotoLayer
             photos={orderedMetas as PortalPhoto[]}
             containerSize={containerSize}
@@ -657,12 +712,12 @@ export default function PhotoOverlay({
                 ? (index === 0 ? -2 : index === total - 1 ? 2 : 0)
                 : (index % 2 === 0 ? -1.5 : 1.5);
 
-            const exitProgress = isActiveTransition ? 0 : 1 - opacity;
+            const exitProgress = overlayExitProgress;
             const staggerOffset = total > 1 ? (total - 1 - index) / (total - 1) * 0.4 : 0;
             const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
 
             // ── Bloom style: geo-anchored animation ──
-            if (isBloom && bloomOrigin && containerSize.w > 0) {
+            if (isBloom && bloomOrigin && containerSize.w > 0 && !shouldFlyToAlbum) {
               // Convert raw map.project() pixels to overlay-local pixels
               const overlayOffsetX = containerRef.current?.offsetLeft ?? 0;
               const overlayOffsetY = containerRef.current?.offsetTop ?? 0;
@@ -769,12 +824,35 @@ export default function PhotoOverlay({
             const enterDelay = typeof (enter.transition as { delay?: number }).delay === "number"
               ? (enter.transition as { delay?: number }).delay!
               : 0;
+            const overlayOffset = {
+              x: containerRef.current?.offsetLeft ?? 0,
+              y: containerRef.current?.offsetTop ?? 0,
+            };
+            const flyToAlbumExit = shouldFlyToAlbum && flyToPosition
+              ? getFlyToAlbumValues(
+                  rect,
+                  containerSize,
+                  overlayOffset,
+                  flyToPosition,
+                  index,
+                )
+              : null;
             const exit = getExitValues(exitAnimation, exitProgress, photoExitT, index);
 
             const enterRotate = typeof (enter.animate as { rotate?: number }).rotate === "number"
               ? (enter.animate as { rotate?: number }).rotate! + rotation
               : rotation;
-            const animateValues: TargetAndTransition = exitProgress > 0
+            const animateValues: TargetAndTransition = flyToAlbumExit
+              ? {
+                  opacity: flyToAlbumExit.exitOpacity,
+                  scale: flyToAlbumExit.exitScale,
+                  x: flyToAlbumExit.exitX,
+                  y: flyToAlbumExit.exitY,
+                  filter: `blur(${flyToAlbumExit.exitBlur}px)`,
+                  rotate: flyToAlbumExit.exitRotate + rotation,
+                  rotateY: undefined,
+                }
+              : exitProgress > 0
               ? {
                   opacity: exit.exitOpacity,
                   scale: exit.exitScale,
@@ -792,9 +870,16 @@ export default function PhotoOverlay({
                   key={photo.id}
                   initial={enter.initial}
                   animate={animateValues}
-                  transition={exitProgress > 0
+                  transition={flyToAlbumExit
+                    ? { duration: 0.5, ease: [0.4, 0, 0.2, 1] }
+                    : exitProgress > 0
                     ? { duration: 0.5, ease: "easeOut" }
                     : enter.transition
+                  }
+                  onAnimationComplete={
+                    flyToAlbumExit && index === 0 && photoLocationId
+                      ? () => handleFlyToAlbumComplete(photoLocationId)
+                      : undefined
                   }
                   className="absolute overflow-hidden drop-shadow-xl"
                   style={{

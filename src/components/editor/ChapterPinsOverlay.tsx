@@ -1,18 +1,57 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-
-import ChapterPin from "./ChapterPin";
-import type { ChapterPinState } from "./ChapterPin";
+import { useEffect, useRef, useState } from "react";
+import ChapterPin, {
+  getChapterPinTargetOffset,
+  type ChapterPinState,
+} from "./ChapterPin";
 import { useMap } from "./MapContext";
 import { useProjectStore } from "@/stores/projectStore";
-import { useAnimationStore } from "@/stores/animationStore";
+import {
+  useAnimationStore,
+  type ScreenPoint,
+} from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
 
 interface PinPosition {
   locationId: string;
   x: number;
   y: number;
+  state: Exclude<ChapterPinState, "future">;
+}
+
+function arePinPositionsEqual(a: PinPosition[], b: PinPosition[]): boolean {
+  if (a.length !== b.length) return false;
+
+  return a.every((position, index) => {
+    const other = b[index];
+    return (
+      other !== undefined &&
+      position.locationId === other.locationId &&
+      position.x === other.x &&
+      position.y === other.y &&
+      position.state === other.state
+    );
+  });
+}
+
+function areScreenPointsEqual(
+  a: Record<string, ScreenPoint>,
+  b: Record<string, ScreenPoint>,
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+
+  return aKeys.every((key) => {
+    const aPoint = a[key];
+    const bPoint = b[key];
+    return (
+      bPoint !== undefined &&
+      aPoint.x === bPoint.x &&
+      aPoint.y === bPoint.y
+    );
+  });
 }
 
 export default function ChapterPinsOverlay() {
@@ -20,112 +59,155 @@ export default function ChapterPinsOverlay() {
   const locations = useProjectStore((s) => s.locations);
   const playbackState = useAnimationStore((s) => s.playbackState);
   const visitedLocationIds = useAnimationStore((s) => s.visitedLocationIds);
-  const currentArrivalLocationId = useAnimationStore((s) => s.currentArrivalLocationId);
+  const currentArrivalLocationId = useAnimationStore(
+    (s) => s.currentArrivalLocationId,
+  );
+  const albumCollectingLocationId = useAnimationStore(
+    (s) => s.albumCollectingLocationId,
+  );
+  const albumClosedLocationId = useAnimationStore((s) => s.albumClosedLocationId);
+  const setChapterPinPositions = useAnimationStore(
+    (s) => s.setChapterPinPositions,
+  );
   const chapterPinsEnabled = useUIStore((s) => s.chapterPinsEnabled);
 
   const [positions, setPositions] = useState<PinPosition[]>([]);
 
-  console.log(
-    "[ChapterPins] render, positions:",
-    positions.length,
-    "visited:",
-    visitedLocationIds.length,
-  );
-
-  // Use refs to avoid recreating the callback when store data changes
   const locationsRef = useRef(locations);
   locationsRef.current = locations;
   const visitedRef = useRef(visitedLocationIds);
   visitedRef.current = visitedLocationIds;
   const arrivalRef = useRef(currentArrivalLocationId);
   arrivalRef.current = currentArrivalLocationId;
+  const collectingRef = useRef(albumCollectingLocationId);
+  collectingRef.current = albumCollectingLocationId;
+  const closedRef = useRef(albumClosedLocationId);
+  closedRef.current = albumClosedLocationId;
+  const targetPositionsRef = useRef(useAnimationStore.getState().chapterPinPositions);
 
   const computePositions = useRef(() => {
-    /* placeholder — replaced below */
+    /* replaced below */
   });
 
   computePositions.current = () => {
     if (!map) return;
-    const locs = locationsRef.current;
-    const visited = visitedRef.current;
-    const arrival = arrivalRef.current;
 
-    const newPositions: PinPosition[] = [];
+    const nextPositions: PinPosition[] = [];
     const seenCoords = new Set<string>();
-    for (const loc of locs) {
-      if (loc.isWaypoint) continue;
-      const isVisited = visited.includes(loc.id);
-      const isActive = loc.id === arrival;
-      if (!isVisited && !isActive) continue;
 
-      // Deduplicate by coordinates — routes that revisit a city
-      // (e.g. Seattle→...→Seattle) should show only one pin
-      const coordKey = `${loc.coordinates[0].toFixed(4)},${loc.coordinates[1].toFixed(4)}`;
+    for (const location of locationsRef.current) {
+      if (location.isWaypoint) continue;
+
+      let state: ChapterPinState = "future";
+      if (location.id === collectingRef.current) {
+        state = "album-collecting";
+      } else if (location.id === closedRef.current) {
+        state = "album-closed";
+      } else if (location.id === arrivalRef.current) {
+        state = "album-open";
+      } else if (visitedRef.current.includes(location.id)) {
+        state = "visited";
+      }
+
+      if (state === "future") continue;
+
+      const coordKey = `${location.coordinates[0].toFixed(4)},${location.coordinates[1].toFixed(4)}`;
       if (seenCoords.has(coordKey)) continue;
       seenCoords.add(coordKey);
 
-      const point = map.project(loc.coordinates);
-      newPositions.push({
-        locationId: loc.id,
-        x: point.x,
-        y: point.y,
+      const projected = map.project(location.coordinates);
+      nextPositions.push({
+        locationId: location.id,
+        x: projected.x,
+        y: projected.y,
+        state,
       });
     }
-    setPositions(newPositions);
+
+    setPositions((current) =>
+      arePinPositionsEqual(current, nextPositions) ? current : nextPositions,
+    );
+
+    const nextTargetPositions = Object.fromEntries(
+      nextPositions
+        .filter((position) => position.state !== "visited")
+        .map((position) => {
+          const offset = getChapterPinTargetOffset(position.state);
+          return [
+            position.locationId,
+            {
+              x: position.x + offset.x,
+              y: position.y + offset.y,
+            },
+          ];
+        }),
+    ) satisfies Record<string, ScreenPoint>;
+
+    if (!areScreenPointsEqual(targetPositionsRef.current, nextTargetPositions)) {
+      targetPositionsRef.current = nextTargetPositions;
+      setChapterPinPositions(nextTargetPositions);
+    }
   };
 
-  // Update on map movement
   useEffect(() => {
     if (!map) return;
 
-    const update = () => computePositions.current();
+    const update = () => {
+      computePositions.current();
+    };
 
     update();
     map.on("move", update);
     return () => {
       map.off("move", update);
+      targetPositionsRef.current = {};
+      setChapterPinPositions({});
     };
-  }, [map]);
+  }, [map, setChapterPinPositions]);
 
-  // Update when animation state changes (subscribe to avoid re-render loops)
   useEffect(() => {
     if (!map) return;
+
     let prevVisited = useAnimationStore.getState().visitedLocationIds;
     let prevArrival = useAnimationStore.getState().currentArrivalLocationId;
+    let prevCollecting = useAnimationStore.getState().albumCollectingLocationId;
+    let prevClosed = useAnimationStore.getState().albumClosedLocationId;
+
     return useAnimationStore.subscribe((state) => {
-      if (state.visitedLocationIds !== prevVisited || state.currentArrivalLocationId !== prevArrival) {
+      if (
+        state.visitedLocationIds !== prevVisited ||
+        state.currentArrivalLocationId !== prevArrival ||
+        state.albumCollectingLocationId !== prevCollecting ||
+        state.albumClosedLocationId !== prevClosed
+      ) {
         prevVisited = state.visitedLocationIds;
         prevArrival = state.currentArrivalLocationId;
+        prevCollecting = state.albumCollectingLocationId;
+        prevClosed = state.albumClosedLocationId;
         computePositions.current();
       }
     });
   }, [map]);
 
-  const isAnimating = playbackState === "playing" || playbackState === "paused";
+  const isAnimating =
+    playbackState === "playing" || playbackState === "paused";
   if (!chapterPinsEnabled || !isAnimating) return null;
 
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden z-[8]">
-        {positions.filter((pos, idx, arr) => arr.findIndex((p) => p.locationId === pos.locationId) === idx).map((pos) => {
-          const location = locations.find((l) => l.id === pos.locationId);
-          if (!location) return null;
+    <div className="pointer-events-none absolute inset-0 z-[8] overflow-hidden">
+      {positions.map((position) => {
+        const location = locations.find((entry) => entry.id === position.locationId);
+        if (!location) return null;
 
-          let pinState: ChapterPinState = "future";
-          if (location.id === currentArrivalLocationId) {
-            pinState = "active";
-          } else if (visitedLocationIds.includes(location.id)) {
-            pinState = "visited";
-          }
-
-          return (
-            <ChapterPin
-              key={location.id}
-              location={location}
-              state={pinState}
-              position={{ x: pos.x, y: pos.y }}
-            />
-          );
-        })}
+        return (
+          <ChapterPin
+            key={location.id}
+            location={location}
+            position={{ x: position.x, y: position.y }}
+            state={position.state}
+          />
+        );
+      })}
     </div>
   );
 }
