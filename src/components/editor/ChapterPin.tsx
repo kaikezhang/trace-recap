@@ -24,7 +24,7 @@ const SPRING_TRANSITION = {
 };
 
 const VISITED_TRANSITION = {
-  duration: 1.8,
+  duration: 3.6,
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
@@ -33,7 +33,7 @@ const ALBUM_EXIT_TRANSITION = {
   ease: [0.4, 0, 1, 1] as const,
 };
 
-const VISITED_ENTER_SCALE = 1.42;
+const VISITED_ENTER_SCALE = 2.4;
 const VISITED_FINAL_SCALE = 0.72;
 
 const OPEN_ALBUM_GEOMETRY = {
