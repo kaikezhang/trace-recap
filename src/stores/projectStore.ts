@@ -20,7 +20,7 @@ import {
   DEFAULT_TRANSPORT_ICON_STYLE,
   resolveTransportIconStyle,
 } from "@/lib/transportIcons";
-import { useHistoryStore } from "./historyStore";
+import { useHistoryStore, registerPhotoUrl, registerPhotoUrls } from "./historyStore";
 import {
   saveProject,
   getProjectData,
@@ -390,6 +390,8 @@ async function runBackgroundPhotoCompression(): Promise<void> {
           console.log(`[compress] ${photo.id}: URL changed during compression, discarded`);
         } else {
           compressed++;
+          // Update the URL registry so undo/redo uses the compressed version
+          registerPhotoUrl(photo.id, compressedUrl);
           console.log(`[compress] ✅ ${photo.id} replaced`);
         }
 
@@ -1288,12 +1290,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   addPhoto: (locationId, photo) => {
     useHistoryStore.getState().pushState();
     markLocationDirty(locationId);
+    const newId = generateId();
+    // Register the photo URL so undo/redo can restore it without cloning
+    registerPhotoUrl(newId, photo.url);
     return set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
           ? {
               ...l,
-              photos: [...l.photos, { ...photo, id: generateId(), locationId }],
+              photos: [...l.photos, { ...photo, id: newId, locationId }],
             }
           : l,
       ),
@@ -1404,6 +1409,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       segmentTimingOverrides: parsed.segmentTimingOverrides,
       segmentColors: {},
     });
+
+    // Register photo URLs for undo/redo
+    registerPhotoUrls(parsed.locations);
   },
 
   loadRouteData: async (data) => {
@@ -1501,6 +1509,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         projects,
       });
       tryUpdateLastSavedJson(data);
+
+      // Register all photo URLs so undo/redo can restore them without cloning
+      registerPhotoUrls(parsed.locations);
 
       useHistoryStore.getState().resetHistory();
       await get().regenerateSegmentGeometries();
@@ -1634,6 +1645,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         segmentColors: {},
       });
       tryUpdateLastSavedJson(data);
+
+      // Register photo URLs for undo/redo
+      registerPhotoUrls(parsed.locations);
+
       useHistoryStore.getState().resetHistory();
 
       await get().regenerateSegmentGeometries();
