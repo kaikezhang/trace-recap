@@ -44,12 +44,15 @@ export default function ChapterPinsOverlay() {
     const arrival = arrivalRef.current;
 
     const newPositions: PinPosition[] = [];
+    const seen = new Set<string>();
     for (const loc of locs) {
       if (loc.isWaypoint) continue;
+      if (seen.has(loc.id)) continue;
       const isVisited = visited.includes(loc.id);
       const isActive = loc.id === arrival;
       if (!isVisited && !isActive) continue;
 
+      seen.add(loc.id);
       const point = map.project(loc.coordinates);
       newPositions.push({
         locationId: loc.id,
