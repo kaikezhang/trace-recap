@@ -381,6 +381,12 @@ export default function FreeCanvas({
     [photos],
   );
 
+  // Stable index per photo id — does not change when zIndex ordering changes
+  const stablePhotoIndex = useMemo(
+    () => new Map(photos.map((photo, i) => [photo.id, i])),
+    [photos],
+  );
+
   const orderedItems = useMemo(
     () =>
       [...transforms]
@@ -1123,7 +1129,7 @@ export default function FreeCanvas({
       }}
       style={mapSnapshot ? { backgroundImage: `url(${mapSnapshot})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
     >
-      {orderedItems.map(({ transform, photo }, photoIndex) => {
+      {orderedItems.map(({ transform, photo }) => {
         const caption = getCaptionTransform(transform);
         const scaledCaptionFontSize = (caption.fontSize ?? defaultCaptionFontSize) * captionScale;
         const captionText = caption.text ?? photo.caption ?? "";
@@ -1163,7 +1169,7 @@ export default function FreeCanvas({
             >
               <PhotoFrame
                 frameStyle={photoFrameStyle}
-                photoIndex={photoIndex}
+                photoIndex={stablePhotoIndex.get(photo.id) ?? 0}
                 className="h-full w-full"
                 mediaStyle={{ borderRadius: `${borderRadius}px` }}
               >
