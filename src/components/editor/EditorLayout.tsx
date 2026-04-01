@@ -244,6 +244,7 @@ function EditorContent() {
       clearAlbumSequenceTimers();
       pendingAlbumCloseLocationIdRef.current = null;
       activeAlbumSequenceLocationIdRef.current = locationId;
+      completedAlbumLocationIdsRef.current.add(locationId);
       setAlbumClosedLocationId(null);
       setAlbumCollectingLocationId(locationId);
       setVisiblePhotoLocationId(locationId);
@@ -526,7 +527,18 @@ function EditorContent() {
       const currentArrivalHasPhotos =
         (currentArrivalLocation?.photos.length ?? 0) > 0;
       const previousPhase = prevPhaseRef.current;
+      prevPhaseRef.current = e.phase;
+      const wasShowingPhotos = prevShowPhotosRef.current;
+      prevShowPhotosRef.current = e.showPhotos;
       const previousPhotoLocationId = prevPhotoLocationIdRef.current;
+      if (e.phase === "ARRIVE") {
+        prevPhotoLocationIdRef.current =
+          e.showPhotos && currentArrivalHasPhotos
+            ? currentArrivalLocation?.id ?? null
+            : null;
+      } else if (!e.showPhotos) {
+        prevPhotoLocationIdRef.current = null;
+      }
       const previousPhotoLocation =
         previousPhotoLocationId != null
           ? locations.find((location) => location.id === previousPhotoLocationId) ??
@@ -655,6 +667,11 @@ function EditorContent() {
           // Show closed album for 200ms then transition to visited
           clearAlbumSequenceTimers();
           albumVisitedTimerRef.current = setTimeout(() => {
+            if (useAnimationStore.getState().playbackState !== "playing") {
+              pendingAlbumCloseLocationIdRef.current = currentCollecting;
+              albumVisitedTimerRef.current = null;
+              return;
+            }
             if (useAnimationStore.getState().albumClosedLocationId === currentCollecting) {
               setAlbumClosedLocationId(null);
             }
@@ -706,8 +723,7 @@ function EditorContent() {
       }
 
       // Breadcrumb: when photos stop showing, drop a breadcrumb for the location that was just visited
-      const wasShowingPhotos = prevShowPhotosRef.current;
-      const prevLocId = prevPhotoLocationIdRef.current;
+      const prevLocId = previousPhotoLocationId;
       if (wasShowingPhotos && !e.showPhotos && prevLocId) {
         const loc = locations.find((l) => l.id === prevLocId);
         if (loc && loc.photos.length > 0) {
@@ -720,16 +736,6 @@ function EditorContent() {
           });
         }
       }
-      prevShowPhotosRef.current = e.showPhotos;
-      if (e.phase === "ARRIVE") {
-        prevPhotoLocationIdRef.current =
-          e.showPhotos && currentArrivalHasPhotos
-            ? currentArrivalLocation?.id ?? null
-            : null;
-      } else if (!e.showPhotos) {
-        prevPhotoLocationIdRef.current = null;
-      }
-      prevPhaseRef.current = e.phase;
 
       // Scene transition metadata
       setSceneTransitionProgress(e.sceneTransitionProgress);
@@ -897,6 +903,7 @@ function EditorContent() {
       if (seekTime >= entry.startTime + entry.duration) {
         const toLoc = groups[i].toLoc;
         if (toLoc.photos.length > 0) {
+          completedAlbumLocationIdsRef.current.add(toLoc.id);
           newBreadcrumbs.push({
             locationId: toLoc.id,
             coordinates: toLoc.coordinates,
