@@ -567,7 +567,8 @@ export class VideoExporter {
     label: string,
     topPercent: number,
     baseFontSize: number = 18,
-    accentColor: string = "#6366f1"
+    accentColor: string = "#6366f1",
+    emoji?: string,
   ): void {
     const fontSize = baseFontSize * scaleX;
     const font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
@@ -576,10 +577,19 @@ export class VideoExporter {
 
     const padH = 20 * scaleX;
     const padV = 10 * scaleX;
-    const dotRadius = 4 * scaleX;
-    const dotGap = 8 * scaleX;
+    const iconGap = 8 * scaleX;
     const textWidth = metrics.width;
-    const boxWidth = padH + dotRadius * 2 + dotGap + textWidth + padH;
+
+    // Icon: emoji text or accent dot
+    let iconWidth: number;
+    if (emoji) {
+      const emojiMetrics = ctx.measureText(emoji);
+      iconWidth = emojiMetrics.width;
+    } else {
+      iconWidth = 8 * scaleX; // dot diameter
+    }
+
+    const boxWidth = padH + iconWidth + iconGap + textWidth + padH;
     const boxHeight = padV + 22 * scaleX + padV;
     const x = (canvasWidth - boxWidth) / 2;
     const y = (canvasHeight * topPercent) / 100;
@@ -601,17 +611,30 @@ export class VideoExporter {
     ctx.stroke();
     ctx.restore();
 
-    const dotX = x + padH + dotRadius;
-    const dotY = y + boxHeight / 2;
-    ctx.beginPath();
-    ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
-    ctx.fillStyle = accentColor;
-    ctx.fill();
+    const iconCenterX = x + padH + iconWidth / 2;
+    const centerY = y + boxHeight / 2;
+
+    if (emoji) {
+      // Draw emoji character
+      ctx.font = font;
+      ctx.fillStyle = "#1e293b";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+      ctx.fillText(emoji, iconCenterX, centerY);
+      ctx.textAlign = "start";
+    } else {
+      // Fallback: accent dot
+      const dotRadius = 4 * scaleX;
+      ctx.beginPath();
+      ctx.arc(iconCenterX, centerY, dotRadius, 0, Math.PI * 2);
+      ctx.fillStyle = accentColor;
+      ctx.fill();
+    }
 
     ctx.font = font;
     ctx.fillStyle = "#1e293b";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, dotX + dotRadius + dotGap, dotY);
+    ctx.fillText(label, x + padH + iconWidth + iconGap, centerY);
   }
 
   private getExportAlbumTailDuration(): number {
@@ -1620,6 +1643,13 @@ export class VideoExporter {
         progress?.showPhotos ?? false,
         progress?.photoOpacity ?? 0,
       );
+
+      // Resolve the city emoji from locations (matching preview behavior)
+      const locations = this.engine.getLocations();
+      const cityEmoji = labelEn
+        ? locations.find((l) => l.name === labelEn)?.chapterEmoji ?? null
+        : null;
+
       this.drawCityLabel(
         ctx,
         canvasWidth,
@@ -1629,6 +1659,7 @@ export class VideoExporter {
         topPercent,
         baseFontSize,
         accentColor,
+        cityEmoji ?? undefined,
       );
     }
   }
