@@ -178,7 +178,8 @@ export default function MapStage({
   const isPlaying = playbackState === "playing";
   const [playbackBarInsetPx, setPlaybackBarInsetPx] = useState(0);
   const effectiveBottomInsetPx = stageBottomInsetPx + playbackBarInsetPx;
-  const routeLabelBottomPx = Math.max(80, effectiveBottomInsetPx + 16);
+  // Route label sits above stats bar (stats bar ≈ effectiveBottomInsetPx + 12 + 36px height)
+  const routeLabelBottomPx = Math.max(80, effectiveBottomInsetPx + 60);
   const currentSegment = segments[currentSegmentIndex];
   const fromLoc = currentSegment
     ? locations.find((l) => l.id === currentSegment.fromId)
