@@ -9,6 +9,11 @@ export interface Breadcrumb {
   visitedAtSegment: number;      // segment index when this was visited
 }
 
+export interface ScreenPoint {
+  x: number;
+  y: number;
+}
+
 interface AnimationState {
   playbackState: PlaybackState;
   currentTime: number;
@@ -38,6 +43,12 @@ interface AnimationState {
   visitedLocationIds: string[];
   /** ID of the location currently arriving at (active chapter pin) */
   currentArrivalLocationId: string | null;
+  /** ID of the location whose album is currently collecting flying photos */
+  albumCollectingLocationId: string | null;
+  /** ID of the location whose album has snapped shut after collecting photos */
+  albumClosedLocationId: string | null;
+  /** Current projected screen positions for visible chapter pins */
+  chapterPinPositions: Record<string, ScreenPoint>;
   /** Breadcrumb thumbnails left at visited locations */
   breadcrumbs: Breadcrumb[];
 
@@ -62,6 +73,9 @@ interface AnimationState {
   setVisitedLocationIds: (ids: string[]) => void;
   addVisitedLocationId: (id: string) => void;
   setCurrentArrivalLocationId: (id: string | null) => void;
+  setAlbumCollectingLocationId: (id: string | null) => void;
+  setAlbumClosedLocationId: (id: string | null) => void;
+  setChapterPinPositions: (positions: Record<string, ScreenPoint>) => void;
   addBreadcrumb: (b: Breadcrumb) => void;
   setBreadcrumbs: (breadcrumbs: Breadcrumb[]) => void;
   clearBreadcrumbs: () => void;
@@ -89,6 +103,9 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   bloomElapsedTime: 0,
   visitedLocationIds: [],
   currentArrivalLocationId: null,
+  albumCollectingLocationId: null,
+  albumClosedLocationId: null,
+  chapterPinPositions: {},
   breadcrumbs: [],
 
   setPlaybackState: (playbackState) => set({ playbackState }),
@@ -117,6 +134,9 @@ export const useAnimationStore = create<AnimationState>((set) => ({
         : [...state.visitedLocationIds, id],
     })),
   setCurrentArrivalLocationId: (currentArrivalLocationId) => set({ currentArrivalLocationId }),
+  setAlbumCollectingLocationId: (albumCollectingLocationId) => set({ albumCollectingLocationId }),
+  setAlbumClosedLocationId: (albumClosedLocationId) => set({ albumClosedLocationId }),
+  setChapterPinPositions: (chapterPinPositions) => set({ chapterPinPositions }),
   addBreadcrumb: (b) =>
     set((state) => {
       // Don't add duplicate breadcrumbs for the same location
@@ -145,6 +165,9 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       bloomElapsedTime: 0,
       visitedLocationIds: [],
       currentArrivalLocationId: null,
+      albumCollectingLocationId: null,
+      albumClosedLocationId: null,
+      chapterPinPositions: {},
       breadcrumbs: [],
     }),
 }));
