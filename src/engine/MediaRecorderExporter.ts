@@ -75,7 +75,11 @@ export class MediaRecorderExporter {
   private stopped = false;
 
   constructor(canvas: HTMLCanvasElement, options: MediaRecorderExportOptions) {
-    const { fps, videoBitsPerSecond = 5_000_000 } = options;
+    const { width, height, fps } = options;
+    // Auto bitrate: ~2 Mbps for 1080p, scale proportionally
+    const pixels = (width ?? canvas.width) * (height ?? canvas.height);
+    const defaultBps = Math.round(Math.max(1_000_000, Math.min(4_000_000, (pixels / (1920 * 1080)) * 2_000_000)));
+    const videoBitsPerSecond = options.videoBitsPerSecond ?? defaultBps;
     this.canvas = canvas;
     this.fps = fps;
     this.frameInterval = 1000 / fps;

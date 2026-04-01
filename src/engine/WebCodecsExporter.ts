@@ -37,7 +37,13 @@ export class WebCodecsExporter {
   private encoderError: Error | null = null;
 
   constructor(options: WebCodecsExportOptions) {
-    const { width, height, fps, bitrate = 5_000_000 } = options;
+    const { width, height, fps } = options;
+    // Auto bitrate: ~2 Mbps for 1080p, scale proportionally for other resolutions
+    // This gives good quality for map animations while keeping file size reasonable
+    // (e.g. 2.5 min video ≈ 35MB instead of 90MB at 5 Mbps)
+    const pixels = width * height;
+    const defaultBitrate = Math.round(Math.max(1_000_000, Math.min(4_000_000, (pixels / (1920 * 1080)) * 2_000_000)));
+    const bitrate = options.bitrate ?? defaultBitrate;
     this.fps = fps;
 
     this.muxer = new Muxer({
