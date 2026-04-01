@@ -742,7 +742,6 @@ export default function PhotoOverlay({
               return (
                 <Fragment key={photo.id}>
                   <div
-                    key={photo.id}
                     className="absolute"
                     style={{
                       left: `${rect.x * 100}%`,
@@ -775,7 +774,7 @@ export default function PhotoOverlay({
                               textShadow: "0 1px 3px rgba(0,0,0,0.35)",
                             }}
                           >
-                            {photo.caption}
+                            {captionDisplay.text}
                           </p>
                         ) : undefined
                       }
@@ -867,7 +866,6 @@ export default function PhotoOverlay({
             return (
               <Fragment key={photo.id}>
                 <motion.div
-                  key={photo.id}
                   initial={enter.initial}
                   animate={animateValues}
                   transition={flyToAlbumExit
@@ -911,7 +909,7 @@ export default function PhotoOverlay({
                             textShadow: "0 1px 3px rgba(0,0,0,0.35)",
                           }}
                         >
-                          {photo.caption}
+                          {captionDisplay.text}
                         </p>
                       ) : undefined
                     }
@@ -1068,7 +1066,7 @@ export default function PhotoOverlay({
                               textShadow: "0 1px 3px rgba(0,0,0,0.35)",
                             }}
                           >
-                            {photo.caption}
+                            {captionDisplay.text}
                           </p>
                         ) : undefined
                       }
