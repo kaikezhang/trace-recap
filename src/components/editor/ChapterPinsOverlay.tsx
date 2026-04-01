@@ -88,11 +88,22 @@ export default function ChapterPinsOverlay() {
   // Register/unregister pin DOM elements
   const registerPinRef = useCallback((locationId: string, el: HTMLDivElement | null) => {
     if (el) {
+      // Hide until position is set to prevent flash at top-left corner
+      el.style.visibility = "hidden";
       pinElementsRef.current.set(locationId, el);
+      // Immediately position if map is available
+      if (map) {
+        const location = locationsRef.current.find((l) => l.id === locationId);
+        if (location) {
+          const projected = map.project(location.coordinates);
+          el.style.transform = `translate(${projected.x}px, ${projected.y}px) translate(-50%, -100%)`;
+        }
+        el.style.visibility = "";
+      }
     } else {
       pinElementsRef.current.delete(locationId);
     }
-  }, []);
+  }, [map]);
 
   // Synchronously update pin DOM positions — called directly in map "move" handler
   const updatePinDOMPositions = useCallback(() => {
