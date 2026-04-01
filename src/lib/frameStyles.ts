@@ -95,12 +95,22 @@ export function frameStyleUsesInlineCaption(style: PhotoFrameStyle): boolean {
   return PHOTO_FRAME_STYLE_CONFIGS[style].inlineCaption;
 }
 
-export function getPhotoFrameRotation(style: PhotoFrameStyle, photoIndex: number): number {
+function hashPhotoId(photoId: string): number {
+  let hash = 0;
+
+  for (let index = 0; index < photoId.length; index += 1) {
+    hash = (hash * 31 + photoId.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
+}
+
+export function getPhotoFrameRotation(style: PhotoFrameStyle, photoId: string): number {
   if (style !== "polaroid") {
     return 0;
   }
 
-  const seeded = Math.sin((photoIndex + 1) * 12.9898 + 78.233) * 43758.5453;
+  const seeded = Math.sin((hashPhotoId(photoId) + 1) * 12.9898 + 78.233) * 43758.5453;
   const normalized = seeded - Math.floor(seeded);
   return Number((((normalized * 2) - 1) * 2).toFixed(2));
 }

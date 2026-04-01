@@ -7,13 +7,14 @@ import type { PhotoFrameStyle } from "@/types";
 
 interface PhotoFrameProps {
   frameStyle: PhotoFrameStyle;
-  photoIndex: number;
+  photoId: string;
   caption?: string;
   className?: string;
   mediaClassName?: string;
   style?: CSSProperties;
   mediaStyle?: CSSProperties;
   footer?: ReactNode;
+  disableDecorativeRotation?: boolean;
   children: ReactNode;
 }
 
@@ -55,17 +56,18 @@ function FilmStripLayer({
 
 export default function PhotoFrame({
   frameStyle,
-  photoIndex,
+  photoId,
   caption,
   className,
   mediaClassName,
   style,
   mediaStyle,
   footer,
+  disableDecorativeRotation = false,
   children,
 }: PhotoFrameProps) {
   const config = getPhotoFrameStyleConfig(frameStyle);
-  const rotation = getPhotoFrameRotation(frameStyle, photoIndex);
+  const rotation = disableDecorativeRotation ? 0 : getPhotoFrameRotation(frameStyle, photoId);
   const trimmedCaption = caption?.trim();
 
   return (

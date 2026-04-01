@@ -59,7 +59,7 @@ function bgColorDisplayHex(color: string): string {
 const MIN_PHOTO_SIZE = 0.05;
 const MIN_CAPTION_VISIBLE_PX = 24;
 const ROTATION_SNAP_TARGETS = [0, 90, -90, 180] as const;
-const ROTATION_SNAP_THRESHOLD = 5;
+const ROTATION_SNAP_THRESHOLD = 3;
 const TOOLBAR_MARGIN_PX = 12;
 const TOOLBAR_WIDTH_PX = 320;
 const TOOLBAR_HEIGHT_PX = 132;
@@ -108,8 +108,8 @@ type GestureState =
   | {
       type: "rotate-photo";
       photoId: string;
-      centerX: number;
-      centerY: number;
+      centerClientX: number;
+      centerClientY: number;
       startAngle: number;
       startRotation: number;
     }
@@ -378,12 +378,6 @@ export default function FreeCanvas({
 
   const photoMap = useMemo(
     () => new Map(photos.map((photo) => [photo.id, photo])),
-    [photos],
-  );
-
-  // Stable index per photo id — does not change when zIndex ordering changes
-  const stablePhotoIndex = useMemo(
-    () => new Map(photos.map((photo, i) => [photo.id, i])),
     [photos],
   );
 
@@ -658,14 +652,16 @@ export default function FreeCanvas({
 
   const beginRotate = useCallback((photoId: string, clientX: number, clientY: number) => {
     const transform = transformsRef.current.find((item) => item.photoId === photoId);
-    if (!transform || containerSize.w <= 0 || containerSize.h <= 0) return;
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    if (!transform || !canvasRect || containerSize.w <= 0 || containerSize.h <= 0) return;
 
     // Snapshot state before rotation starts
     useHistoryStore.getState().pushState();
 
-    const centerX = (transform.x + transform.width / 2) * containerSize.w;
-    const centerY = (transform.y + transform.height / 2) * containerSize.h;
-    const startAngle = (Math.atan2(clientY - centerY, clientX - centerX) * 180) / Math.PI + 90;
+    const centerClientX = canvasRect.left + (transform.x + transform.width / 2) * containerSize.w;
+    const centerClientY = canvasRect.top + (transform.y + transform.height / 2) * containerSize.h;
+    const startAngle =
+      (Math.atan2(clientY - centerClientY, clientX - centerClientX) * 180) / Math.PI + 90;
 
     setEditingCaptionId(null);
     const nextSelection = createSingleSelection({ kind: "photo", photoId });
@@ -674,8 +670,8 @@ export default function FreeCanvas({
     setActiveGesture({
       type: "rotate-photo",
       photoId,
-      centerX,
-      centerY,
+      centerClientX,
+      centerClientY,
       startAngle,
       startRotation: transform.rotation,
     });
@@ -865,12 +861,15 @@ export default function FreeCanvas({
 
       if (activeGesture.type === "rotate-photo") {
         const currentAngle =
-          (Math.atan2(event.clientY - activeGesture.centerY, event.clientX - activeGesture.centerX) * 180) /
+          (Math.atan2(
+            event.clientY - activeGesture.centerClientY,
+            event.clientX - activeGesture.centerClientX,
+          ) * 180) /
             Math.PI +
           90;
         const angleDelta = currentAngle - activeGesture.startAngle;
         let nextAngle = normalizeRotation(activeGesture.startRotation + angleDelta);
-        if (!event.shiftKey) {
+        if (event.shiftKey) {
           const snapTarget = getRotationSnapTarget(nextAngle);
           if (snapTarget !== undefined) {
             nextAngle = normalizeRotation(snapTarget);
@@ -1169,9 +1168,10 @@ export default function FreeCanvas({
             >
               <PhotoFrame
                 frameStyle={photoFrameStyle}
-                photoIndex={stablePhotoIndex.get(photo.id) ?? 0}
+                photoId={photo.id}
                 className="h-full w-full"
                 mediaStyle={{ borderRadius: `${borderRadius}px` }}
+                disableDecorativeRotation
               >
                 <img
                   src={photo.url}

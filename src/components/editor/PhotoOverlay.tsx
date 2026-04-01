@@ -756,10 +756,11 @@ export default function PhotoOverlay({
                   >
                     <PhotoFrame
                       frameStyle={photoFrameStyle}
-                      photoIndex={index}
+                      photoId={photo.id}
                       caption={!displayIsFreeMode ? captionDisplay.text : undefined}
                       className="h-full w-full"
                       mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
+                      disableDecorativeRotation={displayIsFreeMode}
                       footer={
                         !displayIsFreeMode && hasCaption && !frameHandlesCaption ? (
                           <p
@@ -891,10 +892,11 @@ export default function PhotoOverlay({
                 >
                   <PhotoFrame
                     frameStyle={photoFrameStyle}
-                    photoIndex={index}
+                    photoId={photo.id}
                     caption={!displayIsFreeMode ? captionDisplay.text : undefined}
                     className="h-full w-full"
                     mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
+                    disableDecorativeRotation={displayIsFreeMode}
                     footer={
                       !displayIsFreeMode && hasCaption && !frameHandlesCaption ? (
                         <p
@@ -1048,10 +1050,11 @@ export default function PhotoOverlay({
                   >
                     <PhotoFrame
                       frameStyle={photoFrameStyle}
-                      photoIndex={index}
+                      photoId={photo.id}
                       caption={!incomingIsFreeMode ? captionDisplay.text : undefined}
                       className="h-full w-full"
                       mediaStyle={{ borderRadius: `${incomingBorderRadiusPx}px` }}
+                      disableDecorativeRotation={incomingIsFreeMode}
                       footer={
                         !incomingIsFreeMode && hasCaption && !frameHandlesCaption ? (
                           <p
