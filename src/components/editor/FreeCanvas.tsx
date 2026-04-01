@@ -118,6 +118,8 @@ type GestureState =
       anchorY: number;
       aspect: number;
       rotation: number;
+      containerOffsetX: number;
+      containerOffsetY: number;
     };
 
 export interface FreeCanvasInitialGesture {
@@ -663,26 +665,28 @@ export default function FreeCanvas({
     });
   }, [bringSelectionToFront, containerSize.h, containerSize.w]);
 
-  const beginResize = useCallback((photoId: string, handle: ResizeHandle) => {
+  const beginResize = useCallback((photoId: string, handle: ResizeHandle, clientX: number, clientY: number, containerEl: HTMLElement | null) => {
     const transform = transformsRef.current.find((item) => item.photoId === photoId);
     if (!transform || containerSize.w <= 0 || containerSize.h <= 0) return;
 
-    const left = transform.x * containerSize.w;
-    const top = transform.y * containerSize.h;
+    const rect = containerEl?.getBoundingClientRect();
+    const containerOffsetX = rect?.left ?? 0;
+    const containerOffsetY = rect?.top ?? 0;
+
     const width = transform.width * containerSize.w;
     const height = transform.height * containerSize.h;
     const aspect = width / Math.max(height, 1);
     const { horizontal, vertical } = getHandleDirections(handle);
     const rotation = (transform.rotation * Math.PI) / 180;
-    const centerX = left + width / 2;
-    const centerY = top + height / 2;
-    const anchorOffset = rotateVector(
-      (-horizontal * width) / 2,
-      (-vertical * height) / 2,
+    // The dragged corner is where the pointer is now (screen coords).
+    // The anchor is the opposite corner — offset by the full diagonal in screen coords.
+    const diagonalOffset = rotateVector(
+      -horizontal * width,
+      -vertical * height,
       rotation,
     );
-    const anchorX = centerX + anchorOffset.x;
-    const anchorY = centerY + anchorOffset.y;
+    const anchorX = clientX + diagonalOffset.x;
+    const anchorY = clientY + diagonalOffset.y;
 
     setEditingCaptionId(null);
     const nextSelection = createSingleSelection({ kind: "photo", photoId });
@@ -696,6 +700,8 @@ export default function FreeCanvas({
       anchorY,
       aspect,
       rotation,
+      containerOffsetX,
+      containerOffsetY,
     });
   }, [bringSelectionToFront, containerSize.h, containerSize.w]);
 
@@ -893,13 +899,16 @@ export default function FreeCanvas({
         verticalDirection * nextHeight,
         activeGesture.rotation,
       );
+      // Convert screen-space center to container-local coords
+      const screenCenterX = activeGesture.anchorX + draggedCornerOffset.x / 2;
+      const screenCenterY = activeGesture.anchorY + draggedCornerOffset.y / 2;
       const nextCenterX = clamp(
-        activeGesture.anchorX + draggedCornerOffset.x / 2,
+        screenCenterX - activeGesture.containerOffsetX,
         0,
         containerSize.w,
       );
       const nextCenterY = clamp(
-        activeGesture.anchorY + draggedCornerOffset.y / 2,
+        screenCenterY - activeGesture.containerOffsetY,
         0,
         containerSize.h,
       );
@@ -1179,7 +1188,7 @@ export default function FreeCanvas({
                           style={{ cursor: getHandleCursor(handle), touchAction: "none" }}
                           onPointerDown={(event) => {
                             event.stopPropagation();
-                            beginResize(photo.id, handle);
+                            beginResize(photo.id, handle, event.clientX, event.clientY, canvasRef.current);
                           }}
                           aria-label={`Resize photo from ${handle} corner`}
                         />
