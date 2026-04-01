@@ -533,7 +533,9 @@ function EditorContent() {
         e.phase !== "ARRIVE" &&
         previousPhotoLocationId !== null &&
         (previousPhotoLocation?.photos.length ?? 0) > 0 &&
-        activeAlbumSequenceLocationIdRef.current !== previousPhotoLocationId;
+        activeAlbumSequenceLocationIdRef.current !== previousPhotoLocationId &&
+        useAnimationStore.getState().albumCollectingLocationId !== previousPhotoLocationId &&
+        useAnimationStore.getState().albumClosedLocationId !== previousPhotoLocationId;
 
       setCurrentTime(e.time);
       setCurrentSegmentIndex(e.segmentIndex);
