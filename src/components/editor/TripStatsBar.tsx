@@ -175,11 +175,11 @@ export default function TripStatsBar({
   if (!tripStatsEnabled) return null;
 
   const isActive = playbackState === "playing" || playbackState === "paused";
-  // Position stats bar just above the playback controls, but never higher than ~18% from bottom
-  // (route label is capped at 25%, stats bar stays below it)
+  // Position stats bar just above the playback controls, capped at 10% from bottom
+  // so it stays below the route label (capped at 20%).
   const baseBottom = Math.max(isCompact ? 32 : 56, bottomInsetPx + (isCompact ? 6 : 12));
   const containerStyle: React.CSSProperties = {
-    bottom: `min(${baseBottom}px, 18%)`,
+    bottom: `min(${baseBottom}px, 10%)`,
   };
 
   const textClass = isCompact ? "text-[10px]" : "text-[13px]";
