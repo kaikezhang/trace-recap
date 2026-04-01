@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { AnimatePresence } from "framer-motion";
+
 import ChapterPin from "./ChapterPin";
 import type { ChapterPinState } from "./ChapterPin";
 import { useMap } from "./MapContext";
@@ -92,7 +92,6 @@ export default function ChapterPinsOverlay() {
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-[8]">
-      <AnimatePresence>
         {positions.map((pos) => {
           const location = locations.find((l) => l.id === pos.locationId);
           if (!location) return null;
@@ -113,7 +112,6 @@ export default function ChapterPinsOverlay() {
             />
           );
         })}
-      </AnimatePresence>
     </div>
   );
 }
