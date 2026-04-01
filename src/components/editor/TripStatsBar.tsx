@@ -57,33 +57,6 @@ interface TripStatsBarProps {
   bottomInsetPx?: number;
 }
 
-/**
- * Compute a scale tier based on the parent container height.
- * Returns "compact" for small containers (e.g. 16:9 on portrait phone),
- * "normal" for standard sizes.
- */
-function useContainerScale(ref: React.RefObject<HTMLDivElement | null>): "compact" | "normal" {
-  const [tier, setTier] = useState<"compact" | "normal">("normal");
-
-  useEffect(() => {
-    const el = ref.current?.parentElement;
-    if (!el) return;
-
-    const update = () => {
-      const h = el.clientHeight;
-      // When the map container is shorter than 300px, switch to compact mode
-      setTier(h < 300 ? "compact" : "normal");
-    };
-
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref]);
-
-  return tier;
-}
-
 export default function TripStatsBar({
   bottomInsetPx = 0,
 }: TripStatsBarProps) {
@@ -99,9 +72,24 @@ export default function TripStatsBar({
   const [visibleModes, setVisibleModes] = useState<string[]>([]);
   const prevModesRef = useRef<string[]>([]);
   const flyProgressRef = useRef(0);
+
+  // Detect if parent container is short (e.g. 16:9 on portrait phone)
   const containerRef = useRef<HTMLDivElement>(null);
-  const tier = useContainerScale(containerRef);
-  const isCompact = tier === "compact";
+  const [isCompact, setIsCompact] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current?.parentElement;
+    if (!el) return;
+
+    const update = () => {
+      setIsCompact(el.clientHeight < 300);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Subscribe to animation store changes for fly progress
   useEffect(() => {
@@ -175,10 +163,12 @@ export default function TripStatsBar({
   if (!tripStatsEnabled) return null;
 
   const isActive = playbackState === "playing" || playbackState === "paused";
-  // Position stats bar just above the playback controls.
-  // The bottomInsetPx is already capped by MapStage so this won't push too high.
-  const baseBottom = Math.max(isCompact ? 32 : 56, bottomInsetPx + (isCompact ? 6 : 12));
-  const containerStyle: React.CSSProperties = { bottom: `${baseBottom}px` };
+
+  // Original positioning logic — only override when bottomInsetPx is provided
+  const containerStyle =
+    bottomInsetPx > 0
+      ? { bottom: `${Math.max(isCompact ? 32 : 56, bottomInsetPx + (isCompact ? 6 : 12))}px` }
+      : undefined;
 
   const textClass = isCompact ? "text-[10px]" : "text-[13px]";
   const emojiClass = isCompact ? "text-[10px]" : "text-[13px]";
@@ -196,7 +186,7 @@ export default function TripStatsBar({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 16 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="absolute left-1/2 z-10 -translate-x-1/2"
+          className={`absolute left-1/2 z-10 -translate-x-1/2 ${isCompact ? "bottom-8" : "bottom-14 md:bottom-16"}`}
           style={containerStyle}
         >
           <div
