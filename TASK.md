@@ -1,67 +1,91 @@
-# TASK: Fix All Photo Rotation Issues
+# TASK: Deep Audit — WYSIWYG Consistency Across 5 Rendering Surfaces
 
-## ⚠️ CREATE PR AND STOP. DO NOT MERGE.
+## ⚠️ DO NOT MAKE CODE CHANGES. AUDIT AND DOCUMENT ONLY.
 
-## Reference
-Read `docs/audit-rotation.md` for full analysis.
+## Context
 
-## Fixes Required (all 4)
+Users see photos rendered in 5 different places. These should look IDENTICAL (WYSIWYG), but there are observable differences. We need to find every source of inconsistency.
 
-### Fix 1: Rotation coordinate-space bug (Priority 1)
+## The 5 Rendering Surfaces
 
-File: `src/components/editor/FreeCanvas.tsx`
+1. **PhotoLayoutEditor Preview** (non-Free modes: Grid/Collage/etc)
+   - Component: `PhotoOverlay` inside `PhotoLayoutEditor`
+   - Props: `containerMode="parent"`, `visible={true}`, `opacity={previewOpacity}`
+   - Container: fitted to preview panel with aspect ratio
 
-**Problem**: `beginRotate` computes photo center in canvas-local pixels but compares against `event.clientX/clientY` (viewport coords). Rotation pivots around a phantom point.
+2. **Free Mode Editor Preview**
+   - Component: `FreeCanvas` inside `PhotoLayoutEditor`
+   - Container: 95% × 88% inset of preview panel
+   - Transforms: `effectiveFreeTransforms` (reconciled from layout + fallback)
 
-**Fix**:
-- In `beginRotate`: get `canvasRef.current.getBoundingClientRect()`, convert photo center to client-space by adding `rect.left` and `rect.top`
-- Store client-space center in the gesture state
-- The move handler already uses `event.clientX/clientY`, so once the center is in the same space, it works
+3. **Scrubber/Paused Preview** (drag progress bar while paused)
+   - Component: `PhotoOverlay` inside `MapStage`/`EditorLayout`
+   - Props: `containerMode="viewport"`, driven by animation timeline
+   - Container: viewport-sized with aspect ratio constraint
 
-### Fix 2: Disable decorative frame rotation in Free mode (Priority 2)
+4. **Playing Animation**
+   - Same `PhotoOverlay` as #3 but with live animation (enter/exit/kenburns/bloom/portal)
+   - Transitions between locations with scene transitions
 
-Files: `src/components/editor/PhotoFrame.tsx`, `src/components/editor/FreeCanvas.tsx`, `src/components/editor/PhotoOverlay.tsx`
+5. **Video Export**
+   - Component: Server-side frame capture or client-side canvas
+   - File: `src/engine/VideoExporter.ts` or `/api/encode-video/frame/route.ts`
+   - Fixed resolution, may have different pixel density
 
-**Problem**: `PhotoFrame` adds a random ±2° polaroid tilt via `getPhotoFrameRotation()`. In Free mode, this stacks with user's manual rotation, making snap-to-0° look crooked.
+## What to Audit
 
-**Fix**:
-- Add a prop `disableDecorativeRotation?: boolean` to `PhotoFrame`
-- When true, skip the `getPhotoFrameRotation` transform
-- Pass `disableDecorativeRotation={true}` in `FreeCanvas` 
-- Pass `disableDecorativeRotation={displayIsFreeMode}` in `PhotoOverlay` (both bloom and normal paths)
+For EACH of these areas, trace the complete rendering path and document:
 
-### Fix 3: Stabilize decorative tilt seeding (Priority 3)
+### A. Container Sizing
+- What determines the container dimensions?
+- How is aspect ratio applied?
+- What is the photo area inset (the 95%×88% area)?
+- Are there rounding differences between surfaces?
 
-Files: `src/components/editor/PhotoOverlay.tsx`, `src/lib/frameStyles.ts`
+### B. Layout Computation
+- How are photo rects computed? (computeAutoLayout / computeTemplateLayout / freeTransforms)
+- Are the same inputs (photos, layout, containerAspect, gap, width) used everywhere?
+- Is `containerAspect` computed the same way in all surfaces?
 
-**Problem**: Editor uses `stablePhotoIndex` (photos array order) but PhotoOverlay uses render-loop index (zIndex-sorted). Same photo gets different tilt in editor vs playback.
+### C. Photo Frame Rendering
+- Which surfaces use PhotoFrame? Which don't?
+- Is `photoFrameStyle` read from the same source?
+- Is `borderRadius` applied consistently?
+- Is decorative rotation (polaroid tilt) handled the same way?
+- Does `disableDecorativeRotation` apply correctly in Free mode across all surfaces?
 
-**Fix**:
-- Change `getPhotoFrameRotation` to accept a `photoId: string` instead of `photoIndex: number`, and derive the seed from the id
-- OR: in PhotoOverlay, create a stable index map from photos array (same pattern as FreeCanvas's `stablePhotoIndex`) and use that for `photoIndex`
-- Choose whichever approach is simpler. The id-based approach is more robust.
+### D. Caption Rendering
+- Is caption positioning (offsetX/offsetY) normalized the same way?
+- Is caption font scaling (captionScale = containerW / 1000) consistent?
+- Are free-mode caption styles (color, bgColor, fontFamily) preserved across all surfaces?
 
-### Fix 4: Soften snap behavior (Priority 4)
+### E. Photo Sizing & Object Fit
+- Is `object-cover` vs `object-contain` used consistently?
+- Is `object-position` (from focalPoint) applied everywhere?
+- Are photos cropped the same way?
 
-File: `src/components/editor/FreeCanvas.tsx`
+### F. Z-Index Ordering
+- Is z-index sorting consistent between FreeCanvas and PhotoOverlay?
+- Does the order match in export?
 
-**Fix**:
-- Reduce `ROTATION_SNAP_THRESHOLD` from `5` to `3`
-- Invert shift-key: make rotation free by default, Shift ENABLES snap (more intuitive for precision work)
-- That means: remove the `if (!event.shiftKey)` guard and change to `if (event.shiftKey)` for snap
+### G. Animation State at Rest
+- When animation is "at rest" (photo fully visible, no transition), does it look exactly like the editor?
+- Are there residual transforms from enter animation (rotation, scale, offset)?
+- Does `rotate: rotation` in PhotoOverlay match `transform: rotate(${rotation}deg)` in FreeCanvas?
 
-## Testing
+### H. Coordinate Normalization
+- Are all positions stored as 0-1 fractions?
+- Are they converted to pixels the same way?
+- Is the reference container size the same?
 
-After all fixes:
-1. Open Free mode editor
-2. Rotate a photo — should rotate smoothly around its visible center
-3. With Shift held, rotation should snap to 0/90/180/-90
-4. Without Shift, rotation should be completely free
-5. Polaroid frame in Free mode should NOT add extra tilt
-6. Switch to Grid/Collage layout — polaroid tilt should still work there
-7. Play animation — photo angles should match what the editor showed
+## Deliverable
 
-## Constraints
-- Do NOT change any non-rotation logic
-- Build must pass: `npx next build`
-- Create a PR to main when done
+Write findings to `docs/audit-wysiwyg.md` with:
+
+1. **Comparison matrix**: 5 surfaces × each audit area (A-H), noting match/mismatch
+2. **Specific discrepancies found**: exact code locations, what differs, and why
+3. **Impact assessment**: which mismatches are most user-visible
+4. **Root cause classification**: (a) different code paths, (b) different container math, (c) different props, (d) timing/animation residuals
+5. **Do NOT propose fixes** — just document the problems precisely
+
+Focus on OBSERVABLE differences, not theoretical ones. If two code paths produce identical output, note that they match even if the code is different.

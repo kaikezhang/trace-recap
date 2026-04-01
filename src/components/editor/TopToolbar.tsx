@@ -189,22 +189,53 @@ export default function TopToolbar() {
     const JSZip = (await import("jszip")).default;
     const zip = new JSZip();
     const routeData = await exportRoute();
+
+    // Build a lookup from location index → in-memory photos (with live blob/data URLs)
+    const locations = useProjectStore.getState().locations;
+    const livePhotoUrlMap = new Map<string, string>();
+    for (const loc of locations) {
+      for (const photo of loc.photos) {
+        // Key by caption+focalPoint to match serialized photos back to live ones
+        livePhotoUrlMap.set(`${loc.name}:${photo.caption ?? ''}:${photo.focalPoint?.x ?? ''}:${photo.focalPoint?.y ?? ''}:${photo.url.slice(-40)}`, photo.url);
+      }
+    }
+
     let photoIndex = 0;
 
-    for (const location of routeData.locations) {
+    for (let locIdx = 0; locIdx < routeData.locations.length; locIdx++) {
+      const location = routeData.locations[locIdx];
       if (!location.photos) {
         continue;
       }
 
-      for (const photo of location.photos) {
+      // Use live in-memory URLs when available (they have valid blob/data URLs)
+      const liveLoc = locations[locIdx];
+
+      for (let pIdx = 0; pIdx < location.photos.length; pIdx++) {
+        const photo = location.photos[pIdx];
         const filename = `photos/photo_${photoIndex++}.jpg`;
         try {
-          const response = await fetch(photo.url);
+          // Prefer in-memory photo URL (blob: or data:) over serialized URL
+          const liveUrl = liveLoc?.photos[pIdx]?.url;
+          const urlToFetch = liveUrl && (liveUrl.startsWith('blob:') || liveUrl.startsWith('data:'))
+            ? liveUrl
+            : photo.url;
+          const response = await fetch(urlToFetch);
+          if (!response.ok) {
+            console.warn(`Export: failed to fetch photo ${filename} (${response.status})`);
+            continue;
+          }
           const blob = await response.blob();
+          // Validate: real photos should be > 1KB
+          if (blob.size < 1024) {
+            console.warn(`Export: photo ${filename} too small (${blob.size}B), skipping`);
+            continue;
+          }
           zip.file(filename, blob);
           photo.url = filename;
         } catch {
           // Keep the serialized URL in route.json if the photo blob cannot be materialized.
+          console.warn(`Export: exception fetching photo ${filename}`);
         }
       }
     }
