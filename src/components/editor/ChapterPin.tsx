@@ -328,9 +328,9 @@ export default function ChapterPin({
         {isVisited ? (
           <motion.div
             key="visited"
-            initial={{ opacity: 0, scale: VISITED_ENTER_SCALE, y: 0 }}
+            initial={{ opacity: 1, scale: VISITED_ENTER_SCALE, y: 0 }}
             animate={{
-              opacity: 0.5,
+              opacity: 0.7,
               scale: VISITED_FINAL_SCALE,
               y: 8,
             }}
