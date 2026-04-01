@@ -1995,11 +1995,18 @@ export class VideoExporter {
     }
 
     const groups = this.engine.getGroups();
+    // When an album sequence is active (fly-to-album, album-open, etc.), use its
+    // groupIndex directly. During the tail period (time > engineDuration) the engine
+    // is clamped at seekTo(1) and progress.phase may no longer be "ARRIVE", causing
+    // the fallback branch to compute groupIndex - 1 (wrong group). The albumState
+    // always knows which group it belongs to, so prefer it.
     const groupIndex = isInSceneTransition
       ? progress.outgoingGroupIndex!
-      : progress.phase === "ARRIVE" || progress.groupIndex === 0
-        ? progress.groupIndex
-        : progress.groupIndex - 1;
+      : albumState
+        ? albumState.groupIndex
+        : progress.phase === "ARRIVE" || progress.groupIndex === 0
+          ? progress.groupIndex
+          : progress.groupIndex - 1;
     const group = groups[groupIndex];
     if (!group) return;
 
