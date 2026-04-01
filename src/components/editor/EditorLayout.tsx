@@ -165,6 +165,11 @@ function EditorContent() {
   const setBreadcrumbs = useAnimationStore((s) => s.setBreadcrumbs);
   const reset = useAnimationStore((s) => s.reset);
 
+  // Moved up: used by completeAlbumSequence / startAlbumSequence callbacks below
+  const [visiblePhotoLocationId, setVisiblePhotoLocationId] = useState<
+    string | null
+  >(null);
+
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const viewportRatio = useUIStore((s) => s.viewportRatio);
@@ -412,9 +417,6 @@ function EditorContent() {
   );
   const editingLocation =
     locations.find((l) => l.id === editingLocationId) ?? null;
-  const [visiblePhotoLocationId, setVisiblePhotoLocationId] = useState<
-    string | null
-  >(null);
   const visiblePhotoLocation =
     locations.find((l) => l.id === visiblePhotoLocationId) ?? null;
 
