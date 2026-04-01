@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -15,6 +15,7 @@ interface PlaybackControlsProps {
   onSeek: (progress: number) => void;
   hintMessage?: string;
   onHintDismiss?: () => void;
+  onPlayingMobileInsetChange?: (insetPx: number) => void;
 }
 
 function formatTime(seconds: number): string {
@@ -31,15 +32,64 @@ export default memo(function PlaybackControls({
   onSeek,
   hintMessage,
   onHintDismiss,
+  onPlayingMobileInsetChange,
 }: PlaybackControlsProps) {
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentTime = useAnimationStore((s) => s.currentTime);
   const totalDuration = useAnimationStore((s) => s.totalDuration);
   const bottomSheetState = useUIStore((s) => s.bottomSheetState);
   const exportDialogOpen = useUIStore((s) => s.exportDialogOpen);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
+
+  useEffect(() => {
+    if (!onPlayingMobileInsetChange || typeof window === "undefined") return;
+
+    const updateInset = () => {
+      const isMobile = window.innerWidth < 768;
+      const container = containerRef.current;
+
+      if (!isPlaying || exportDialogOpen || !isMobile || !container) {
+        onPlayingMobileInsetChange(0);
+        return;
+      }
+
+      const rect = container.getBoundingClientRect();
+      const viewportHeight =
+        window.visualViewport?.height ?? window.innerHeight;
+      const nextInset = Math.max(0, Math.round(viewportHeight - rect.top));
+      onPlayingMobileInsetChange(nextInset);
+    };
+
+    updateInset();
+
+    const container = containerRef.current;
+    const observer = container ? new ResizeObserver(updateInset) : null;
+    if (container && observer) {
+      observer.observe(container);
+    }
+    container?.addEventListener("transitionend", updateInset);
+
+    const visualViewport = window.visualViewport;
+    const settleTimeout = window.setTimeout(updateInset, 350);
+    const settleAnimationFrame = window.requestAnimationFrame(updateInset);
+    window.addEventListener("resize", updateInset);
+    visualViewport?.addEventListener("resize", updateInset);
+    visualViewport?.addEventListener("scroll", updateInset);
+
+    return () => {
+      observer?.disconnect();
+      container?.removeEventListener("transitionend", updateInset);
+      window.clearTimeout(settleTimeout);
+      window.cancelAnimationFrame(settleAnimationFrame);
+      window.removeEventListener("resize", updateInset);
+      visualViewport?.removeEventListener("resize", updateInset);
+      visualViewport?.removeEventListener("scroll", updateInset);
+      onPlayingMobileInsetChange(0);
+    };
+  }, [exportDialogOpen, isPlaying, onPlayingMobileInsetChange]);
 
   // Hide controls when export dialog is open
   if (exportDialogOpen) return null;
@@ -89,7 +139,7 @@ export default memo(function PlaybackControls({
     : "h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5";
 
   return (
-    <div className={containerClassName}>
+    <div ref={containerRef} className={containerClassName}>
       {/* Controls bar */}
       <div className={barClassName}>
         <div className={resetContainerClassName} aria-hidden={isPlaying}>

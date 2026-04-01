@@ -161,6 +161,7 @@ function EditorContent() {
     width: 0,
     height: 0,
   });
+  const [stageViewportBottomInsetPx, setStageViewportBottomInsetPx] = useState(0);
 
   const constrainedMapSize = useMemo(
     () =>
@@ -198,6 +199,47 @@ function EditorContent() {
 
     return () => observer.disconnect();
   }, [map, viewportRatio]);
+
+  useEffect(() => {
+    if (viewportRatio !== "free") {
+      setStageViewportBottomInsetPx(0);
+      return;
+    }
+
+    const stageViewport = stageViewportRef.current;
+    if (!stageViewport || typeof window === "undefined") return;
+
+    const updateStageInset = () => {
+      const rect = stageViewport.getBoundingClientRect();
+      const viewportHeight =
+        window.visualViewport?.height ?? window.innerHeight;
+      const visibleBottom = Math.min(rect.bottom, viewportHeight);
+      const nextInset = Math.max(0, Math.round(rect.bottom - visibleBottom));
+
+      setStageViewportBottomInsetPx((current) =>
+        current === nextInset ? current : nextInset,
+      );
+    };
+
+    updateStageInset();
+
+    const observer = new ResizeObserver(() => {
+      updateStageInset();
+    });
+    observer.observe(stageViewport);
+
+    const visualViewport = window.visualViewport;
+    window.addEventListener("resize", updateStageInset);
+    visualViewport?.addEventListener("resize", updateStageInset);
+    visualViewport?.addEventListener("scroll", updateStageInset);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateStageInset);
+      visualViewport?.removeEventListener("resize", updateStageInset);
+      visualViewport?.removeEventListener("scroll", updateStageInset);
+    };
+  }, [viewportRatio]);
 
   useEffect(() => {
     if (!map || !mapContainerRef.current) return;
@@ -885,6 +927,7 @@ function EditorContent() {
                   playHintMessage={playHintMessage}
                   showPhotoOverlay={showPhotoOverlay}
                   showEmptyState={locations.length === 0}
+                  stageBottomInsetPx={stageViewportBottomInsetPx}
                   onFocusSearch={handleFocusSearch}
                   onHintDismiss={() => dismissHint("playPreview")}
                   onLoadDemo={handleLoadDemo}
@@ -925,6 +968,7 @@ function EditorContent() {
                     playHintMessage={playHintMessage}
                     showPhotoOverlay={showPhotoOverlay}
                     showEmptyState={locations.length === 0}
+                    stageBottomInsetPx={0}
                     onFocusSearch={handleFocusSearch}
                     onHintDismiss={() => dismissHint("playPreview")}
                     onLoadDemo={handleLoadDemo}

@@ -60,7 +60,13 @@ function Separator() {
   return <div className="h-3.5 w-px bg-white/20" />;
 }
 
-export default function TripStatsBar() {
+interface TripStatsBarProps {
+  bottomInsetPx?: number;
+}
+
+export default function TripStatsBar({
+  bottomInsetPx = 0,
+}: TripStatsBarProps) {
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
   const currentPhase = useAnimationStore((s) => s.currentPhase);
@@ -149,6 +155,10 @@ export default function TripStatsBar() {
   if (!tripStatsEnabled) return null;
 
   const isActive = playbackState === "playing" || playbackState === "paused";
+  const containerStyle =
+    bottomInsetPx > 0
+      ? { bottom: `${Math.max(56, bottomInsetPx + 12)}px` }
+      : undefined;
 
   return (
     <AnimatePresence>
@@ -159,6 +169,7 @@ export default function TripStatsBar() {
           exit={{ opacity: 0, y: 16 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="absolute bottom-14 left-1/2 z-10 -translate-x-1/2 md:bottom-16"
+          style={containerStyle}
         >
           <div className="flex items-center gap-2.5 rounded-t-lg bg-black/50 px-4 py-1.5 backdrop-blur-sm"
             style={{ height: "36px" }}

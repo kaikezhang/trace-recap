@@ -190,6 +190,7 @@ interface PhotoOverlayProps {
   visible: boolean;
   photoLayout?: PhotoLayout;
   opacity?: number; // 0-1, for fade-out transition
+  bottomInsetPx?: number;
   containerMode?: "viewport" | "parent"; // 'parent' uses 100% sizing instead of vw/vh
   originCoordinates?: [number, number];
   incomingOriginCoordinates?: [number, number];
@@ -266,6 +267,7 @@ export default function PhotoOverlay({
   visible,
   photoLayout,
   opacity = 1,
+  bottomInsetPx = 0,
   containerMode = "viewport",
   originCoordinates,
   portalAccentColor = "#ffffff",
@@ -311,12 +313,16 @@ export default function PhotoOverlay({
       return { width: "95%", height: "88%" };
     }
     if (viewportRatio === "free") {
-      // Use dvh on mobile to account for browser chrome + playback bar;
-      // on desktop % is fine since the map container matches the visible area.
-      return { width: "95%", height: "min(88%, calc(100dvh - 200px))" };
+      return {
+        width: "95%",
+        height:
+          bottomInsetPx > 0
+            ? `min(88%, calc(100% - ${bottomInsetPx}px))`
+            : "88%",
+      };
     }
     return { width: "95%", height: "88%" };
-  }, [viewportRatio, containerMode, usesPortalLayout]);
+  }, [bottomInsetPx, viewportRatio, containerMode, usesPortalLayout]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
@@ -586,7 +592,7 @@ export default function PhotoOverlay({
         ...containerStyle,
         margin: "auto",
         top: 0,
-        bottom: 0,
+        bottom: bottomInsetPx,
         left: 0,
         right: 0,
       }}

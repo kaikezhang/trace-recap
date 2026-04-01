@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { useState } from "react";
 import MapCanvas from "./MapCanvas";
 import PlaybackControls from "./PlaybackControls";
 import PhotoOverlay from "./PhotoOverlay";
@@ -30,6 +31,7 @@ interface MapStageProps {
   photoOverlayOpacity: number;
   playHintMessage?: string;
   showPhotoOverlay: boolean;
+  stageBottomInsetPx?: number;
   onFocusSearch: () => void;
   onHintDismiss: () => void;
   onLoadDemo: () => void;
@@ -125,6 +127,7 @@ export default function MapStage({
   photoOverlayOpacity,
   playHintMessage,
   showPhotoOverlay,
+  stageBottomInsetPx = 0,
   onFocusSearch,
   onHintDismiss,
   onLoadDemo,
@@ -173,6 +176,9 @@ export default function MapStage({
   };
 
   const isPlaying = playbackState === "playing";
+  const [playbackBarInsetPx, setPlaybackBarInsetPx] = useState(0);
+  const effectiveBottomInsetPx = stageBottomInsetPx + playbackBarInsetPx;
+  const routeLabelBottomPx = Math.max(80, effectiveBottomInsetPx + 16);
   const currentSegment = segments[currentSegmentIndex];
   const fromLoc = currentSegment
     ? locations.find((l) => l.id === currentSegment.fromId)
@@ -216,7 +222,10 @@ export default function MapStage({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
             className="absolute left-1/2 z-10 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-full px-4 py-1.5 shadow-lg font-medium text-gray-700"
-            style={{ bottom: `max(80px, ${routeLabelBottomPercent}%)`, fontSize: `${routeLabelSize}px` }}
+            style={{
+              bottom: `max(${routeLabelBottomPx}px, ${routeLabelBottomPercent}%)`,
+              fontSize: `${routeLabelSize}px`,
+            }}
           >
             {fromCity} → {toCity}
           </motion.div>
@@ -236,10 +245,11 @@ export default function MapStage({
         transitionBearing={isTransitioning ? transitionBearing : undefined}
         originCoordinates={visiblePhotoLocation?.coordinates}
         incomingOriginCoordinates={isTransitioning ? incomingLocation?.coordinates : undefined}
+        bottomInsetPx={effectiveBottomInsetPx}
         portalAccentColor={getPortalAccentColor(photoLocationId)}
         incomingPortalAccentColor={isTransitioning ? getPortalAccentColor(incomingPhotoLocationId) : undefined}
       />
-      <TripStatsBar />
+      <TripStatsBar bottomInsetPx={effectiveBottomInsetPx} />
       {showPhotoLayoutEditor && editingLocation && (
         <PhotoLayoutEditor
           location={editingLocation}
@@ -254,6 +264,7 @@ export default function MapStage({
           onSeek={onSeek}
           hintMessage={playHintMessage}
           onHintDismiss={onHintDismiss}
+          onPlayingMobileInsetChange={setPlaybackBarInsetPx}
         />
       )}
     </div>
