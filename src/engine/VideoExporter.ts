@@ -54,6 +54,11 @@ import {
   getPhotoFrameRotation,
   getPhotoFrameStyleConfig,
 } from "@/lib/frameStyles";
+import {
+  computeAlbumPageGrid,
+  getAlbumStyleConfig,
+  splitPhotosAcrossPages,
+} from "@/lib/albumStyles";
 
 export type ExportProgress = {
   phase: "capturing" | "uploading" | "encoding" | "done";
@@ -95,6 +100,61 @@ interface ParsedShadow {
   blur: number;
   color: string;
 }
+
+type ExportAlbumPhase =
+  | "pre-open"
+  | "fly-to-album"
+  | "album-open"
+  | "album-hold"
+  | "album-to-visited";
+
+interface ExportAlbumTiming {
+  groupIndex: number;
+  locationId: string;
+  preOpenStart: number;
+  sequenceStart: number;
+  flyDuration: number;
+  openDuration: number;
+  holdDuration: number;
+  morphDuration: number;
+  sequenceEnd: number;
+  nextFlyStart: number;
+}
+
+interface ExportAlbumState extends ExportAlbumTiming {
+  phase: ExportAlbumPhase;
+  phaseProgress: number;
+}
+
+interface AlbumPinMetrics {
+  width: number;
+  height: number;
+  labelCenterY: number;
+  bookCenterY: number;
+  convergenceY: number;
+}
+
+const EXPORT_ALBUM_PHASE_DURATIONS = {
+  flyToAlbum: 0.4,
+  albumOpen: 0.3,
+  albumHold: 0.5,
+  albumToVisited: 0.4,
+} as const;
+
+const EXPORT_ALBUM_TOTAL_DURATION =
+  EXPORT_ALBUM_PHASE_DURATIONS.flyToAlbum +
+  EXPORT_ALBUM_PHASE_DURATIONS.albumOpen +
+  EXPORT_ALBUM_PHASE_DURATIONS.albumHold +
+  EXPORT_ALBUM_PHASE_DURATIONS.albumToVisited;
+
+const EXPORT_ALBUM_PIN_GEOMETRY = {
+  width: 420,
+  height: 252,
+  labelGap: 8,
+  labelHeight: 18,
+  tailGap: 4,
+  tailHeight: 10,
+} as const;
 
 function getFreeTransformMap(layout?: PhotoLayout): Map<string, FreePhotoTransform> {
   return new Map((layout?.mode === "free" ? layout.freeTransforms : undefined)?.map((transform) => [transform.photoId, transform]) ?? []);
@@ -548,12 +608,155 @@ export class VideoExporter {
     ctx.fillText(label, dotX + dotRadius + dotGap, dotY);
   }
 
+  private getExportAlbumTailDuration(): number {
+    const groups = this.engine.getGroups();
+    const lastGroup = groups[groups.length - 1];
+    if (!lastGroup || lastGroup.toLoc.isWaypoint || lastGroup.toLoc.photos.length === 0) {
+      return 0;
+    }
+    return EXPORT_ALBUM_TOTAL_DURATION;
+  }
+
+  private getAlbumPinMetrics(scale: number): AlbumPinMetrics {
+    const width = EXPORT_ALBUM_PIN_GEOMETRY.width * scale;
+    const height = EXPORT_ALBUM_PIN_GEOMETRY.height * scale;
+    const labelCenterY =
+      -(
+        EXPORT_ALBUM_PIN_GEOMETRY.tailHeight +
+        EXPORT_ALBUM_PIN_GEOMETRY.tailGap +
+        EXPORT_ALBUM_PIN_GEOMETRY.labelHeight / 2
+      ) * scale;
+    const bookCenterY =
+      -(
+        EXPORT_ALBUM_PIN_GEOMETRY.tailHeight +
+        EXPORT_ALBUM_PIN_GEOMETRY.tailGap +
+        EXPORT_ALBUM_PIN_GEOMETRY.labelHeight +
+        EXPORT_ALBUM_PIN_GEOMETRY.labelGap +
+        EXPORT_ALBUM_PIN_GEOMETRY.height / 2
+      ) * scale;
+
+    return {
+      width,
+      height,
+      labelCenterY,
+      bookCenterY,
+      convergenceY: bookCenterY + height * 0.18,
+    };
+  }
+
+  private getAlbumSequenceTiming(
+    groupIndex: number,
+    exportDuration: number,
+  ): ExportAlbumTiming | null {
+    const groups = this.engine.getGroups();
+    const group = groups[groupIndex];
+    if (!group || group.toLoc.isWaypoint || group.toLoc.photos.length === 0) {
+      return null;
+    }
+
+    const timeline = this.engine.getTimeline();
+    const entry = timeline[groupIndex];
+    const arrivePhase = entry?.phases.find((phase) => phase.phase === "ARRIVE");
+    if (!arrivePhase) return null;
+
+    const nextEntry = timeline[groupIndex + 1];
+    const nextFly = nextEntry?.phases.find((phase) => phase.phase === "FLY");
+    const sequenceStart = arrivePhase.startTime + arrivePhase.duration;
+    const nextFlyStart = nextFly?.startTime ?? exportDuration;
+    const availableDuration = Math.max(0, nextFlyStart - sequenceStart);
+    if (availableDuration <= 0) return null;
+
+    const durationScale = Math.min(1, availableDuration / EXPORT_ALBUM_TOTAL_DURATION);
+    const flyDuration = EXPORT_ALBUM_PHASE_DURATIONS.flyToAlbum * durationScale;
+    const openDuration = EXPORT_ALBUM_PHASE_DURATIONS.albumOpen * durationScale;
+    const holdDuration = EXPORT_ALBUM_PHASE_DURATIONS.albumHold * durationScale;
+    const morphDuration = EXPORT_ALBUM_PHASE_DURATIONS.albumToVisited * durationScale;
+
+    return {
+      groupIndex,
+      locationId: group.toLoc.id,
+      preOpenStart: arrivePhase.startTime + arrivePhase.duration * 0.8,
+      sequenceStart,
+      flyDuration,
+      openDuration,
+      holdDuration,
+      morphDuration,
+      sequenceEnd: sequenceStart + flyDuration + openDuration + holdDuration + morphDuration,
+      nextFlyStart,
+    };
+  }
+
+  private getActiveAlbumState(
+    renderTime: number,
+    exportDuration: number,
+  ): ExportAlbumState | null {
+    const groups = this.engine.getGroups();
+
+    for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+      const timing = this.getAlbumSequenceTiming(groupIndex, exportDuration);
+      if (!timing) continue;
+
+      if (renderTime >= timing.preOpenStart && renderTime < timing.sequenceStart) {
+        const preOpenDuration = Math.max(timing.sequenceStart - timing.preOpenStart, 0.0001);
+        return {
+          ...timing,
+          phase: "pre-open",
+          phaseProgress: Math.max(0, Math.min(1, (renderTime - timing.preOpenStart) / preOpenDuration)),
+        };
+      }
+
+      if (renderTime < timing.sequenceStart || renderTime >= timing.sequenceEnd) {
+        continue;
+      }
+
+      let cursor = timing.sequenceStart;
+      if (renderTime < cursor + timing.flyDuration) {
+        return {
+          ...timing,
+          phase: "fly-to-album",
+          phaseProgress: Math.max(0, Math.min(1, (renderTime - cursor) / Math.max(timing.flyDuration, 0.0001))),
+        };
+      }
+      cursor += timing.flyDuration;
+
+      if (renderTime < cursor + timing.openDuration) {
+        return {
+          ...timing,
+          phase: "album-open",
+          phaseProgress: Math.max(0, Math.min(1, (renderTime - cursor) / Math.max(timing.openDuration, 0.0001))),
+        };
+      }
+      cursor += timing.openDuration;
+
+      if (renderTime < cursor + timing.holdDuration) {
+        return {
+          ...timing,
+          phase: "album-hold",
+          phaseProgress: Math.max(0, Math.min(1, (renderTime - cursor) / Math.max(timing.holdDuration, 0.0001))),
+        };
+      }
+      cursor += timing.holdDuration;
+
+      return {
+        ...timing,
+        phase: "album-to-visited",
+        phaseProgress: Math.max(0, Math.min(1, (renderTime - cursor) / Math.max(timing.morphDuration, 0.0001))),
+      };
+    }
+
+    return null;
+  }
+
   /** Update chapter pin tracking state — derived from current time so seek is correct */
-  private updateChapterPinState(progress: AnimationEvent | null): void {
+  private updateChapterPinState(
+    progress: AnimationEvent | null,
+    renderTime: number,
+    exportDuration: number,
+  ): void {
     if (!progress) return;
     const groups = this.engine.getGroups();
     const tl = this.engine.getTimeline();
-    const t = progress.time;
+    const t = renderTime;
 
     this.exportVisitedLocationIds.clear();
     this.exportCurrentArrivalId = null;
@@ -576,12 +779,22 @@ export class VideoExporter {
         }
       }
 
-      // toLoc: arriving during ARRIVE phase, visited after
+      // toLoc: with photos, keep the chapter in an album state until the export-side
+      // book-to-visited morph completes. Without photos, keep the legacy pin card.
       if (!group.toLoc.isWaypoint) {
         const arrive = entry.phases.find((p) => p.phase === "ARRIVE");
         if (arrive) {
           const arriveEnd = arrive.startTime + arrive.duration;
-          if (t >= arrive.startTime && t < arriveEnd) {
+          const albumTiming = this.getAlbumSequenceTiming(i, exportDuration);
+          const hasPhotos = group.toLoc.photos.length > 0;
+
+          if (hasPhotos && albumTiming) {
+            if (t >= albumTiming.preOpenStart && t < albumTiming.sequenceEnd) {
+              this.exportCurrentArrivalId = group.toLoc.id;
+            } else if (t >= albumTiming.sequenceEnd) {
+              this.exportVisitedLocationIds.add(group.toLoc.id);
+            }
+          } else if (t >= arrive.startTime && t < arriveEnd) {
             this.exportCurrentArrivalId = group.toLoc.id;
           } else if (t >= arriveEnd) {
             this.exportVisitedLocationIds.add(group.toLoc.id);
@@ -596,10 +809,13 @@ export class VideoExporter {
     ctx: CanvasRenderingContext2D,
     scaleX: number,
     scaleY: number,
+    renderTime: number,
+    exportDuration: number,
   ): void {
     if (!useUIStore.getState().chapterPinsEnabled) return;
 
     const locations = this.engine.getLocations();
+    const albumState = this.getActiveAlbumState(renderTime, exportDuration);
 
     for (const loc of locations) {
       if (loc.isWaypoint) continue;
@@ -611,7 +827,9 @@ export class VideoExporter {
       const px = point.x * scaleX;
       const py = point.y * scaleY;
 
-      if (isActive) {
+      if (albumState && loc.id === albumState.locationId) {
+        this.drawAlbumChapterPin(ctx, loc, px, py, scaleX, albumState);
+      } else if (isActive) {
         this.drawActiveChapterPin(ctx, loc, px, py, scaleX);
       } else {
         this.drawVisitedChapterPin(ctx, loc, px, py, scaleX);
@@ -767,13 +985,21 @@ export class VideoExporter {
     cx: number,
     cy: number,
     scale: number,
+    options?: {
+      opacity?: number;
+      scaleMultiplier?: number;
+    },
   ): void {
     const title = loc.chapterTitle || loc.name;
     const photoSize = 32 * scale;
     const photoRadius = photoSize / 2;
+    const opacity = options?.opacity ?? 1;
+    const scaleMultiplier = options?.scaleMultiplier ?? 1;
 
     ctx.save();
-    ctx.globalAlpha = 0.5;
+    ctx.translate(cx, cy);
+    ctx.scale(scaleMultiplier, scaleMultiplier);
+    ctx.globalAlpha = 0.5 * opacity;
 
     // Photo circle
     const coverUrl = loc.photos[0]?.url;
@@ -781,7 +1007,7 @@ export class VideoExporter {
 
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx, cy - photoRadius - 4 * scale, photoRadius, 0, Math.PI * 2);
+    ctx.arc(0, -photoRadius - 4 * scale, photoRadius, 0, Math.PI * 2);
     ctx.clip();
     if (preloaded) {
       const img = preloaded.img;
@@ -797,7 +1023,7 @@ export class VideoExporter {
         sh = sw;
         sy = (img.naturalHeight - sh) / 2;
       }
-      ctx.drawImage(img, sx, sy, sw, sh, cx - photoRadius, cy - photoSize - 4 * scale, photoSize, photoSize);
+      ctx.drawImage(img, sx, sy, sw, sh, -photoRadius, -photoSize - 4 * scale, photoSize, photoSize);
     } else {
       ctx.fillStyle = "#e0e7ff";
       ctx.fill();
@@ -806,14 +1032,14 @@ export class VideoExporter {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#000";
-      ctx.fillText(emoji, cx, cy - photoRadius - 4 * scale);
+      ctx.fillText(emoji, 0, -photoRadius - 4 * scale);
     }
     ctx.restore();
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.5 * opacity;
 
     // White border
     ctx.beginPath();
-    ctx.arc(cx, cy - photoRadius - 4 * scale, photoRadius, 0, Math.PI * 2);
+    ctx.arc(0, -photoRadius - 4 * scale, photoRadius, 0, Math.PI * 2);
     ctx.strokeStyle = "white";
     ctx.lineWidth = 2 * scale;
     ctx.stroke();
@@ -823,7 +1049,329 @@ export class VideoExporter {
     ctx.fillStyle = "#374151";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(title, cx, cy + 2 * scale, 80 * scale);
+    ctx.fillText(title, 0, 2 * scale, 80 * scale);
+
+    ctx.restore();
+  }
+
+  private drawAlbumChapterPin(
+    ctx: CanvasRenderingContext2D,
+    loc: {
+      name: string;
+      chapterTitle?: string;
+      chapterEmoji?: string;
+      photos: Photo[];
+    },
+    cx: number,
+    cy: number,
+    scale: number,
+    albumState: ExportAlbumState,
+  ): void {
+    const metrics = this.getAlbumPinMetrics(scale);
+    const title = loc.chapterTitle || loc.name;
+    const titleLabel = loc.chapterEmoji ? `${loc.chapterEmoji} ${title}` : title;
+    const revealScale = albumState.openDuration / EXPORT_ALBUM_PHASE_DURATIONS.albumOpen;
+    const revealCompleteElapsed =
+      albumState.openDuration +
+      loc.photos.length * 0.12 * revealScale +
+      Math.max(0.18 * revealScale, 0.12);
+
+    let pinScale = 1;
+    let pinOpacity = 1;
+    let bookRotation = -3;
+    let bookOffsetY = 0;
+    let photoRevealElapsed = 0;
+    let visitedOpacity = 0;
+    let visitedScaleMultiplier = 1.18;
+
+    switch (albumState.phase) {
+      case "pre-open": {
+        const eased = this.easeOut(albumState.phaseProgress);
+        pinScale = 0.94 + 0.06 * eased;
+        pinOpacity = 0.75 + 0.25 * eased;
+        bookRotation = -1.6 * eased;
+        break;
+      }
+      case "fly-to-album":
+        bookRotation = -2.2;
+        break;
+      case "album-open": {
+        const eased = this.easeOut(albumState.phaseProgress);
+        bookRotation = -3 * eased;
+        photoRevealElapsed = albumState.openDuration * albumState.phaseProgress;
+        break;
+      }
+      case "album-hold":
+        bookRotation = -3;
+        photoRevealElapsed = revealCompleteElapsed;
+        bookOffsetY = -1.5 * Math.sin(albumState.phaseProgress * Math.PI) * scale;
+        break;
+      case "album-to-visited": {
+        const eased = this.easeOut(albumState.phaseProgress);
+        pinScale = 1 - 0.28 * eased;
+        pinOpacity = 1 - 0.3 * eased;
+        bookRotation = -3 * (1 - eased);
+        photoRevealElapsed = revealCompleteElapsed;
+        visitedOpacity = eased;
+        visitedScaleMultiplier = 1.24 - 0.24 * eased;
+        break;
+      }
+    }
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(pinScale, pinScale);
+    ctx.globalAlpha = pinOpacity;
+
+    this.drawAlbumBook(ctx, {
+      x: -metrics.width / 2,
+      y: metrics.bookCenterY - metrics.height / 2 + bookOffsetY,
+      width: metrics.width,
+      height: metrics.height,
+      scale,
+      rotationDeg: bookRotation,
+      photos: loc.photos,
+      photoRevealElapsed,
+      photoRevealScale: revealScale,
+    });
+
+    ctx.font = `500 ${13 * scale}px system-ui, -apple-system, sans-serif`;
+    ctx.fillStyle = "#44403c";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(titleLabel, 0, metrics.labelCenterY, 180 * scale);
+
+    ctx.beginPath();
+    ctx.moveTo(0, -(EXPORT_ALBUM_PIN_GEOMETRY.tailHeight * scale));
+    ctx.lineTo(0, 0);
+    ctx.strokeStyle = "rgba(120, 113, 108, 0.55)";
+    ctx.lineWidth = 1.2 * scale;
+    ctx.stroke();
+
+    ctx.restore();
+
+    if (visitedOpacity > 0) {
+      this.drawVisitedChapterPin(ctx, loc, cx, cy, scale, {
+        opacity: visitedOpacity,
+        scaleMultiplier: visitedScaleMultiplier,
+      });
+    }
+  }
+
+  private drawAlbumBook(
+    ctx: CanvasRenderingContext2D,
+    options: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      scale: number;
+      rotationDeg: number;
+      photos: Photo[];
+      photoRevealElapsed: number;
+      photoRevealScale: number;
+    },
+  ): void {
+    const albumStyle = useUIStore.getState().albumStyle;
+    const albumCaptionsEnabled = useUIStore.getState().albumCaptionsEnabled;
+    const frameStyle = this.settings.photoFrameStyle ?? "polaroid";
+    const config = getAlbumStyleConfig(albumStyle);
+    const shadow = this.parseShadow(config.shadow, {
+      scale: options.scale,
+      relativeTo: options.width,
+      canvasWidth: options.width,
+      canvasHeight: options.height,
+    });
+    const split = splitPhotosAcrossPages(options.photos.length);
+    const leftPhotos = options.photos.slice(0, split.left);
+    const rightPhotos = options.photos.slice(split.left);
+    const pagePadding = config.pagePadding * options.scale;
+    const spineWidth = config.spineWidth * options.scale;
+    const borderRadius = config.borderRadius * options.scale;
+    const borderWidth = config.borderWidth * options.scale;
+    const pageWidth = options.width / 2;
+
+    ctx.save();
+    ctx.translate(options.x + options.width / 2, options.y + options.height / 2);
+    ctx.rotate((options.rotationDeg * Math.PI) / 180);
+    ctx.translate(-options.width / 2, -options.height / 2);
+
+    if (shadow && !shadow.inset) {
+      ctx.save();
+      ctx.shadowColor = shadow.color;
+      ctx.shadowBlur = shadow.blur;
+      ctx.shadowOffsetX = shadow.offsetX;
+      ctx.shadowOffsetY = shadow.offsetY;
+      this.drawRoundedRectPath(ctx, 0, 0, options.width, options.height, borderRadius);
+      ctx.fillStyle = config.pageColor;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    this.drawRoundedRectPath(ctx, 0, 0, options.width, options.height, borderRadius);
+    ctx.fillStyle = config.pageColor;
+    ctx.fill();
+
+    if (borderWidth > 0) {
+      ctx.strokeStyle = config.borderColor;
+      ctx.lineWidth = borderWidth;
+      this.drawRoundedRectPath(ctx, borderWidth / 2, borderWidth / 2, options.width - borderWidth, options.height - borderWidth, Math.max(borderRadius - borderWidth / 2, 0));
+      ctx.stroke();
+    }
+
+    const texture = ctx.createLinearGradient(0, 0, options.width, options.height);
+    texture.addColorStop(0, "rgba(255,255,255,0.16)");
+    texture.addColorStop(0.45, "rgba(255,255,255,0.05)");
+    texture.addColorStop(1, config.noiseBlendColor ? `${config.noiseBlendColor}22` : "rgba(0,0,0,0.04)");
+    this.drawRoundedRectPath(ctx, 0, 0, options.width, options.height, borderRadius);
+    ctx.fillStyle = texture;
+    ctx.fill();
+
+    const leftPageX = 0;
+    const rightPageX = pageWidth;
+
+    const drawPage = (
+      pageX: number,
+      photos: Photo[],
+      startIndex: number,
+      align: "left" | "right",
+    ) => {
+      const innerX = pageX + pagePadding;
+      const innerY = pagePadding;
+      const innerW = pageWidth - pagePadding * 2;
+      const innerH = options.height - pagePadding * 2;
+
+      ctx.save();
+      this.drawRoundedRectPath(ctx, innerX, innerY, innerW, innerH, Math.max(borderRadius - options.scale, 0));
+      ctx.fillStyle = config.pageColor;
+      ctx.fill();
+
+      const pageGradient = ctx.createLinearGradient(innerX, innerY, innerX + innerW, innerY);
+      pageGradient.addColorStop(
+        0,
+        align === "left" ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.1)",
+      );
+      pageGradient.addColorStop(1, align === "left" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.07)");
+      this.drawRoundedRectPath(ctx, innerX, innerY, innerW, innerH, Math.max(borderRadius - options.scale, 0));
+      ctx.fillStyle = pageGradient;
+      ctx.fill();
+
+      if (photos.length === 0) {
+        ctx.strokeStyle = `${config.spineColor}33`;
+        ctx.lineWidth = 2 * options.scale;
+        ctx.beginPath();
+        ctx.moveTo(innerX + innerW * 0.18, innerY + innerH * 0.42);
+        ctx.lineTo(innerX + innerW * 0.82, innerY + innerH * 0.42);
+        ctx.moveTo(innerX + innerW * 0.28, innerY + innerH * 0.58);
+        ctx.lineTo(innerX + innerW * 0.72, innerY + innerH * 0.58);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      const grid = computeAlbumPageGrid(photos.length);
+      const gap = config.gridGap * options.scale;
+      const cellWidth = (innerW - gap * Math.max(grid.cols - 1, 0)) / Math.max(grid.cols, 1);
+      const cellHeight = (innerH - gap * Math.max(grid.rows - 1, 0)) / Math.max(grid.rows, 1);
+
+      photos.forEach((photo, index) => {
+        const cell = grid.cells[index];
+        if (!cell) return;
+
+        const delay = startIndex * 0.12 * options.photoRevealScale + index * 0.12 * options.photoRevealScale;
+        const fadeDuration = Math.max(0.18 * options.photoRevealScale, 0.12);
+        const revealProgress = Math.max(
+          0,
+          Math.min(1, (options.photoRevealElapsed - delay) / fadeDuration),
+        );
+        if (revealProgress <= 0) return;
+
+        const easedReveal = this.easeOut(revealProgress);
+        const cellX = innerX + (cell.col - 1) * (cellWidth + gap);
+        const cellY = innerY + (cell.row - 1) * (cellHeight + gap);
+        const cellW = cellWidth * cell.colSpan + gap * (cell.colSpan - 1);
+        const cellH = cellHeight * cell.rowSpan + gap * (cell.rowSpan - 1);
+        const preloaded = this.photoImages.get(photo.url);
+
+        ctx.save();
+        ctx.globalAlpha *= easedReveal;
+        ctx.translate(cellX + cellW / 2, cellY + cellH / 2);
+        ctx.scale(0.96 + 0.04 * easedReveal, 0.96 + 0.04 * easedReveal);
+
+        if (preloaded) {
+          this.drawResolvedPhotoFrame(ctx, {
+            photo,
+            photoIndex: startIndex + index,
+            preloaded,
+            photoStyle: "classic",
+            frameStyle,
+            frameW: cellW,
+            frameH: cellH,
+            borderRadiusPx: 4,
+            caption: {
+              text: albumCaptionsEnabled ? photo.caption ?? "" : "",
+              fontFamily: "system-ui",
+              fontSizePx: Math.max(10 * options.scale, Math.min(cellW, cellH) * 0.08),
+              color: "#ffffff",
+              bgColor: DEFAULT_CAPTION_BG_COLOR,
+              offsetX: 0,
+              offsetY: 0,
+              rotation: 0,
+            },
+            scaleX: options.scale,
+            canvasWidth: options.width,
+            canvasHeight: options.height,
+            isFreeMode: false,
+            kenBurnsProgress: null,
+            focalPoint: photo.focalPoint ?? { x: 0.5, y: 0.5 },
+          });
+        } else {
+          this.drawRoundedRect(ctx, -cellW / 2, -cellH / 2, cellW, cellH, 6 * options.scale, "rgba(0,0,0,0.08)");
+        }
+
+        ctx.restore();
+      });
+
+      ctx.restore();
+    };
+
+    drawPage(leftPageX, leftPhotos, 0, "left");
+    drawPage(rightPageX, rightPhotos, split.left, "right");
+
+    if (config.spineSpiral) {
+      const spiralX = pageWidth - spineWidth / 2;
+      ctx.strokeStyle = config.spineColor;
+      ctx.lineWidth = 2 * options.scale;
+      for (let loop = 0; loop < 14; loop += 1) {
+        const y = 14 * options.scale + loop * 16 * options.scale;
+        ctx.beginPath();
+        ctx.arc(spiralX, y, 4.5 * options.scale, Math.PI * 0.5, Math.PI * 1.5);
+        ctx.stroke();
+      }
+    } else {
+      this.drawRoundedRect(ctx, pageWidth - spineWidth / 2, 4 * options.scale, spineWidth, options.height - 8 * options.scale, spineWidth / 2, config.spineColor);
+      if (config.spineStitched) {
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.lineWidth = 1.5 * options.scale;
+        ctx.setLineDash([4 * options.scale, 4 * options.scale]);
+        ctx.beginPath();
+        ctx.moveTo(pageWidth, 12 * options.scale);
+        ctx.lineTo(pageWidth, options.height - 12 * options.scale);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (config.spineGoldAccent) {
+        this.drawRoundedRect(
+          ctx,
+          pageWidth - 0.5 * options.scale,
+          12 * options.scale,
+          1.5 * options.scale,
+          options.height - 24 * options.scale,
+          1 * options.scale,
+          "#c9a84c",
+        );
+      }
+    }
 
     ctx.restore();
   }
@@ -1428,27 +1976,47 @@ export class VideoExporter {
     captured: { progress: AnimationEvent | null },
     frameIndex: number,
     fps: number,
+    renderTime: number,
+    exportDuration: number,
   ): void {
     const progress = captured.progress;
     if (!progress) return;
+    const albumState = this.getActiveAlbumState(renderTime, exportDuration);
 
     // During scene transitions, draw the outgoing photo set with transition opacity
     const isInSceneTransition = progress.sceneTransitionProgress !== undefined
       && progress.outgoingGroupIndex !== undefined;
 
     if (!isInSceneTransition) {
-      // Normal (non-transition) path: only draw during ARRIVE with showPhotos
-      if (!progress.showPhotos) return;
-      if (progress.phase !== "ARRIVE") return;
+      const isAlbumFlyPhase = albumState?.phase === "fly-to-album";
+      const isInitialHover = progress.groupIndex === 0 && progress.phase === "HOVER";
+      if (!progress.showPhotos && !isAlbumFlyPhase) return;
+      if (progress.phase !== "ARRIVE" && !isAlbumFlyPhase && !isInitialHover) return;
     }
 
     const groups = this.engine.getGroups();
-    // During scene transition, draw the outgoing group's photos
-    const groupIndex = isInSceneTransition ? progress.outgoingGroupIndex! : progress.groupIndex;
+    const groupIndex = isInSceneTransition
+      ? progress.outgoingGroupIndex!
+      : progress.phase === "ARRIVE" || progress.groupIndex === 0
+        ? progress.groupIndex
+        : progress.groupIndex - 1;
     const group = groups[groupIndex];
     if (!group) return;
 
-    const photoLoc = group.toLoc;
+    const photoLoc =
+      !isInSceneTransition && progress.groupIndex === 0 && progress.phase === "HOVER"
+        ? group.fromLoc
+        : group.toLoc;
+    const isAlbumFlySequence = albumState?.phase === "fly-to-album" && albumState.groupIndex === groupIndex;
+    if (
+      albumState &&
+      albumState.groupIndex === groupIndex &&
+      albumState.phase !== "pre-open" &&
+      !isAlbumFlySequence &&
+      !isInSceneTransition
+    ) {
+      return;
+    }
 
     const photos: Photo[] = photoLoc.photos;
     if (photos.length === 0) return;
@@ -1521,7 +2089,7 @@ export class VideoExporter {
     } = resolvePhotoAnimations(layout, this.settings.photoAnimation ?? "scale");
     const photoStyle: PhotoStyle = resolvePhotoStyle(layout, this.settings.photoStyle ?? "classic");
 
-    if (photoStyle === "portal") {
+    if (photoStyle === "portal" && !isAlbumFlySequence) {
       let transitionOutgoingAlpha = 1;
       let transitionOutgoingBlur = 0;
       let outgoingClip: { direction: string; position: number } | null = null;
@@ -1711,12 +2279,19 @@ export class VideoExporter {
       );
     })();
 
-    // Use the photo source group index for tracking (prev group during fade-out)
-    const photoGroupIdx = isInSceneTransition
-      ? groupIndex
-      : progress.phase === "ARRIVE"
-        ? progress.groupIndex
-        : progress.groupIndex - 1; // HOVER/ZOOM_OUT = fading out prev group's photos
+    const albumConvergence = isAlbumFlySequence
+      ? (() => {
+          const projected = this.map.project(photoLoc.coordinates as [number, number]);
+          const metrics = this.getAlbumPinMetrics(scaleX);
+          return {
+            x: projected.x * scaleX,
+            y: projected.y * scaleY + metrics.convergenceY,
+          };
+        })()
+      : null;
+    const hasAlbumSequence = this.getAlbumSequenceTiming(groupIndex, exportDuration) !== null;
+
+    const photoGroupIdx = groupIndex;
 
     // Track when photos first appeared for this group
     if (!this.photoShowStartFrame.has(photoGroupIdx)) {
@@ -1731,10 +2306,15 @@ export class VideoExporter {
     // Exit: derive from photoOpacity (1 = fully visible, 0 = fully gone)
     // During scene transitions, transition opacity is the sole driver — no per-photo exit animation.
     let exitProgress = 0;
-    if (isInSceneTransition) {
+    if (isAlbumFlySequence) {
+      exitProgress = 0;
+    } else if (isInSceneTransition) {
       // Scene transition handles fading via transitionOutgoingAlpha — no exit animation
       exitProgress = 0;
     } else if (progress.phase === "ARRIVE" && progress.progress > 0) {
+      if (hasAlbumSequence) {
+        exitProgress = 0;
+      } else {
       // Compute phase progress within ARRIVE
       // Use photoOpacity if it's already fading, otherwise compute from timeline
       const opacity = progress.photoOpacity ?? 1;
@@ -1755,12 +2335,13 @@ export class VideoExporter {
           }
         }
       }
+      }
     } else if (progress.phase !== "ARRIVE") {
       exitProgress = 1 - (progress.photoOpacity ?? 1);
     }
 
     // Bloom tether lines: drawn before photos so they appear behind
-    if (photoStyle === "bloom" && bloomOriginCanvas && exitProgress <= 0) {
+    if (photoStyle === "bloom" && bloomOriginCanvas && exitProgress <= 0 && !isAlbumFlySequence) {
       const bloomEnterProgress = Math.min(1, bloomElapsed / BLOOM_ENTER_DURATION_SEC);
       // Tether lines visible only when photos are settled (progress >= 1)
       const tetherAlpha = bloomEnterProgress >= 1 ? 0.3 * transitionOutgoingAlpha : 0;
@@ -1824,7 +2405,23 @@ export class VideoExporter {
       // --- Compute animation transform for this photo ---
       let animTransform: { opacity: number; scaleX: number; scaleY: number; translateX: number; translateY: number; rotate: number; blur: number };
 
-      if (photoStyle === "bloom" && bloomOriginCanvas) {
+      if (isAlbumFlySequence && albumConvergence) {
+        const stagger = count > 1 ? (i / Math.max(count - 1, 1)) * 0.18 : 0;
+        const localProgress = Math.max(
+          0,
+          Math.min(1, (albumState.phaseProgress - stagger) / Math.max(1 - stagger, 0.0001)),
+        );
+        const eased = this.easeOut(localProgress);
+        animTransform = {
+          opacity: 1 - 0.92 * eased,
+          scaleX: 1 - 0.85 * eased,
+          scaleY: 1 - 0.85 * eased,
+          translateX: ((albumConvergence.x - centerX) / scaleX) * eased,
+          translateY: ((albumConvergence.y - centerY) / scaleX) * eased,
+          rotate: (i % 2 === 0 ? -8 : 8) * eased,
+          blur: 2 * eased,
+        };
+      } else if (photoStyle === "bloom" && bloomOriginCanvas) {
         // Bloom: use geo-anchored transform
         const targetPx = { x: rx, y: ry, w: frameW, h: frameH };
         if (exitProgress > 0) {
@@ -2816,7 +3413,8 @@ export class VideoExporter {
     this.tripStatsBarAge = 0;
     const { signal } = this.abortController;
 
-    const totalDuration = this.engine.getTotalDuration();
+    const engineDuration = this.engine.getTotalDuration();
+    const totalDuration = engineDuration + this.getExportAlbumTailDuration();
     const totalFrames = Math.ceil(totalDuration * fps);
     const canvas = this.map.getCanvas();
     const useWebCodecs = isWebCodecsSupported();
@@ -2859,7 +3457,7 @@ export class VideoExporter {
         try {
           return await this.exportWithWebCodecs(
             offscreen, offCtx, canvas, scaleX, scaleY,
-            targetW, targetH, totalFrames, totalDuration, fps, onProgress, captured
+            targetW, targetH, totalFrames, totalDuration, engineDuration, fps, onProgress, captured
           );
         } catch (webCodecsError) {
           console.warn("WebCodecs export failed, falling back:", webCodecsError);
@@ -2871,7 +3469,7 @@ export class VideoExporter {
             try {
               return await this.exportWithMediaRecorder(
                 offscreen, offCtx, canvas, scaleX, scaleY,
-                totalFrames, totalDuration, fps, onProgress, captured
+                totalFrames, totalDuration, engineDuration, fps, onProgress, captured
               );
             } catch (mrError) {
               console.warn("MediaRecorder export failed, falling back to server:", mrError);
@@ -2882,14 +3480,14 @@ export class VideoExporter {
           }
           return await this.exportWithServer(
             offscreen, offCtx, canvas, scaleX, scaleY,
-            totalFrames, totalDuration, fps, signal, onProgress, captured
+            totalFrames, totalDuration, engineDuration, fps, signal, onProgress, captured
           );
         }
       } else if (useMediaRecorder) {
         try {
           return await this.exportWithMediaRecorder(
             offscreen, offCtx, canvas, scaleX, scaleY,
-            totalFrames, totalDuration, fps, onProgress, captured
+            totalFrames, totalDuration, engineDuration, fps, onProgress, captured
           );
         } catch (mrError) {
           console.warn("MediaRecorder export failed, falling back to server:", mrError);
@@ -2898,13 +3496,13 @@ export class VideoExporter {
           this.hideAllSegments();
           return await this.exportWithServer(
             offscreen, offCtx, canvas, scaleX, scaleY,
-            totalFrames, totalDuration, fps, signal, onProgress, captured
+            totalFrames, totalDuration, engineDuration, fps, signal, onProgress, captured
           );
         }
       } else {
         return await this.exportWithServer(
           offscreen, offCtx, canvas, scaleX, scaleY,
-          totalFrames, totalDuration, fps, signal, onProgress, captured
+          totalFrames, totalDuration, engineDuration, fps, signal, onProgress, captured
         );
       }
     } finally {
@@ -2931,15 +3529,16 @@ export class VideoExporter {
     captured: { routeDraw: AnimationEvent | null; progress: AnimationEvent | null },
     frameIndex: number,
     fps: number,
-    totalDuration: number
+    totalDuration: number,
+    engineDuration: number,
   ): Promise<void> {
     const time = frameIndex / fps;
-    const progress = time / totalDuration;
+    const engineProgress = engineDuration > 0 ? Math.min(time / engineDuration, 1) : 1;
 
     captured.routeDraw = null;
     captured.progress = null;
 
-    this.engine.seekTo(Math.min(progress, 1));
+    this.engine.seekTo(engineProgress);
     this.applyRouteDrawFromCapture(captured);
 
     // Update breadcrumb tracking and Mapbox source BEFORE waiting for map idle
@@ -2965,11 +3564,11 @@ export class VideoExporter {
     );
     this.drawRouteLabel(offCtx, offscreen.width, offscreen.height, scaleX, captured, this.settings.routeLabelSize ?? 14);
     // Chapter pins: update tracking and draw BEFORE photos (pins behind photos, matching preview z-order)
-    this.updateChapterPinState(captured.progress);
-    this.drawChapterPins(offCtx, scaleX, scaleY);
+    this.updateChapterPinState(captured.progress, time, totalDuration);
+    this.drawChapterPins(offCtx, scaleX, scaleY, time, totalDuration);
 
     this.drawTripStats(offCtx, offscreen.width, offscreen.height, scaleX, captured);
-    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
+    this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps, time, totalDuration);
     this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
 
     // Clear photo start tracking when photos stop showing so re-entry is tracked fresh
@@ -2989,6 +3588,7 @@ export class VideoExporter {
     targetH: number,
     totalFrames: number,
     totalDuration: number,
+    engineDuration: number,
     fps: number,
     onProgress: ProgressCallback,
     captured: { routeDraw: AnimationEvent | null; progress: AnimationEvent | null }
@@ -3002,7 +3602,7 @@ export class VideoExporter {
     for (let i = 0; i < totalFrames; i++) {
       if (this.cancelled) return null;
 
-      await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
+      await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration, engineDuration);
       webCodecsExporter.addFrame(offscreen, i);
 
       onProgress({
@@ -3029,6 +3629,7 @@ export class VideoExporter {
     scaleY: number,
     totalFrames: number,
     totalDuration: number,
+    engineDuration: number,
     fps: number,
     onProgress: ProgressCallback,
     captured: { routeDraw: AnimationEvent | null; progress: AnimationEvent | null }
@@ -3048,7 +3649,7 @@ export class VideoExporter {
           return null;
         }
 
-        await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
+        await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration, engineDuration);
         await mrExporter.captureFrame();
 
         onProgress({
@@ -3082,6 +3683,7 @@ export class VideoExporter {
     scaleY: number,
     totalFrames: number,
     totalDuration: number,
+    engineDuration: number,
     fps: number,
     signal: AbortSignal,
     onProgress: ProgressCallback,
@@ -3099,7 +3701,7 @@ export class VideoExporter {
     for (let i = 0; i < totalFrames; i++) {
       if (this.cancelled) return null;
 
-      await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration);
+      await this.captureFrame(offCtx, offscreen, canvas, scaleX, scaleY, captured, i, fps, totalDuration, engineDuration);
 
       const blob = await new Promise<Blob>((resolve, reject) => {
         offscreen.toBlob(
