@@ -313,7 +313,7 @@ export default function PhotoOverlay({
     if (viewportRatio === "free") {
       // Use dvh on mobile to account for browser chrome + playback bar;
       // on desktop % is fine since the map container matches the visible area.
-      return { width: "95%", height: "min(88%, calc(100dvh - 120px))" };
+      return { width: "95%", height: "min(88%, calc(100dvh - 200px))" };
     }
     return { width: "95%", height: "88%" };
   }, [viewportRatio, containerMode, usesPortalLayout]);
