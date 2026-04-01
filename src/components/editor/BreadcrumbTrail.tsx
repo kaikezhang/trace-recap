@@ -178,9 +178,12 @@ export default function BreadcrumbTrail() {
   const breadcrumbs = useAnimationStore((s) => s.breadcrumbs);
   const playbackState = useAnimationStore((s) => s.playbackState);
   const breadcrumbsEnabled = useUIStore((s) => s.breadcrumbsEnabled);
+  const chapterPinsEnabled = useUIStore((s) => s.chapterPinsEnabled);
   const addedImagesRef = useRef<Set<string>>(new Set());
   const prevLengthRef = useRef(0);
   const animFrameRef = useRef<number | null>(null);
+  const isPlaybackActive = playbackState === "playing" || playbackState === "paused";
+  const suppressBreadcrumbPins = chapterPinsEnabled && isPlaybackActive;
 
   // Initialize source and layer
   useEffect(() => {
@@ -261,9 +264,13 @@ export default function BreadcrumbTrail() {
       }
     }
 
-    if (!breadcrumbsEnabled || breadcrumbs.length === 0) {
+    if (!breadcrumbsEnabled || suppressBreadcrumbPins || breadcrumbs.length === 0) {
+      if (animFrameRef.current !== null) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
       source.setData({ type: "FeatureCollection", features: [] });
-      prevLengthRef.current = 0;
+      prevLengthRef.current = breadcrumbs.length;
       return;
     }
 
@@ -320,7 +327,7 @@ export default function BreadcrumbTrail() {
     };
 
     loadAndUpdate();
-  }, [map, breadcrumbs, breadcrumbsEnabled, playbackState]);
+  }, [map, breadcrumbs, breadcrumbsEnabled, playbackState, suppressBreadcrumbPins]);
 
   // No DOM rendering — breadcrumbs are Mapbox layers
   return null;
