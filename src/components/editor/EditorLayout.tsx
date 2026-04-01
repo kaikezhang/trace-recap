@@ -652,41 +652,20 @@ function EditorContent() {
         setCurrentArrivalLocationId(newArrival);
       }
 
-      // Album state machine driven by animation phases:
-      // collecting (open with photos) → closed (cover, 200ms) → visited
-      // Only trigger close when there's NO active fly-to-album animation.
+      // Album state machine: collecting → visited (skip closed to avoid race)
+      // When ZOOM_OUT or FLY starts, clear collecting. The chapter pin tracking
+      // block above already marks the location as visited, so the pin will
+      // naturally transition via AnimatePresence.
       {
         const currentCollecting = useAnimationStore.getState().albumCollectingLocationId;
-        const currentClosed = useAnimationStore.getState().albumClosedLocationId;
         const hasActiveSequence = activeAlbumSequenceLocationIdRef.current !== null;
 
-        // ZOOM_OUT means we've moved past the departure HOVER — safe to close
-        if (e.phase === "ZOOM_OUT" && currentCollecting !== null && !hasActiveSequence) {
+        if (
+          (e.phase === "ZOOM_OUT" || e.phase === "FLY") &&
+          currentCollecting !== null &&
+          !hasActiveSequence
+        ) {
           setAlbumCollectingLocationId(null);
-          setAlbumClosedLocationId(currentCollecting);
-          // Show closed album for 200ms then transition to visited
-          clearAlbumSequenceTimers();
-          albumVisitedTimerRef.current = setTimeout(() => {
-            if (useAnimationStore.getState().playbackState !== "playing") {
-              pendingAlbumCloseLocationIdRef.current = currentCollecting;
-              albumVisitedTimerRef.current = null;
-              return;
-            }
-            if (useAnimationStore.getState().albumClosedLocationId === currentCollecting) {
-              setAlbumClosedLocationId(null);
-            }
-            albumVisitedTimerRef.current = null;
-          }, 200);
-        }
-
-        // Safety: FLY phase force-clears any lingering album state
-        if (e.phase === "FLY") {
-          if (currentCollecting !== null && !hasActiveSequence) {
-            setAlbumCollectingLocationId(null);
-          }
-          if (currentClosed !== null) {
-            setAlbumClosedLocationId(null);
-          }
         }
       }
 

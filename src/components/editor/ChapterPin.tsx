@@ -227,43 +227,26 @@ function OpenAlbum({
 }
 
 /**
- * Closed Album — book snapping shut with cover photo visible.
- * Brief appearance (200ms) before morphing to visited pin.
+ * Closed Album — clean book cover, no photo. Brief hold before visited.
  */
 function ClosedAlbum({ location }: { location: Location }) {
-  const coverPhoto = location.photos[0]?.url;
-
   return (
     <div className="relative flex flex-col items-center gap-2">
-      {/* Same size as OpenAlbum (252×180) — book closing effect */}
       <motion.div
         layout
-        className="relative h-[180px] w-[252px] overflow-hidden rounded-[28px] border-2 border-white/80 bg-stone-100 shadow-[0_24px_48px_rgba(15,23,42,0.25)]"
+        className="relative h-[180px] w-[252px] overflow-hidden rounded-[28px] border-2 border-white/80 bg-gradient-to-br from-stone-100 via-white to-stone-200 shadow-[0_24px_48px_rgba(15,23,42,0.25)]"
         initial={{ scaleX: 0.1, scaleY: 1.05, rotate: -4, opacity: 0.8 }}
         animate={{ scaleX: 1, scaleY: 1, rotate: -2, opacity: 1 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       >
-        {coverPhoto ? (
-          <img
-            src={coverPhoto}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-stone-200 via-stone-50 to-stone-300 text-4xl">
-            {location.chapterEmoji || "📍"}
-          </div>
-        )}
-        {/* Spine shadow */}
-        <div className="absolute inset-y-0 left-0 w-[14px] bg-gradient-to-r from-stone-900/30 to-transparent" />
+        {/* Spine */}
+        <div className="absolute inset-y-[8px] left-1/2 w-[10px] -translate-x-1/2 rounded-full bg-gradient-to-b from-stone-300 via-stone-200 to-stone-400 opacity-80" />
+        {/* Centered emoji */}
+        <div className="absolute inset-0 flex items-center justify-center text-4xl opacity-50">
+          {location.chapterEmoji || "📍"}
+        </div>
         {/* Inner ring */}
         <div className="absolute inset-0 rounded-[28px] ring-1 ring-inset ring-white/50" />
-        {/* Emoji badge */}
-        {location.chapterEmoji && (
-          <div className="absolute bottom-3 right-3 rounded-full bg-black/50 px-2 py-1 text-base leading-none text-white shadow-sm">
-            {location.chapterEmoji}
-          </div>
-        )}
       </motion.div>
       <PinLabel
         emoji={location.chapterEmoji}
