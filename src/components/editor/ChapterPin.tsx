@@ -28,6 +28,14 @@ const VISITED_TRANSITION = {
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
+const ALBUM_EXIT_TRANSITION = {
+  duration: 0.18,
+  ease: [0.4, 0, 1, 1] as const,
+};
+
+const VISITED_ENTER_SCALE = 1.42;
+const VISITED_FINAL_SCALE = 0.72;
+
 const OPEN_ALBUM_GEOMETRY = {
   bodyHeight: 180,
   labelGap: 8,
@@ -312,57 +320,53 @@ export default function ChapterPin({
         zIndex: isVisited ? 5 : 15,
       }}
     >
-      <motion.div
-        layout
-        initial={{ scale: 0.85, opacity: 0 }}
-        animate={{
-          scale: isVisited ? 0.72 : 1,
-          opacity: isVisited ? 0.5 : 1,
-          y: isVisited ? 8 : 0,
-        }}
-        transition={isVisited ? VISITED_TRANSITION : SPRING_TRANSITION}
-      >
-        <AnimatePresence mode="sync" initial={false}>
-          {/* Group album states under one key so open→collecting→closed
-              morphs smoothly without exit/enter bounce animations.
-              Only album→visited triggers the full exit/enter. */}
-          {isVisited ? (
-            <motion.div
-              key="visited"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="flex flex-col items-center"
-            >
-              <VisitedPin location={location} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="album"
-              initial={{ opacity: 0, scale: 0.94, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.5 }}
-              transition={SPRING_TRANSITION}
-              className="flex flex-col items-center"
-            >
-              {state === "album-closed" ? (
-                <>
-                  <ClosedAlbum location={location} />
-                  <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
-                </>
-              ) : (
-                <>
-                  <OpenAlbum
-                    location={location}
-                    collecting={state === "album-collecting"}
-                  />
-                  <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
-                </>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+      <AnimatePresence mode="wait" initial={false}>
+        {/* Group album states under one key so open→collecting→closed
+            morphs smoothly without exit/enter bounce animations.
+            The visited state gets its own single enter animation after
+            the album fully fades away. */}
+        {isVisited ? (
+          <motion.div
+            key="visited"
+            initial={{ opacity: 0, scale: VISITED_ENTER_SCALE, y: 0 }}
+            animate={{
+              opacity: 0.5,
+              scale: VISITED_FINAL_SCALE,
+              y: 8,
+            }}
+            transition={VISITED_TRANSITION}
+            style={{ originX: 0.5, originY: 1 }}
+            className="flex flex-col items-center"
+          >
+            <VisitedPin location={location} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="album"
+            initial={{ opacity: 0, scale: 0.94, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, transition: ALBUM_EXIT_TRANSITION }}
+            transition={SPRING_TRANSITION}
+            style={{ originX: 0.5, originY: 1 }}
+            className="flex flex-col items-center"
+          >
+            {state === "album-closed" ? (
+              <>
+                <ClosedAlbum location={location} />
+                <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
+              </>
+            ) : (
+              <>
+                <OpenAlbum
+                  location={location}
+                  collecting={state === "album-collecting"}
+                />
+                <div className="mt-1.5 h-2.5 w-px bg-stone-400/55" />
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
