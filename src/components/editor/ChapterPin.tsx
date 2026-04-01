@@ -126,11 +126,10 @@ export default function ChapterPin({
   state,
   registerRef,
 }: ChapterPinProps) {
+  const albumStyle = useUIStore((store) => store.albumStyle);
   if (state === "future") return null;
 
   const isVisited = state === "visited";
-  const albumStyle = useUIStore((store) => store.albumStyle);
-
   const refCallback = useCallback(
     (el: HTMLDivElement | null) => {
       registerRef(location.id, el);

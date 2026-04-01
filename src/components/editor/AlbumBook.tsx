@@ -189,6 +189,7 @@ export default function AlbumBook({
   return (
     <motion.div
       layout
+      initial={{ scale: 0.9, opacity: 0.8 }}
       className="relative"
       animate={
         collecting

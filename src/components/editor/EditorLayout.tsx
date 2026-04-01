@@ -215,6 +215,7 @@ function EditorContent() {
       pendingAlbumCloseLocationIdRef.current = null;
       setShowPhotoOverlay(false);
       setVisiblePhotoLocationId(null);
+      clearAlbumSequenceTimers();
       albumVisitedTimerRef.current = setTimeout(() => {
         completedAlbumLocationIdsRef.current.add(locationId);
         activeAlbumSequenceLocationIdRef.current = null;
@@ -236,7 +237,7 @@ function EditorContent() {
         albumVisitedTimerRef.current = null;
       }, ALBUM_VISITED_HOLD_MS);
     },
-    [setAlbumCollectingLocationId, setShowPhotoOverlay],
+    [clearAlbumSequenceTimers, setAlbumCollectingLocationId, setShowPhotoOverlay],
   );
 
   const startAlbumSequence = useCallback(
