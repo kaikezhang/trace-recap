@@ -49,15 +49,8 @@ function AnimatedNumber({ value, decimals = 0 }: { value: number; decimals?: num
   return <>{decimals > 0 ? display.toFixed(decimals) : Math.round(display)}</>;
 }
 
-function formatDistance(km: number): string {
-  if (km >= 1000) {
-    return `${(km / 1000).toFixed(1)}k`;
-  }
-  return String(Math.round(km));
-}
-
-function Separator() {
-  return <div className="h-3.5 w-px bg-white/20" />;
+function Separator({ compact }: { compact?: boolean }) {
+  return <div className={compact ? "h-2.5 w-px bg-white/20" : "h-3.5 w-px bg-white/20"} />;
 }
 
 interface TripStatsBarProps {
@@ -80,13 +73,28 @@ export default function TripStatsBar({
   const prevModesRef = useRef<string[]>([]);
   const flyProgressRef = useRef(0);
 
+  // Detect if parent container is short (e.g. 16:9 on portrait phone)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isCompact, setIsCompact] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current?.parentElement;
+    if (!el) return;
+
+    const update = () => {
+      setIsCompact(el.clientHeight < 300);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // Subscribe to animation store changes for fly progress
   useEffect(() => {
-    // We track routeDrawFraction via the animation store's currentTime changes
-    // Since there's no direct routeDrawFraction in the store, we estimate from phase progress
     const unsub = useAnimationStore.subscribe((state) => {
       if (state.currentPhase === "FLY") {
-        // Estimate fly progress from timeline
         const timeline = state.timeline;
         const segTiming = timeline[state.currentSegmentIndex];
         if (segTiming) {
@@ -155,49 +163,62 @@ export default function TripStatsBar({
   if (!tripStatsEnabled) return null;
 
   const isActive = playbackState === "playing" || playbackState === "paused";
+
+  // Original positioning logic — only override when bottomInsetPx is provided
   const containerStyle =
     bottomInsetPx > 0
-      ? { bottom: `${Math.max(56, bottomInsetPx + 12)}px` }
+      ? { bottom: `${Math.max(isCompact ? 32 : 56, bottomInsetPx + (isCompact ? 6 : 12))}px` }
       : undefined;
+
+  const textClass = isCompact ? "text-[10px]" : "text-[13px]";
+  const emojiClass = isCompact ? "text-[10px]" : "text-[13px]";
+  const barHeight = isCompact ? "28px" : "36px";
+  const barPx = isCompact ? "px-2.5" : "px-4";
+  const barPy = isCompact ? "py-1" : "py-1.5";
+  const gapClass = isCompact ? "gap-1.5" : "gap-2.5";
 
   return (
     <AnimatePresence>
       {isActive && stats && (
         <motion.div
+          ref={containerRef}
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 16 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="absolute bottom-14 left-1/2 z-10 -translate-x-1/2 md:bottom-16"
+          className={`absolute left-1/2 z-10 -translate-x-1/2 ${isCompact ? "bottom-8" : "bottom-14 md:bottom-16"}`}
           style={containerStyle}
         >
-          <div className="flex items-center gap-2.5 rounded-t-lg bg-black/50 px-4 py-1.5 backdrop-blur-sm"
-            style={{ height: "36px" }}
+          <div
+            className={`flex items-center ${gapClass} rounded-t-lg bg-black/50 ${barPx} ${barPy} backdrop-blur-sm`}
+            style={{ height: barHeight }}
           >
             {/* Cities */}
-            <div className="flex items-center gap-1 text-[13px] text-white tabular-nums">
-              <span>📍</span>
+            <div className={`flex items-center gap-1 ${textClass} text-white tabular-nums`}>
+              <span className={emojiClass}>📍</span>
               <span>
                 <AnimatedNumber value={stats.citiesVisited} />
-                /{stats.totalCities} cities
+                /{stats.totalCities}
+                {!isCompact && " cities"}
               </span>
             </div>
 
-            <Separator />
+            <Separator compact={isCompact} />
 
             {/* Photos */}
-            <div className="flex items-center gap-1 text-[13px] text-white tabular-nums">
-              <span>📸</span>
+            <div className={`flex items-center gap-1 ${textClass} text-white tabular-nums`}>
+              <span className={emojiClass}>📸</span>
               <span>
-                <AnimatedNumber value={stats.photosShown} /> photos
+                <AnimatedNumber value={stats.photosShown} />
+                {!isCompact && " photos"}
               </span>
             </div>
 
-            <Separator />
+            <Separator compact={isCompact} />
 
             {/* Distance */}
-            <div className="flex items-center gap-1 text-[13px] text-white tabular-nums">
-              <span>🛣️</span>
+            <div className={`flex items-center gap-1 ${textClass} text-white tabular-nums`}>
+              <span className={emojiClass}>🛣️</span>
               <span>
                 {stats.totalDistanceKm >= 1000 ? (
                   <>
@@ -214,7 +235,7 @@ export default function TripStatsBar({
             {/* Transport modes */}
             {visibleModes.length > 0 && (
               <>
-                <Separator />
+                <Separator compact={isCompact} />
                 <div className="flex items-center gap-0.5">
                   <AnimatePresence mode="popLayout">
                     {visibleModes.map((mode) => (
@@ -224,7 +245,7 @@ export default function TripStatsBar({
                         animate={{ opacity: 1, scale: 1, width: "auto" }}
                         exit={{ opacity: 0, scale: 0, width: 0 }}
                         transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                        className="text-[13px]"
+                        className={emojiClass}
                       >
                         {TRANSPORT_MODE_EMOJI[mode] ?? mode}
                       </motion.span>
