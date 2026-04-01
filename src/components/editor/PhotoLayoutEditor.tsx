@@ -46,10 +46,13 @@ import {
   ChevronDown,
   Maximize2,
   Minimize2,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useHistoryStore } from "@/stores/historyStore";
 import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS, resolvePhotoStyle } from "@/lib/photoAnimation";
 import { SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
 import { computeAutoLayout, computeTemplateLayout, computedRectsToFreeTransforms, type PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
@@ -694,6 +697,10 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const removePhoto = useProjectStore((s) => s.removePhoto);
   const segments = useProjectStore((s) => s.segments);
   const segmentColors = useProjectStore((s) => s.segmentColors);
+  const undo = useHistoryStore((s) => s.undo);
+  const redo = useHistoryStore((s) => s.redo);
+  const canUndo = useHistoryStore((s) => s.canUndo);
+  const canRedo = useHistoryStore((s) => s.canRedo);
   const { map } = useMap();
   const layout = location.photoLayout ?? { mode: "auto" as const };
 
@@ -1025,6 +1032,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     (style: LayoutStyle) => {
       const config = LAYOUT_STYLES.find((s) => s.id === style);
       if (!config) return;
+      useHistoryStore.getState().pushState();
       if (style === "free") {
         updateLayout({ mode: "free", freeTransforms: effectiveFreeTransforms });
         return;
@@ -1048,6 +1056,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const refreshRandomLayout = useCallback(() => {
     if (!isRandomLayoutActive) return;
+    useHistoryStore.getState().pushState();
     updateLayout({ layoutSeed: Math.random() });
   }, [isRandomLayoutActive, updateLayout]);
 
@@ -1075,6 +1084,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const handleEnterAnimationSelect = useCallback(
     (animation: PhotoAnimationOption) => {
+      useHistoryStore.getState().pushState();
       updateLayout({ enterAnimation: animation === "default" ? undefined : animation });
       replayEnterPreview();
     },
@@ -1083,6 +1093,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const handlePhotoStyleSelect = useCallback(
     (style: PhotoStyle) => {
+      useHistoryStore.getState().pushState();
       updateLayout({ photoStyle: style });
       replayEnterPreview();
     },
@@ -1091,6 +1102,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const handlePhotoFrameStyleSelect = useCallback(
     (style: PhotoFrameStyle) => {
+      useHistoryStore.getState().pushState();
       setPhotoFrameStyle(style);
       replayEnterPreview();
     },
@@ -1099,6 +1111,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const handleExitAnimationSelect = useCallback(
     (animation: PhotoAnimationOption) => {
+      useHistoryStore.getState().pushState();
       updateLayout({ exitAnimation: animation === "default" ? undefined : animation });
       replayExitPreview();
     },
@@ -1107,6 +1120,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   const handleSceneTransitionSelect = useCallback(
     (transition: SceneTransitionOption) => {
+      useHistoryStore.getState().pushState();
       updateLayout({ sceneTransition: transition === "default" ? undefined : transition });
     },
     [updateLayout]
@@ -1159,6 +1173,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
         return;
       }
 
+      useHistoryStore.getState().pushState();
       updateLayout({ order: arrayMove(orderedPhotoIds, oldIndex, newIndex) });
     },
     [orderedPhotoIds, updateLayout]
@@ -1292,9 +1307,27 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                 {location.photos.length} photo{location.photos.length !== 1 ? "s" : ""}
               </p>
             </div>
-            <button onClick={onClose} aria-label="Close photo layout editor" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <X className="h-5 w-5 text-gray-500" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={undo}
+                disabled={!canUndo}
+                aria-label="Undo"
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
+              >
+                <Undo2 className="h-4 w-4 text-gray-500" />
+              </button>
+              <button
+                onClick={redo}
+                disabled={!canRedo}
+                aria-label="Redo"
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
+              >
+                <Redo2 className="h-4 w-4 text-gray-500" />
+              </button>
+              <button onClick={onClose} aria-label="Close photo layout editor" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
           </div>
 
           {/* Preview area — takes up remaining space above controls */}
@@ -1439,6 +1472,22 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
               </div>
               <div className="flex items-center gap-1">
                 <button
+                  onClick={undo}
+                  disabled={!canUndo}
+                  aria-label="Undo"
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
+                >
+                  <Undo2 className="h-4 w-4 text-gray-500" />
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={!canRedo}
+                  aria-label="Redo"
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
+                >
+                  <Redo2 className="h-4 w-4 text-gray-500" />
+                </button>
+                <button
                   onClick={() => setExpanded(true)}
                   aria-label="Expand editor"
                   className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -1514,14 +1563,34 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             {/* CENTER — Live preview with map background */}
             <div ref={desktopPreviewRef} className={`relative flex-1 bg-gray-100 flex items-center justify-center ${expanded ? "p-2" : "p-6"}`}>
               {expanded ? (
-                <button
-                  type="button"
-                  onClick={() => setExpanded(false)}
-                  aria-label="Minimize editor"
-                  className="absolute right-4 top-4 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/70 text-gray-700 shadow-lg backdrop-blur-sm transition hover:bg-white/85"
-                >
-                  <Minimize2 className="h-5 w-5" />
-                </button>
+                <div className="absolute right-4 top-4 z-40 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={undo}
+                    disabled={!canUndo}
+                    aria-label="Undo"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/70 text-gray-700 shadow-lg backdrop-blur-sm transition hover:bg-white/85 disabled:opacity-30"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={redo}
+                    disabled={!canRedo}
+                    aria-label="Redo"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/70 text-gray-700 shadow-lg backdrop-blur-sm transition hover:bg-white/85 disabled:opacity-30"
+                  >
+                    <Redo2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(false)}
+                    aria-label="Minimize editor"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-white/70 text-gray-700 shadow-lg backdrop-blur-sm transition hover:bg-white/85"
+                  >
+                    <Minimize2 className="h-5 w-5" />
+                  </button>
+                </div>
               ) : null}
               <PreviewWithMapBackground mapSnapshot={mapSnapshot} previewContainerStyle={previewContainerStyle}>
                 {layoutPreviewNode}

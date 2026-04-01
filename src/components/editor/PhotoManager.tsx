@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { Upload, X, LayoutGrid } from "lucide-react";
+import { Upload, X, LayoutGrid, Undo2, Redo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { compressImage } from "@/lib/imageUtils";
 import { useProjectStore } from "@/stores/projectStore";
+import { useHistoryStore } from "@/stores/historyStore";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -80,6 +81,10 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
   const addPhoto = useProjectStore((s) => s.addPhoto);
   const removePhoto = useProjectStore((s) => s.removePhoto);
   const setPhotoCaption = useProjectStore((s) => s.setPhotoCaption);
+  const undo = useHistoryStore((s) => s.undo);
+  const redo = useHistoryStore((s) => s.redo);
+  const canUndo = useHistoryStore((s) => s.canUndo);
+  const canRedo = useHistoryStore((s) => s.canRedo);
 
   if (!location) return null;
 
@@ -161,17 +166,41 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
         </button>
       )}
 
-      {/* Layout button */}
-      {hasPhotos && onEditLayout && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={() => onEditLayout(locationId)}
-        >
-          <LayoutGrid className="h-3 w-3" />
-          Layout
-        </Button>
+      {/* Layout + Undo/Redo buttons */}
+      {hasPhotos && (
+        <div className="flex items-center gap-1">
+          {onEditLayout && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => onEditLayout(locationId)}
+            >
+              <LayoutGrid className="h-3 w-3" />
+              Layout
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={undo}
+            disabled={!canUndo}
+            aria-label="Undo"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={redo}
+            disabled={!canRedo}
+            aria-label="Redo"
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import {
   DEFAULT_CAPTION_BG_COLOR,
   DEFAULT_CAPTION_FONT_FAMILY,
 } from "@/lib/constants";
+import { useHistoryStore } from "@/stores/historyStore";
 import type { FreePhotoTransform, Photo } from "@/types";
 
 const CAPTION_COLOR_PRESETS = [
@@ -624,6 +625,9 @@ export default function FreeCanvas({
         return;
       }
 
+      // Snapshot state before drag starts so undo reverts the whole gesture
+      useHistoryStore.getState().pushState();
+
       const targetAlreadySelected = isSelectionTargetSelected(selection, target);
       const shouldNarrowSelectionOnClick =
         targetAlreadySelected && getSelectionItemCount(selection) > 1;
@@ -647,6 +651,9 @@ export default function FreeCanvas({
     const transform = transformsRef.current.find((item) => item.photoId === photoId);
     if (!transform || containerSize.w <= 0 || containerSize.h <= 0) return;
 
+    // Snapshot state before rotation starts
+    useHistoryStore.getState().pushState();
+
     const centerX = (transform.x + transform.width / 2) * containerSize.w;
     const centerY = (transform.y + transform.height / 2) * containerSize.h;
     const startAngle = (Math.atan2(clientY - centerY, clientX - centerX) * 180) / Math.PI + 90;
@@ -668,6 +675,9 @@ export default function FreeCanvas({
   const beginResize = useCallback((photoId: string, handle: ResizeHandle, clientX: number, clientY: number, containerEl: HTMLElement | null) => {
     const transform = transformsRef.current.find((item) => item.photoId === photoId);
     if (!transform || containerSize.w <= 0 || containerSize.h <= 0) return;
+
+    // Snapshot state before resize starts
+    useHistoryStore.getState().pushState();
 
     const rect = containerEl?.getBoundingClientRect();
     const containerOffsetX = rect?.left ?? 0;
@@ -1010,6 +1020,7 @@ export default function FreeCanvas({
   }, [editingCaptionId]);
 
   const commitCaptionText = useCallback((photoId: string, text: string) => {
+    useHistoryStore.getState().pushState();
     updateTransforms((current) =>
       current.map((transform) => {
         if (transform.photoId !== photoId) {
@@ -1030,6 +1041,7 @@ export default function FreeCanvas({
 
   const applyCaptionStyle = useCallback(
     (photoIds: string[], updates: Partial<NonNullable<FreePhotoTransform["caption"]>>) => {
+      useHistoryStore.getState().pushState();
       const selectedIds = new Set(photoIds);
       updateTransforms((current) =>
         current.map((transform) => {
