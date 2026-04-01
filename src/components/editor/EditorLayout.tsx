@@ -112,6 +112,7 @@ function EditorContent() {
   const prevPhotoLocationIdRef = useRef<string | null>(null);
   const prevPhaseRef = useRef<string | null>(null);
   const activeAlbumSequenceLocationIdRef = useRef<string | null>(null);
+  const completedAlbumLocationIdsRef = useRef<Set<string>>(new Set());
   const pendingAlbumCloseLocationIdRef = useRef<string | null>(null);
   const albumVisitedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -200,6 +201,7 @@ function EditorContent() {
     clearAlbumSequenceTimers();
     activeAlbumSequenceLocationIdRef.current = null;
     pendingAlbumCloseLocationIdRef.current = null;
+    completedAlbumLocationIdsRef.current.clear();
     setAlbumCollectingLocationId(null);
     setAlbumClosedLocationId(null);
   }, [
@@ -221,11 +223,13 @@ function EditorContent() {
       setShowPhotoOverlay(false);
       setVisiblePhotoLocationId(null);
       activeAlbumSequenceLocationIdRef.current = null;
+      // Mark this location as having completed its album sequence
+      // so shouldStartAlbumSequence won't re-trigger it.
+      completedAlbumLocationIdsRef.current.add(locationId);
 
       // Keep albumCollectingLocationId set — the pin stays in "collecting"
-      // state (open album with photos visible) until the next HOVER phase
-      // triggers the close animation. The progress callback handles the
-      // collecting → closed → visited transition.
+      // state (open album with photos visible) until ZOOM_OUT triggers
+      // the close animation.
     },
     [
       clearAlbumSequenceTimers,
@@ -534,8 +538,7 @@ function EditorContent() {
         previousPhotoLocationId !== null &&
         (previousPhotoLocation?.photos.length ?? 0) > 0 &&
         activeAlbumSequenceLocationIdRef.current !== previousPhotoLocationId &&
-        useAnimationStore.getState().albumCollectingLocationId !== previousPhotoLocationId &&
-        useAnimationStore.getState().albumClosedLocationId !== previousPhotoLocationId;
+        !completedAlbumLocationIdsRef.current.has(previousPhotoLocationId);
 
       setCurrentTime(e.time);
       setCurrentSegmentIndex(e.segmentIndex);
