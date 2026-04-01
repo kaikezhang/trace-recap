@@ -65,8 +65,14 @@ export class WebCodecsExporter {
       },
     });
 
+    // Pick AVC level based on coded pixel area:
+    // Level 5.0 (0x32): max 5,652,480 px — covers up to 1920×1080 and 2560×1440
+    // Level 5.1 (0x33): max 9,437,184 px — covers 4K (3840×2160, 2880×2160, etc.)
+    const codedArea = width * height;
+    const avcLevel = codedArea > 5_652_480 ? "33" : "32";
+
     this.encoder.configure({
-      codec: "avc1.640032",  // H.264 High Profile Level 5.0 — supports up to 4096x2304
+      codec: `avc1.6400${avcLevel}`,
       width,
       height,
       bitrate,
