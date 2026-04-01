@@ -93,6 +93,7 @@ export interface ExportSettings {
   routeLabelBottomPercent?: number; // Route label bottom position % (default 15)
   photoAnimation?: PhotoAnimation;
   photoStyle?: PhotoStyle;
+  photoFrameStyle?: PhotoFrameStyle;
 }
 
 export type LayoutTemplate =
