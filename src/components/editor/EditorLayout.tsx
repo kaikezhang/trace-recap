@@ -560,6 +560,15 @@ function EditorContent() {
       if (e.showPhotos && e.phase === "ARRIVE") {
         setShowPhotoOverlay(true);
         setPhotoOverlayOpacity(1);
+      } else if (e.showPhotos && e.phase === "HOVER" && e.groupIndex === 0) {
+        // First city: show photos during HOVER
+        const firstLoc = locations[0];
+        if (firstLoc && firstLoc.photos.length > 0) {
+          setShowPhotoOverlay(true);
+          setPhotoOverlayOpacity(1);
+          setVisiblePhotos(firstLoc.photos);
+          setVisiblePhotoLocationId(firstLoc.id);
+        }
       } else if (shouldStartAlbumSequence) {
         startAlbumSequenceRef.current(previousPhotoLocationId);
       } else if (

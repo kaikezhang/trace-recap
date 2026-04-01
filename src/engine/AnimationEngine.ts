@@ -460,10 +460,12 @@ export class AnimationEngine {
     let showPhotos = false;
     let photoOpacity = 0;
 
-    if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
+    // First city: show photos during HOVER phase of group 0
+    if (groupIndex === 0 && phase === "HOVER" && group.fromLoc.photos.length > 0) {
       showPhotos = true;
-      // Keep full opacity during ARRIVE — exit animation handled by PhotoOverlay on unmount
-      // For export: last 30% fades out via photoOpacity (export reads this directly)
+      photoOpacity = 1;
+    } else if (phase === "ARRIVE" && group.toLoc.photos.length > 0) {
+      showPhotos = true;
       photoOpacity = 1;
     } else if (groupIndex > 0) {
       const prevGroup = this.groups[groupIndex - 1];

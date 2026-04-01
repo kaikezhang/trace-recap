@@ -150,12 +150,13 @@ export default function ChapterPinsOverlay() {
     for (const location of locationsRef.current) {
       if (location.isWaypoint) continue;
 
+      const hasPhotos = location.photos && location.photos.length > 0;
       let state: ChapterPinState = "future";
-      if (location.id === collectingRef.current) {
+      if (location.id === collectingRef.current && hasPhotos) {
         state = "album-collecting";
-      } else if (location.id === closedRef.current) {
+      } else if (location.id === closedRef.current && hasPhotos) {
         state = "album-closed";
-      } else if (location.id === arrivalRef.current) {
+      } else if (location.id === arrivalRef.current && hasPhotos) {
         state = "album-open";
       } else if (visitedRef.current.includes(location.id)) {
         state = "visited";
