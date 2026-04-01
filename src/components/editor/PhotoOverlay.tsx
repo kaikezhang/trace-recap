@@ -14,6 +14,7 @@ import {
   computeBloomFanLayout,
 } from "@/lib/photoAnimation";
 import { DEFAULT_CAPTION_BG_COLOR } from "@/lib/constants";
+import { frameStyleUsesInlineCaption } from "@/lib/frameStyles";
 import type { PhotoMeta as LayoutPhotoMeta, PhotoRect } from "@/lib/photoLayout";
 import type { FreePhotoTransform, Photo, PhotoLayout, PhotoAnimation, SceneTransition } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -21,6 +22,7 @@ import { computeDissolveOpacity, computeBlurDissolve, computeWipeProgress } from
 import { computePortalPhaseProgress } from "@/lib/portalLayout";
 import { useAnimationStore } from "@/stores/animationStore";
 import PortalPhotoLayer, { useProjectedOrigin, type PortalPhoto } from "./PortalPhotoLayer";
+import PhotoFrame from "./PhotoFrame";
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -317,6 +319,7 @@ export default function PhotoOverlay({
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const photoAnimation = useUIStore((s) => s.photoAnimation);
   const globalPhotoStyle = useUIStore((s) => s.photoStyle);
+  const photoFrameStyle = useUIStore((s) => s.photoFrameStyle);
   const currentTime = useAnimationStore((s) => s.currentTime);
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
   const timeline = useAnimationStore((s) => s.timeline);
@@ -703,8 +706,8 @@ export default function PhotoOverlay({
             const freeTransform = displayFreeTransformMap.get(photo.id);
             const captionDisplay = getCaptionDisplay(photo, freeTransform, captionFontFamily, captionFontSizePx, captionScale);
             const hasCaption = Boolean(captionDisplay.text);
+            const frameHandlesCaption = !displayIsFreeMode && frameStyleUsesInlineCaption(photoFrameStyle);
             const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
-            const isPolaroid = !displayIsFreeMode && displayLayout?.template === "polaroid";
 
             const rotation = rect.rotation != null
               ? rect.rotation
@@ -740,53 +743,50 @@ export default function PhotoOverlay({
                 <Fragment key={photo.id}>
                   <div
                     key={photo.id}
-                    className="absolute overflow-hidden drop-shadow-xl"
+                    className="absolute"
                     style={{
                       left: `${rect.x * 100}%`,
                       top: `${rect.y * 100}%`,
                       width: `${rect.width * 100}%`,
                       height: `${rect.height * 100}%`,
-                      borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
-                      display: "flex",
-                      flexDirection: "column" as const,
                       opacity: bt.opacity,
                       transform: `translate(${bt.translateX}px, ${bt.translateY}px) scale(${bt.scale}) rotate(${rotation}deg)`,
                       transition: exitProgress > 0 ? "transform 0.05s linear, opacity 0.05s linear" : undefined,
                       willChange: "transform, opacity",
-                      ...(isPolaroid ? {
-                        background: "white",
-                        padding: "4% 4% 10% 4%",
-                        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-                      } : {}),
                     }}
                   >
-                    <div
-                      className="w-full overflow-hidden"
-                      style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
+                    <PhotoFrame
+                      frameStyle={photoFrameStyle}
+                      photoIndex={index}
+                      caption={!displayIsFreeMode ? captionDisplay.text : undefined}
+                      className="h-full w-full"
+                      mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
+                      footer={
+                        !displayIsFreeMode && hasCaption && !frameHandlesCaption ? (
+                          <p
+                            className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
+                            style={{
+                              minHeight: `${captionH}px`,
+                              fontSize: `${captionFontSizePx}px`,
+                              fontFamily: captionFontFamily,
+                              flexShrink: 0,
+                              backgroundColor: DEFAULT_CAPTION_BG_COLOR,
+                              color: "#ffffff",
+                              textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                            }}
+                          >
+                            {photo.caption}
+                          </p>
+                        ) : undefined
+                      }
                     >
                       <img
                         src={photo.url}
                         alt={photo.caption || ""}
-                        className="w-full h-full object-contain"
+                        className="h-full w-full object-contain"
                         style={{ objectPosition: `${fp.x * 100}% ${fp.y * 100}%` }}
                       />
-                    </div>
-                    {!displayIsFreeMode && hasCaption && (
-                      <p
-                        className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
-                        style={{
-                          minHeight: `${captionH}px`,
-                          fontSize: `${captionFontSizePx}px`,
-                          fontFamily: captionFontFamily,
-                          flexShrink: 0,
-                          backgroundColor: DEFAULT_CAPTION_BG_COLOR,
-                          color: "#ffffff",
-                          textShadow: "0 1px 3px rgba(0,0,0,0.35)",
-                        }}
-                      >
-                        {photo.caption}
-                      </p>
-                    )}
+                    </PhotoFrame>
                   </div>
                   {displayIsFreeMode && hasCaption && (
                     <div
@@ -881,33 +881,46 @@ export default function PhotoOverlay({
                       ? () => handleFlyToAlbumComplete(photoLocationId)
                       : undefined
                   }
-                  className="absolute overflow-hidden drop-shadow-xl"
+                  className="absolute"
                   style={{
                     left: `${rect.x * 100}%`,
                     top: `${rect.y * 100}%`,
                     width: `${rect.width * 100}%`,
                     height: `${rect.height * 100}%`,
-                    borderRadius: isPolaroid ? "4px" : `${borderRadiusPx}px`,
                     rotate: rotation,
-                    display: "flex",
-                    flexDirection: "column" as const,
                     zIndex: freeTransform?.zIndex ?? index,
-                    ...(isPolaroid ? {
-                      background: "white",
-                      padding: "4% 4% 10% 4%",
-                      boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-                    } : {}),
                   }}
                 >
-                  <div
-                    className="w-full overflow-hidden"
-                    style={{ flex: 1, minHeight: 0, borderRadius: `${borderRadiusPx}px` }}
+                  <PhotoFrame
+                    frameStyle={photoFrameStyle}
+                    photoIndex={index}
+                    caption={!displayIsFreeMode ? captionDisplay.text : undefined}
+                    className="h-full w-full"
+                    mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
+                    footer={
+                      !displayIsFreeMode && hasCaption && !frameHandlesCaption ? (
+                        <p
+                          className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
+                          style={{
+                            minHeight: `${captionH}px`,
+                            fontSize: `${captionFontSizePx}px`,
+                            fontFamily: captionFontFamily,
+                            flexShrink: 0,
+                            backgroundColor: DEFAULT_CAPTION_BG_COLOR,
+                            color: "#ffffff",
+                            textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                          }}
+                        >
+                          {photo.caption}
+                        </p>
+                      ) : undefined
+                    }
                   >
                     {isKenBurns && kbStart && kbEnd ? (
                       <motion.img
                         src={photo.url}
                         alt={photo.caption || ""}
-                        className="w-full h-full object-cover"
+                        className="h-full w-full object-cover"
                         initial={{
                           scale: kbStart.scale,
                           x: `${kbStart.translateX}%`,
@@ -932,29 +945,13 @@ export default function PhotoOverlay({
                       <img
                         src={photo.url}
                         alt={photo.caption || ""}
-                        className="w-full h-full object-contain"
+                        className="h-full w-full object-contain"
                         style={{
                           objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
                         }}
                       />
                     )}
-                  </div>
-                  {!displayIsFreeMode && hasCaption && (
-                    <p
-                      className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
-                      style={{
-                        minHeight: `${captionH}px`,
-                        fontSize: `${captionFontSizePx}px`,
-                        fontFamily: captionFontFamily,
-                        flexShrink: 0,
-                        backgroundColor: DEFAULT_CAPTION_BG_COLOR,
-                        color: "#ffffff",
-                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
-                      }}
-                    >
-                      {photo.caption}
-                    </p>
-                  )}
+                  </PhotoFrame>
                 </motion.div>
                 {displayIsFreeMode && hasCaption && (
                   <div
@@ -1016,8 +1013,8 @@ export default function PhotoOverlay({
               const freeTransform = incomingFreeTransformMap.get(photo.id);
               const captionDisplay = getCaptionDisplay(photo, freeTransform, incomingCaptionFontFamily, incomingCaptionFontSizePx, captionScale);
               const hasCaption = Boolean(captionDisplay.text);
+              const frameHandlesCaption = !incomingIsFreeMode && frameStyleUsesInlineCaption(photoFrameStyle);
               const fp = photo.focalPoint ?? { x: 0.5, y: 0.5 };
-              const isPolaroid = !incomingIsFreeMode && incomingPhotoLayout?.template === "polaroid";
 
               const rotation = rect.rotation != null
                 ? rect.rotation
@@ -1041,33 +1038,46 @@ export default function PhotoOverlay({
                     initial={enter.initial}
                     animate={{ ...enter.animate, rotate: rotation }}
                     transition={enter.transition}
-                    className="absolute overflow-hidden drop-shadow-xl"
+                    className="absolute"
                     style={{
                       left: `${rect.x * 100}%`,
                       top: `${rect.y * 100}%`,
                       width: `${rect.width * 100}%`,
                       height: `${rect.height * 100}%`,
-                      borderRadius: isPolaroid ? "4px" : `${incomingBorderRadiusPx}px`,
                       rotate: rotation,
-                      display: "flex",
-                      flexDirection: "column" as const,
                       zIndex: freeTransform?.zIndex ?? index,
-                      ...(isPolaroid ? {
-                        background: "white",
-                        padding: "4% 4% 10% 4%",
-                        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-                      } : {}),
                     }}
                   >
-                    <div
-                      className="w-full overflow-hidden"
-                      style={{ flex: 1, minHeight: 0, borderRadius: `${incomingBorderRadiusPx}px` }}
+                    <PhotoFrame
+                      frameStyle={photoFrameStyle}
+                      photoIndex={index}
+                      caption={!incomingIsFreeMode ? captionDisplay.text : undefined}
+                      className="h-full w-full"
+                      mediaStyle={{ borderRadius: `${incomingBorderRadiusPx}px` }}
+                      footer={
+                        !incomingIsFreeMode && hasCaption && !frameHandlesCaption ? (
+                          <p
+                            className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
+                            style={{
+                              minHeight: `${incomingCaptionH}px`,
+                              fontSize: `${incomingCaptionFontSizePx}px`,
+                              fontFamily: incomingCaptionFontFamily,
+                              flexShrink: 0,
+                              backgroundColor: DEFAULT_CAPTION_BG_COLOR,
+                              color: "#ffffff",
+                              textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                            }}
+                          >
+                            {photo.caption}
+                          </p>
+                        ) : undefined
+                      }
                     >
                       {isKenBurns && kbStart && kbEnd ? (
                         <motion.img
                           src={photo.url}
                           alt={photo.caption || ""}
-                          className="w-full h-full object-cover"
+                          className="h-full w-full object-cover"
                           initial={{
                             scale: kbStart.scale,
                             x: `${kbStart.translateX}%`,
@@ -1092,29 +1102,13 @@ export default function PhotoOverlay({
                         <img
                           src={photo.url}
                           alt={photo.caption || ""}
-                          className="w-full h-full object-contain"
+                          className="h-full w-full object-contain"
                           style={{
                             objectPosition: `${fp.x * 100}% ${fp.y * 100}%`,
                           }}
                         />
                       )}
-                    </div>
-                    {!incomingIsFreeMode && hasCaption && (
-                      <p
-                        className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
-                        style={{
-                          minHeight: `${incomingCaptionH}px`,
-                          fontSize: `${incomingCaptionFontSizePx}px`,
-                          fontFamily: incomingCaptionFontFamily,
-                          flexShrink: 0,
-                          backgroundColor: DEFAULT_CAPTION_BG_COLOR,
-                          color: "#ffffff",
-                          textShadow: "0 1px 3px rgba(0,0,0,0.35)",
-                        }}
-                      >
-                        {photo.caption}
-                      </p>
-                    )}
+                    </PhotoFrame>
                   </motion.div>
                   {incomingIsFreeMode && hasCaption && (
                     <div

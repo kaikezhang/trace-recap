@@ -9,7 +9,9 @@ import {
   splitPhotosAcrossPages,
   type AlbumStyleConfig,
 } from "@/lib/albumStyles";
+import { useUIStore } from "@/stores/uiStore";
 import PaperTexture from "./PaperTexture";
+import PhotoFrame from "./PhotoFrame";
 
 interface AlbumBookProps {
   albumStyle: AlbumStyle;
@@ -89,6 +91,7 @@ function PhotoGrid({
   config: AlbumStyleConfig;
 }) {
   const grid = useMemo(() => computeAlbumPageGrid(photos.length), [photos.length]);
+  const photoFrameStyle = useUIStore((state) => state.photoFrameStyle);
 
   if (photos.length === 0) {
     return (
@@ -132,21 +135,28 @@ function PhotoGrid({
             }}
           >
             {showPhotos ? (
-              <motion.img
-                src={photo.url}
-                alt=""
-                className="h-full w-full object-cover"
-                style={{
-                  objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%`,
-                }}
-                initial={{ opacity: 0, scale: 1.1 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{
-                  duration: 0.4,
-                  delay: index * 0.12,
-                  ease: [0.4, 0, 0.2, 1],
-                }}
-              />
+              <PhotoFrame
+                frameStyle={photoFrameStyle}
+                photoIndex={index}
+                caption={photo.caption}
+                className="h-full w-full"
+              >
+                <motion.img
+                  src={photo.url}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  style={{
+                    objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%`,
+                  }}
+                  initial={{ opacity: 0, scale: 1.1 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{
+                    duration: 0.4,
+                    delay: index * 0.12,
+                    ease: [0.4, 0, 0.2, 1],
+                  }}
+                />
+              </PhotoFrame>
             ) : null}
           </div>
         );

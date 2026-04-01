@@ -43,6 +43,7 @@ import {
   Film,
   Aperture,
   Type,
+  ChevronDown,
   Maximize2,
   Minimize2,
 } from "lucide-react";
@@ -50,13 +51,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS, resolvePhotoStyle } from "@/lib/photoAnimation";
-import { resolveSceneTransition, SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
+import { SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
 import { computeAutoLayout, computeTemplateLayout, computedRectsToFreeTransforms, type PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import { CAPTION_FONT_OPTIONS, DEFAULT_CAPTION_FONT_FAMILY } from "@/lib/constants";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
 import FreeCanvas, { type FreeCanvasInitialGesture } from "./FreeCanvas";
-import type { FreePhotoTransform, Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoStyle, SceneTransition } from "@/types";
+import type { FreePhotoTransform, Location, LayoutTemplate as LayoutTemplateType, PhotoLayout, Photo, PhotoAnimation, PhotoFrameStyle, PhotoStyle, SceneTransition } from "@/types";
 
 interface PhotoLayoutEditorProps {
   location: Location;
@@ -78,6 +79,7 @@ type LayoutStyle =
   | "free";
 type SortablePhotoListOrientation = "horizontal" | "vertical";
 type PhotoAnimationOption = PhotoAnimation | "default";
+type SceneTransitionOption = SceneTransition | "default";
 
 const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; template: LayoutTemplateType | "auto" }[] = [
   { id: "grid", label: "Grid", icon: LayoutGrid, template: "grid" },
@@ -111,6 +113,14 @@ const PHOTO_STYLE_OPTIONS: { value: PhotoStyle; label: string; icon: typeof Came
   { value: "kenburns", label: "Ken Burns", icon: ScanEye },
   { value: "bloom", label: "Bloom", icon: Flower2 },
   { value: "portal", label: "Portal", icon: Aperture },
+];
+
+const PHOTO_FRAME_STYLE_OPTIONS: { value: PhotoFrameStyle; label: string; icon: typeof Camera }[] = [
+  { value: "polaroid", label: "Polaroid", icon: Square },
+  { value: "borderless", label: "Borderless", icon: ImageIcon },
+  { value: "film-strip", label: "Film Strip", icon: Film },
+  { value: "classic-border", label: "Classic Border", icon: Camera },
+  { value: "rounded-card", label: "Rounded Card", icon: Layers },
 ];
 
 function getOrderedPhotos(photos: Photo[], order: string[]): Photo[] {
@@ -396,13 +406,290 @@ function AnimationSelectorSection({
   );
 }
 
+function SettingsGroup({
+  title,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group overflow-hidden rounded-2xl border border-gray-200 bg-gray-50/70"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-gray-900 [&::-webkit-details-marker]:hidden">
+        <span>{title}</span>
+        <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-gray-200 bg-white px-4 py-4">
+        {children}
+      </div>
+    </details>
+  );
+}
+
+function LayoutStyleSelectorSection({
+  variant,
+  activeStyle,
+  isRandomLayoutActive,
+  onSelect,
+  onRefresh,
+}: {
+  variant: "mobile" | "desktop";
+  activeStyle: LayoutStyle;
+  isRandomLayoutActive: boolean;
+  onSelect: (style: LayoutStyle) => void;
+  onRefresh: () => void;
+}) {
+  const isMobile = variant === "mobile";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+          Template
+        </p>
+        {isRandomLayoutActive ? (
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:border-gray-300 hover:text-gray-700"
+            aria-label="Refresh random layout"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+
+      {isMobile ? (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onSelect(id)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-colors ${
+                activeStyle === id
+                  ? "bg-indigo-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onSelect(id)}
+              className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                activeStyle === id
+                  ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                  : "border-transparent text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhotoStyleSelectorSection({
+  selectedStyle,
+  onSelect,
+}: {
+  selectedStyle: PhotoStyle;
+  onSelect: (style: PhotoStyle) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+        Photo Style
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {PHOTO_STYLE_OPTIONS.map(({ value, label, icon: Icon }) => {
+          const isActive = selectedStyle === value;
+
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onSelect(value)}
+              aria-pressed={isActive}
+              className={`flex items-center gap-1.5 h-10 rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                isActive
+                  ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FrameStyleSelectorSection({
+  selectedStyle,
+  onSelect,
+}: {
+  selectedStyle: PhotoFrameStyle;
+  onSelect: (style: PhotoFrameStyle) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+        Frame Style
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {PHOTO_FRAME_STYLE_OPTIONS.map(({ value, label, icon: Icon }) => {
+          const isActive = selectedStyle === value;
+
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onSelect(value)}
+              aria-pressed={isActive}
+              className={`flex items-center gap-1.5 h-10 rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                isActive
+                  ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CaptionStyleSection({
+  captionFontFamily,
+  captionFontSize,
+  onFontChange,
+  onSizeChange,
+}: {
+  captionFontFamily: string;
+  captionFontSize: number;
+  onFontChange: (fontFamily: string) => void;
+  onSizeChange: (fontSize: number) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Type className="h-3.5 w-3.5 text-gray-400" />
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+          Caption Style
+        </p>
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <label className="w-14 shrink-0 text-xs text-gray-500">Font</label>
+          <select
+            className="h-7 flex-1 rounded-md border border-gray-200 bg-white px-2 text-xs focus:border-indigo-400 focus:outline-none"
+            style={{ fontFamily: captionFontFamily }}
+            value={captionFontFamily}
+            onChange={(e) => onFontChange(e.target.value)}
+          >
+            {CAPTION_FONT_OPTIONS.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+                style={{ fontFamily: option.value }}
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="w-14 shrink-0 text-xs text-gray-500">Size</label>
+          <input
+            type="range"
+            min={10}
+            max={24}
+            step={1}
+            value={captionFontSize}
+            onChange={(e) => onSizeChange(Number(e.target.value))}
+            className="h-1 flex-1 accent-indigo-500"
+          />
+          <span className="w-8 text-right text-[10px] text-gray-400">{captionFontSize}px</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SceneTransitionSection({
+  selectedTransition,
+  options,
+  onSelect,
+  keyPrefix,
+}: {
+  selectedTransition: SceneTransitionOption;
+  options: ReadonlyArray<{ value: SceneTransitionOption; label: string }>;
+  onSelect: (transition: SceneTransitionOption) => void;
+  keyPrefix: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Film className="h-3.5 w-3.5 text-gray-400" />
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
+          Scene Transition
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {options.map(({ value, label }) => {
+          const isActive = selectedTransition === value;
+
+          return (
+            <button
+              key={`${keyPrefix}-${value}`}
+              type="button"
+              onClick={() => onSelect(value)}
+              aria-pressed={isActive}
+              className={`h-10 min-w-[64px] rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
+                isActive
+                  ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEditorProps) {
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const defaultPhotoAnimation = useUIStore((s) => s.photoAnimation);
   const defaultPhotoStyle = useUIStore((s) => s.photoStyle);
+  const photoFrameStyle = useUIStore((s) => s.photoFrameStyle);
   const globalSceneTransition = useUIStore((s) => s.sceneTransition);
   const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
-  const setGlobalSceneTransition = useUIStore((s) => s.setSceneTransition);
+  const setPhotoFrameStyle = useUIStore((s) => s.setPhotoFrameStyle);
   const setPhotoLayout = useProjectStore((s) => s.setPhotoLayout);
   const removePhoto = useProjectStore((s) => s.removePhoto);
   const segments = useProjectStore((s) => s.segments);
@@ -668,8 +955,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const selectedEnterAnimation: PhotoAnimationOption = layout.enterAnimation ?? "default";
   const selectedExitAnimation: PhotoAnimationOption = layout.exitAnimation ?? "default";
   const activePhotoStyle: PhotoStyle = resolvePhotoStyle(layout, defaultPhotoStyle);
-  const activeSceneTransition: SceneTransition = resolveSceneTransition(layout, globalSceneTransition);
-  type SceneTransitionOption = SceneTransition | "default";
   const selectedSceneTransition: SceneTransitionOption = layout.sceneTransition ?? "default";
   const portalAccentColor = useMemo(() => {
     if (!moodColorsEnabled) return "#ffffff";
@@ -804,6 +1089,14 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     [replayEnterPreview, updateLayout]
   );
 
+  const handlePhotoFrameStyleSelect = useCallback(
+    (style: PhotoFrameStyle) => {
+      setPhotoFrameStyle(style);
+      replayEnterPreview();
+    },
+    [replayEnterPreview, setPhotoFrameStyle]
+  );
+
   const handleExitAnimationSelect = useCallback(
     (animation: PhotoAnimationOption) => {
       updateLayout({ exitAnimation: animation === "default" ? undefined : animation });
@@ -840,13 +1133,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       }
     },
     [effectiveFreeTransforms, layout.mode, updateLayout],
-  );
-
-  const handleGlobalSceneTransitionSelect = useCallback(
-    (transition: SceneTransition) => {
-      setGlobalSceneTransition(transition);
-    },
-    [setGlobalSceneTransition]
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -1021,109 +1307,60 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           {/* Bottom controls */}
           <div className="max-h-[50vh] shrink-0 border-t border-gray-100 bg-white flex min-h-0 flex-col">
             <div className="min-h-0 overflow-y-auto">
-              <div className="flex items-center justify-between gap-3 px-4 pt-3">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">Layout</p>
-                {isRandomLayoutActive ? (
-                  <button
-                    type="button"
-                    onClick={refreshRandomLayout}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:border-gray-300 hover:text-gray-700"
-                    aria-label="Refresh random layout"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
-              </div>
-
-              {/* Layout style selector — horizontal pills */}
-              <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
-                {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => handleStyleSelect(id)}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-colors ${
-                      activeStyle === id
-                        ? "bg-indigo-500 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="border-t border-gray-100 px-4 py-3">
-                <div className="space-y-4">
-                  <div className="space-y-3">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-                      Photo Style
-                    </p>
-                    <div className="flex gap-2">
-                      {PHOTO_STYLE_OPTIONS.map(({ value, label, icon: Icon }) => {
-                        const isActive = activePhotoStyle === value;
-                        return (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => handlePhotoStyleSelect(value)}
-                            aria-pressed={isActive}
-                            className={`flex items-center gap-1.5 h-10 rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
-                              isActive
-                                ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
-                                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            <Icon className="h-3.5 w-3.5" />
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <AnimationSelectorSection
-                    title="In Animation"
-                    selectedAnimation={selectedEnterAnimation}
-                    options={enterAnimationOptions}
-                    defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
-                    onSelect={handleEnterAnimationSelect}
+              <div className="space-y-3 px-4 py-3">
+                <SettingsGroup title="Layout" defaultOpen>
+                  <LayoutStyleSelectorSection
+                    variant="mobile"
+                    activeStyle={activeStyle}
+                    isRandomLayoutActive={isRandomLayoutActive}
+                    onSelect={handleStyleSelect}
+                    onRefresh={refreshRandomLayout}
                   />
-                  <AnimationSelectorSection
-                    title="Out Animation"
-                    selectedAnimation={selectedExitAnimation}
-                    options={exitAnimationOptions}
-                    defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
-                    onSelect={handleExitAnimationSelect}
-                  />
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Film className="h-3.5 w-3.5 text-gray-400" />
-                      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-                        Scene Transition
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {sceneTransitionOptions.map(({ value, label }) => {
-                        const isActive = selectedSceneTransition === value;
-                        return (
-                          <button
-                            key={`scene-transition-mobile-${value}`}
-                            type="button"
-                            onClick={() => handleSceneTransitionSelect(value)}
-                            aria-pressed={isActive}
-                            className={`h-10 min-w-[64px] rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
-                              isActive
-                                ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
-                                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                </SettingsGroup>
+
+                <SettingsGroup title="Style" defaultOpen>
+                  <div className="space-y-4">
+                    <PhotoStyleSelectorSection
+                      selectedStyle={activePhotoStyle}
+                      onSelect={handlePhotoStyleSelect}
+                    />
+                    <FrameStyleSelectorSection
+                      selectedStyle={photoFrameStyle}
+                      onSelect={handlePhotoFrameStyleSelect}
+                    />
+                    <CaptionStyleSection
+                      captionFontFamily={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
+                      captionFontSize={layout.captionFontSize ?? 14}
+                      onFontChange={(captionFontFamily) => updateLayout({ captionFontFamily })}
+                      onSizeChange={(captionFontSize) => updateLayout({ captionFontSize })}
+                    />
                   </div>
-                </div>
+                </SettingsGroup>
+
+                <SettingsGroup title="Animation">
+                  <div className="space-y-4">
+                    <AnimationSelectorSection
+                      title="In Animation"
+                      selectedAnimation={selectedEnterAnimation}
+                      options={enterAnimationOptions}
+                      defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                      onSelect={handleEnterAnimationSelect}
+                    />
+                    <AnimationSelectorSection
+                      title="Out Animation"
+                      selectedAnimation={selectedExitAnimation}
+                      options={exitAnimationOptions}
+                      defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
+                      onSelect={handleExitAnimationSelect}
+                    />
+                    <SceneTransitionSection
+                      selectedTransition={selectedSceneTransition}
+                      options={sceneTransitionOptions}
+                      onSelect={handleSceneTransitionSelect}
+                      keyPrefix="scene-transition-mobile"
+                    />
+                  </div>
+                </SettingsGroup>
               </div>
 
               {/* Photo thumbnails — horizontal scroll */}
@@ -1218,147 +1455,60 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           {/* 3-column body */}
           <div className="flex flex-1 min-h-0">
             {/* LEFT — Layout style selector */}
-            <div className={`w-72 min-h-0 overflow-y-auto border-r border-gray-100 p-4 space-y-2 transition-all duration-300 ${expanded ? "hidden" : ""}`}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-xs font-medium uppercase tracking-wider text-gray-400">Layout</p>
-                {isRandomLayoutActive ? (
-                  <button
-                    type="button"
-                    onClick={refreshRandomLayout}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:border-gray-300 hover:text-gray-700"
-                    aria-label="Refresh random layout"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
-              </div>
-              {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => handleStyleSelect(id)}
-                  className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    activeStyle === id
-                      ? "bg-indigo-50 text-indigo-600 border border-indigo-200"
-                      : "text-gray-600 hover:bg-gray-50 border border-transparent"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </button>
-              ))}
+            <div className={`w-72 min-h-0 overflow-y-auto border-r border-gray-100 p-4 space-y-3 transition-all duration-300 ${expanded ? "hidden" : ""}`}>
+              <SettingsGroup title="Layout" defaultOpen>
+                <LayoutStyleSelectorSection
+                  variant="desktop"
+                  activeStyle={activeStyle}
+                  isRandomLayoutActive={isRandomLayoutActive}
+                  onSelect={handleStyleSelect}
+                  onRefresh={refreshRandomLayout}
+                />
+              </SettingsGroup>
 
-              <div className="space-y-5 pt-4">
-                <div className="space-y-3">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-                    Photo Style
-                  </p>
-                  <div className="flex gap-2">
-                    {PHOTO_STYLE_OPTIONS.map(({ value, label, icon: Icon }) => {
-                      const isActive = activePhotoStyle === value;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => handlePhotoStyleSelect(value)}
-                          aria-pressed={isActive}
-                          className={`flex items-center gap-1.5 h-10 rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
-                            isActive
-                              ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
-                              : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <SettingsGroup title="Style" defaultOpen>
+                <div className="space-y-4">
+                  <PhotoStyleSelectorSection
+                    selectedStyle={activePhotoStyle}
+                    onSelect={handlePhotoStyleSelect}
+                  />
+                  <FrameStyleSelectorSection
+                    selectedStyle={photoFrameStyle}
+                    onSelect={handlePhotoFrameStyleSelect}
+                  />
+                  <CaptionStyleSection
+                    captionFontFamily={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
+                    captionFontSize={layout.captionFontSize ?? 14}
+                    onFontChange={(captionFontFamily) => updateLayout({ captionFontFamily })}
+                    onSizeChange={(captionFontSize) => updateLayout({ captionFontSize })}
+                  />
                 </div>
-                <AnimationSelectorSection
-                  title="In Animation"
-                  selectedAnimation={selectedEnterAnimation}
-                  options={enterAnimationOptions}
-                  defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
-                  onSelect={handleEnterAnimationSelect}
-                />
-                <AnimationSelectorSection
-                  title="Out Animation"
-                  selectedAnimation={selectedExitAnimation}
-                  options={exitAnimationOptions}
-                  defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
-                  onSelect={handleExitAnimationSelect}
-                />
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Type className="h-3.5 w-3.5 text-gray-400" />
-                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-                      Caption Style
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-500 w-14 shrink-0">Font</label>
-                      <select
-                        className="flex-1 h-7 text-xs rounded-md border border-gray-200 bg-white px-2 focus:border-indigo-400 focus:outline-none"
-                        style={{ fontFamily: layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY }}
-                        value={layout.captionFontFamily ?? DEFAULT_CAPTION_FONT_FAMILY}
-                        onChange={(e) => updateLayout({ captionFontFamily: e.target.value })}
-                      >
-                        {CAPTION_FONT_OPTIONS.map((option) => (
-                          <option
-                            key={option.value}
-                            value={option.value}
-                            style={{ fontFamily: option.value }}
-                          >
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-500 w-14 shrink-0">Size</label>
-                      <input
-                        type="range"
-                        min={10}
-                        max={24}
-                        step={1}
-                        value={layout.captionFontSize ?? 14}
-                        onChange={(e) => updateLayout({ captionFontSize: Number(e.target.value) })}
-                        className="flex-1 h-1 accent-indigo-500"
-                      />
-                      <span className="text-[10px] text-gray-400 w-8 text-right">{layout.captionFontSize ?? 14}px</span>
-                    </div>
-                  </div>
+              </SettingsGroup>
+
+              <SettingsGroup title="Animation">
+                <div className="space-y-4">
+                  <AnimationSelectorSection
+                    title="In Animation"
+                    selectedAnimation={selectedEnterAnimation}
+                    options={enterAnimationOptions}
+                    defaultAnimationLabel={PHOTO_ANIMATION_LABELS[defaultPhotoAnimation]}
+                    onSelect={handleEnterAnimationSelect}
+                  />
+                  <AnimationSelectorSection
+                    title="Out Animation"
+                    selectedAnimation={selectedExitAnimation}
+                    options={exitAnimationOptions}
+                    defaultAnimationLabel={PHOTO_EXIT_ANIMATION_LABELS[defaultPhotoAnimation]}
+                    onSelect={handleExitAnimationSelect}
+                  />
+                  <SceneTransitionSection
+                    selectedTransition={selectedSceneTransition}
+                    options={sceneTransitionOptions}
+                    onSelect={handleSceneTransitionSelect}
+                    keyPrefix="scene-transition-desktop"
+                  />
                 </div>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Film className="h-3.5 w-3.5 text-gray-400" />
-                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">
-                      Scene Transition
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {sceneTransitionOptions.map(({ value, label }) => {
-                      const isActive = selectedSceneTransition === value;
-                      return (
-                        <button
-                          key={`scene-transition-desktop-${value}`}
-                          type="button"
-                          onClick={() => handleSceneTransitionSelect(value)}
-                          aria-pressed={isActive}
-                          className={`h-10 min-w-[64px] rounded-xl border px-3 text-sm font-medium transition active:scale-95 ${
-                            isActive
-                              ? "border-indigo-500 bg-indigo-500 text-white ring-2 ring-indigo-200"
-                              : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
+              </SettingsGroup>
             </div>
 
             {/* CENTER — Live preview with map background */}
