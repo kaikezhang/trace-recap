@@ -127,13 +127,13 @@ export default function BottomSheet({
         animate={{ y: currentOffset }}
         onDragEnd={handleDragEnd}
         transition={{ type: "spring", damping: 30, stiffness: 300 }}
-        className="fixed bottom-0 left-0 right-0 z-50 flex flex-col overflow-hidden rounded-t-[24px] border-t bg-background shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
+        className="fixed bottom-0 left-0 right-0 z-50 flex touch-pan-x flex-col overflow-hidden rounded-t-[24px] border-t bg-background shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
         style={{ height: maxSheetHeight || "85vh" }}
       >
         <div className="shrink-0 px-4 pb-2 pt-3" style={{ height: collapsedHeight }}>
-          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-300" />
+          <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-gray-300" />
           <div
-            className="mb-2 flex items-center justify-between"
+            className="mb-2 flex min-h-[44px] items-center justify-between"
             onClick={toggleSheet}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -150,17 +150,19 @@ export default function BottomSheet({
               <MapPin className="h-4 w-4" />
               <span>{stopsLabel}</span>
             </div>
-            <ChevronUp
-              className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
-                bottomSheetState === "collapsed" ? "" : "rotate-180"
-              }`}
-            />
+            <span className="flex h-11 w-11 items-center justify-center">
+              <ChevronUp
+                className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
+                  bottomSheetState === "collapsed" ? "" : "rotate-180"
+                }`}
+              />
+            </span>
           </div>
           <CitySearch
             className="p-0"
             hintMessage={searchHintMessage}
             onHintDismiss={onDismissSearchHint}
-            inputClassName="h-10"
+            inputClassName="h-11"
           />
         </div>
 
