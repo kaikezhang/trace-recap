@@ -35,18 +35,21 @@ export function computeContainedViewportSize(
   availableWidth: number,
   availableHeight: number,
   viewportRatio: AspectRatio,
+  reservedHeight = 0,
 ): ViewportDimensions | null {
   const ratio = parseViewportRatio(viewportRatio);
-  if (!ratio || availableWidth <= 0 || availableHeight <= 0) {
+  const usableHeight = Math.max(availableHeight - reservedHeight, 0);
+
+  if (!ratio || availableWidth <= 0 || usableHeight <= 0) {
     return null;
   }
 
   const aspectRatio = ratio.width / ratio.height;
-  let targetWidth = Math.min(availableWidth, availableHeight * aspectRatio);
+  let targetWidth = Math.min(availableWidth, usableHeight * aspectRatio);
   let targetHeight = targetWidth / aspectRatio;
 
-  if (targetHeight > availableHeight) {
-    targetHeight = availableHeight;
+  if (targetHeight > usableHeight) {
+    targetHeight = usableHeight;
     targetWidth = targetHeight * aspectRatio;
   }
 

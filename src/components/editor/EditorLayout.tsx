@@ -34,6 +34,7 @@ import { computeContainedViewportSize } from "@/lib/viewportRatio";
 
 const ONBOARDING_STORAGE_KEY = "trace-recap-onboarded";
 const ALBUM_VISITED_HOLD_MS = 300;
+const CONSTRAINED_STAGE_PLAYBACK_RESERVE_PX = 72;
 
 type OnboardingHintKey =
   | "searchStart"
@@ -202,8 +203,11 @@ function EditorContent() {
         availableStageSize.width,
         availableStageSize.height,
         viewportRatio,
+        viewportRatio !== "free" && segments.length > 0
+          ? CONSTRAINED_STAGE_PLAYBACK_RESERVE_PX
+          : 0,
       ),
-    [availableStageSize.height, availableStageSize.width, viewportRatio],
+    [availableStageSize.height, availableStageSize.width, segments.length, viewportRatio],
   );
 
   const clearAlbumSequenceTimers = useCallback(() => {
