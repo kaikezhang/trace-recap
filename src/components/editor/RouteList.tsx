@@ -8,7 +8,6 @@ import {
   Bus,
   Car,
   ChevronDown,
-  Clock3,
   Footprints,
   Plane,
   Route,
@@ -32,7 +31,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { brand } from "@/lib/brand";
-import { useAnimationStore } from "@/stores/animationStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useLocationCount, useLocationIds } from "@/stores/selectors";
 import type { Segment, TransportMode } from "@/types";
@@ -66,24 +64,17 @@ const TRANSPORT_ACCENTS: Record<TransportMode, string> = {
   bicycle: "#155e75",
 };
 
+const WHOLE_NUMBER_FORMAT = new Intl.NumberFormat("en-US");
+const ONE_DECIMAL_FORMAT = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
 function formatDistance(distanceKm: number | null): string | null {
   if (distanceKm === null || !Number.isFinite(distanceKm) || distanceKm <= 0) return null;
-  if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} m`;
-  if (distanceKm < 100) return `${distanceKm.toFixed(1)} km`;
-  return `${Math.round(distanceKm)} km`;
-}
-
-function formatDuration(seconds: number | null): string | null {
-  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return null;
-
-  if (seconds < 60) return `${Math.max(1, Math.round(seconds))} sec`;
-
-  const roundedMinutes = Math.max(1, Math.round(seconds / 60));
-  if (roundedMinutes < 60) return `${roundedMinutes} min`;
-
-  const hours = Math.floor(roundedMinutes / 60);
-  const minutes = roundedMinutes % 60;
-  return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
+  if (distanceKm < 1) return `${WHOLE_NUMBER_FORMAT.format(Math.round(distanceKm * 1000))} m`;
+  if (distanceKm < 100) return `${ONE_DECIMAL_FORMAT.format(distanceKm)} km`;
+  return `${WHOLE_NUMBER_FORMAT.format(Math.round(distanceKm))} km`;
 }
 
 function getSegmentDistance(segment: Segment): number | null {
@@ -125,51 +116,89 @@ function TimelineSegmentCard({
   segment,
   fromLabel,
   toLabel,
-  durationSeconds,
   distanceKm,
-  compact = false,
+  expanded,
+  onToggle,
   indented = false,
   showConnector = true,
 }: {
   segment: Segment;
   fromLabel: string;
   toLabel: string;
-  durationSeconds: number | null;
   distanceKm: number | null;
-  compact?: boolean;
+  expanded: boolean;
+  onToggle: () => void;
   indented?: boolean;
   showConnector?: boolean;
 }) {
   const Icon = TRANSPORT_ICONS[segment.transportMode];
   const accent = TRANSPORT_ACCENTS[segment.transportMode];
-  const pillBits = [formatDistance(distanceKm), formatDuration(durationSeconds)].filter(Boolean);
+  const formattedDistance = formatDistance(distanceKm);
 
   return (
-    <div
-      className={`relative ${indented ? "ml-6" : ""} pl-11 sm:pl-12`}
-    >
+    <div className={`relative ${indented ? "ml-6" : ""} pl-11 sm:pl-12`}>
       <div
-        className={`relative overflow-hidden rounded-[24px] border ${
-          compact ? "px-3 py-3" : "px-3.5 py-3.5"
-        }`}
+        className="relative overflow-hidden rounded-[20px] border"
         style={{
           borderColor: brand.colors.warm[200],
-          background: compact
-            ? "rgba(255,250,245,0.84)"
-            : "linear-gradient(160deg, rgba(255,251,245,0.96) 0%, rgba(255,255,255,0.92) 100%)",
+          borderLeftColor: accent,
+          borderLeftWidth: 3,
+          background: expanded
+            ? "linear-gradient(160deg, rgba(255,251,245,0.96) 0%, rgba(255,255,255,0.92) 100%)"
+            : "rgba(255,250,245,0.88)",
           boxShadow: brand.shadows.sm,
         }}
       >
-        <div className="flex items-stretch gap-3">
-          <span
-            aria-hidden
-            className="w-1 shrink-0 rounded-full"
-            style={{ backgroundColor: accent }}
-          />
+        <button
+          type="button"
+          className="touch-target-mobile flex min-h-9 w-full items-center justify-between gap-3 px-3 py-2 text-left"
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${segment.transportMode} segment details`}
+          onClick={onToggle}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+              style={{ backgroundColor: `${accent}1A` }}
+            >
+              <Icon className="h-3.5 w-3.5" style={{ color: accent }} />
+            </span>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
+            <span
+              className="truncate text-sm font-medium"
+              style={{ color: brand.colors.warm[800] }}
+            >
+              {formattedDistance ?? "Distance pending"}
+            </span>
+          </div>
+
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 transition-transform duration-200 ease-out ${
+              expanded ? "rotate-180" : ""
+            }`}
+            style={{ color: brand.colors.warm[500] }}
+          />
+        </button>
+
+        <div
+          className="grid"
+          style={{
+            gridTemplateRows: expanded ? "1fr" : "0fr",
+            transition: "grid-template-rows 200ms ease-out",
+          }}
+        >
+          <div className="overflow-hidden">
+            <div
+              className="border-t px-3 pb-3 pt-2.5"
+              style={{
+                borderColor: brand.colors.warm[200],
+                opacity: expanded ? 1 : 0,
+                transform: expanded ? "translateY(0)" : "translateY(-4px)",
+                visibility: expanded ? "visible" : "hidden",
+                transition: "opacity 200ms ease-out, transform 200ms ease-out",
+              }}
+            >
+              <div className="flex items-start gap-3">
                 <span
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
                   style={{ backgroundColor: `${accent}1A` }}
@@ -177,45 +206,47 @@ function TimelineSegmentCard({
                   <Icon className="h-3.5 w-3.5" style={{ color: accent }} />
                 </span>
 
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p
+                      className="truncate text-[11px] font-semibold uppercase tracking-[0.18em]"
+                      style={{ color: brand.colors.warm[500] }}
+                    >
+                      {segment.transportMode}
+                    </p>
+                    {formattedDistance && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+                        style={{
+                          color: brand.colors.warm[700],
+                          borderColor: brand.colors.warm[200],
+                          backgroundColor: "rgba(255,255,255,0.88)",
+                        }}
+                      >
+                        <Route className="h-3 w-3" />
+                        {formattedDistance}
+                      </span>
+                    )}
+                  </div>
+
                   <p
-                    className="truncate text-[11px] font-semibold uppercase tracking-[0.18em]"
-                    style={{ color: brand.colors.warm[500] }}
-                  >
-                    {segment.transportMode}
-                  </p>
-                  <p
-                    className="truncate text-sm font-medium"
+                    className="mt-1 truncate text-sm font-medium"
                     style={{ color: brand.colors.warm[800] }}
                   >
                     {fromLabel} to {toLabel}
                   </p>
+
+                  <div
+                    className="mt-3 overflow-hidden rounded-[18px] border"
+                    style={{
+                      borderColor: brand.colors.warm[200],
+                      backgroundColor: "rgba(255,255,255,0.76)",
+                    }}
+                  >
+                    <TransportSelector segment={segment} />
+                  </div>
                 </div>
               </div>
-
-              {pillBits.length > 0 && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium"
-                  style={{
-                    color: brand.colors.warm[700],
-                    borderColor: brand.colors.warm[200],
-                    backgroundColor: "rgba(255,255,255,0.88)",
-                  }}
-                >
-                  <Route className="h-3 w-3" />
-                  {pillBits.join(" · ")}
-                </span>
-              )}
-            </div>
-
-            <div
-              className="mt-3 overflow-hidden rounded-[20px] border"
-              style={{
-                borderColor: brand.colors.warm[200],
-                backgroundColor: "rgba(255,255,255,0.76)",
-              }}
-            >
-              <TransportSelector segment={segment} />
             </div>
           </div>
         </div>
@@ -240,15 +271,14 @@ export default memo(function RouteList({
 }: RouteListProps) {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
-  const segmentTimingOverrides = useProjectStore((s) => s.segmentTimingOverrides);
   const removeLocation = useProjectStore((s) => s.removeLocation);
   const reorderLocations = useProjectStore((s) => s.reorderLocations);
   const toggleWaypoint = useProjectStore((s) => s.toggleWaypoint);
-  const timeline = useAnimationStore((s) => s.timeline);
   const locationIds = useLocationIds();
   const locationCount = useLocationCount();
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
   const [showEditHint, setShowEditHint] = useState(false);
 
   useEffect(() => {
@@ -317,11 +347,12 @@ export default memo(function RouteList({
     }
   };
 
-  const getDisplayDuration = (segment: Segment): number | null => {
-    const override = segmentTimingOverrides[segment.id];
-    if (override !== undefined) return override;
-    return timeline.find((entry) => entry.segmentId === segment.id)?.duration ?? null;
-  };
+  const toggleSegmentExpansion = useCallback((segmentId: string) => {
+    setExpandedSegments((current) => ({
+      ...current,
+      [segmentId]: !current[segmentId],
+    }));
+  }, []);
 
   if (locationCount === 0) {
     return (
@@ -406,16 +437,7 @@ export default memo(function RouteList({
       const nextStop = locations[nextStopIndex];
       const groupSegments = segments.slice(index, nextStopIndex);
       const totalDistance = groupSegments.reduce((sum, segment) => sum + (getSegmentDistance(segment) ?? 0), 0);
-      const durationValues = groupSegments
-        .map((segment) => getDisplayDuration(segment))
-        .filter((value): value is number => value !== null);
-      const totalDuration =
-        durationValues.length === groupSegments.length
-          ? durationValues.reduce((sum, value) => sum + value, 0)
-          : durationValues.length > 0
-            ? durationValues.reduce((sum, value) => sum + value, 0)
-            : null;
-      const summaryBits = [formatDistance(totalDistance || null), formatDuration(totalDuration)].filter(Boolean);
+      const summaryDistance = formatDistance(totalDistance || null);
       const groupKey = `${location.id}-stopovers`;
       const isCollapsed = collapsedGroups[groupKey] ?? false;
 
@@ -460,7 +482,7 @@ export default memo(function RouteList({
                   >
                     {waypointIndexes.length}
                   </span>
-                  {summaryBits.length > 0 && (
+                  {summaryDistance && (
                     <span
                       className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium"
                       style={{
@@ -469,8 +491,8 @@ export default memo(function RouteList({
                         backgroundColor: "rgba(255,255,255,0.84)",
                       }}
                     >
-                      <Clock3 className="h-3 w-3" />
-                      {summaryBits.join(" · ")}
+                      <Route className="h-3 w-3" />
+                      {summaryDistance}
                     </span>
                   )}
                 </div>
@@ -504,9 +526,9 @@ export default memo(function RouteList({
                           segment={waypointSegment}
                           fromLabel={locations[waypointIndex - 1]?.name || "Previous stop"}
                           toLabel={waypoint.name || "Stopover"}
-                          durationSeconds={getDisplayDuration(waypointSegment)}
                           distanceKm={getSegmentDistance(waypointSegment)}
-                          compact
+                          expanded={expandedSegments[waypointSegment.id] ?? false}
+                          onToggle={() => toggleSegmentExpansion(waypointSegment.id)}
                           indented
                           showConnector
                         />
@@ -541,9 +563,9 @@ export default memo(function RouteList({
                           segment={segments[nextStopIndex - 1]}
                           fromLabel={waypoint.name || "Stopover"}
                           toLabel={nextStop.name || "Destination"}
-                          durationSeconds={getDisplayDuration(segments[nextStopIndex - 1])}
                           distanceKm={getSegmentDistance(segments[nextStopIndex - 1])}
-                          compact
+                          expanded={expandedSegments[segments[nextStopIndex - 1].id] ?? false}
+                          onToggle={() => toggleSegmentExpansion(segments[nextStopIndex - 1].id)}
                           indented
                           showConnector={showConnector}
                         />
@@ -569,8 +591,9 @@ export default memo(function RouteList({
           segment={nextSegment}
           fromLabel={location.name || "Current stop"}
           toLabel={nextLocation.name || "Next stop"}
-          durationSeconds={getDisplayDuration(nextSegment)}
           distanceKm={getSegmentDistance(nextSegment)}
+          expanded={expandedSegments[nextSegment.id] ?? false}
+          onToggle={() => toggleSegmentExpansion(nextSegment.id)}
           showConnector
         />,
       );
