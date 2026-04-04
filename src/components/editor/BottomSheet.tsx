@@ -133,7 +133,7 @@ export default function BottomSheet({
         <div className="shrink-0 px-4 pb-2 pt-3" style={{ height: collapsedHeight }}>
           <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-gray-300" />
           <div
-            className="mb-2 flex min-h-[44px] items-center justify-between"
+            className="touch-target-mobile mb-2 flex min-h-[44px] items-center justify-between"
             onClick={toggleSheet}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
