@@ -5,7 +5,6 @@ import {
   Bike,
   Bus,
   Car,
-  ChevronRight,
   Copy,
   Footprints,
   Image as ImageIcon,
@@ -708,14 +707,22 @@ export default memo(function LocationCard({
             )}
           </div>
 
-          <div className="shrink-0">
+          <div
+            className={`relative shrink-0 overflow-hidden ${
+              isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
+            } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
+            style={{
+              boxShadow: brand.shadows.sm,
+              ...(coverPhoto
+                ? {}
+                : {
+                    border: `1px solid ${brand.colors.warm[200]}`,
+                    background: `linear-gradient(160deg, ${brand.colors.sand[100]} 0%, ${brand.colors.primary[50]} 100%)`,
+                  }),
+            }}
+          >
             {coverPhoto ? (
-              <div
-                className={`relative overflow-hidden ${
-                  isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
-                } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
-                style={{ boxShadow: brand.shadows.sm }}
-              >
+              <>
                 <img
                   src={coverPhoto.url}
                   alt={location.name ? `${location.name} photo` : "Location photo"}
@@ -729,17 +736,9 @@ export default memo(function LocationCard({
                     +{photoCount - 1}
                   </div>
                 )}
-              </div>
+              </>
             ) : (
-              <div
-                className={`flex items-center justify-center border ${
-                  isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
-                } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
-                style={{
-                  borderColor: brand.colors.warm[200],
-                  background: `linear-gradient(160deg, ${brand.colors.sand[100]} 0%, ${brand.colors.primary[50]} 100%)`,
-                }}
-              >
+              <div className="flex h-full w-full items-center justify-center">
                 <ImageIcon
                   className="h-4 w-4"
                   style={{ color: brand.colors.warm[400] }}
@@ -747,24 +746,6 @@ export default memo(function LocationCard({
               </div>
             )}
           </div>
-
-          <button
-            className="touch-target-mobile flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white"
-            data-no-seek
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsExpanded((expanded) => !expanded);
-              onClick?.(index);
-            }}
-            aria-label={isExpanded ? "Collapse location details" : "Expand location details"}
-          >
-            <ChevronRight
-              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
-                isExpanded ? "rotate-90" : ""
-              }`}
-              style={{ color: brand.colors.warm[500] }}
-            />
-          </button>
 
           <button
             data-delete-btn
