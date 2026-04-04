@@ -3,6 +3,7 @@
 import { lineString } from "@turf/helpers";
 import { length } from "@turf/length";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import mapboxgl from "mapbox-gl";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
@@ -128,6 +129,7 @@ function EditorContent() {
   const resetAlbumSequenceStateRef = useRef<() => void>(() => {});
   const clearAlbumSequenceTimersRef = useRef<() => void>(() => {});
 
+  const playbackState = useAnimationStore((s) => s.playbackState);
   const setPlaybackState = useAnimationStore((s) => s.setPlaybackState);
   const setCurrentTime = useAnimationStore((s) => s.setCurrentTime);
   const setTotalDuration = useAnimationStore((s) => s.setTotalDuration);
@@ -177,15 +179,22 @@ function EditorContent() {
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const speedMultiplier = useUIStore((s) => s.speedMultiplier);
+  const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
+  const immersiveMode = useUIStore((s) => s.immersiveMode);
   const setBottomSheetState = useUIStore((s) => s.setBottomSheetState);
+  const setLeftPanelOpen = useUIStore((s) => s.setLeftPanelOpen);
+  const setImmersiveMode = useUIStore((s) => s.setImmersiveMode);
 
   const stageViewportRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const previousPlaybackStateRef = useRef(playbackState);
+  const previousTabletViewportRef = useRef(false);
   const [availableStageSize, setAvailableStageSize] = useState({
     width: 0,
     height: 0,
   });
   const [stageViewportBottomInsetPx, setStageViewportBottomInsetPx] = useState(0);
+  const [isTabletViewport, setIsTabletViewport] = useState(false);
 
   const constrainedMapSize = useMemo(
     () =>
@@ -346,6 +355,34 @@ function EditorContent() {
       visualViewport?.removeEventListener("scroll", updateStageInset);
     };
   }, [viewportRatio]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsTabletViewport(event.matches);
+    };
+
+    setIsTabletViewport(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  useEffect(() => {
+    const enteredPlayback =
+      playbackState === "playing" && previousPlaybackStateRef.current !== "playing";
+    const enteredTabletViewport =
+      isTabletViewport && !previousTabletViewportRef.current;
+
+    if (enteredPlayback || (enteredTabletViewport && playbackState === "playing")) {
+      setImmersiveMode(true);
+    }
+
+    previousPlaybackStateRef.current = playbackState;
+    previousTabletViewportRef.current = isTabletViewport;
+  }, [isTabletViewport, playbackState, setImmersiveMode]);
 
   useEffect(() => {
     if (!map || !mapContainerRef.current) return;
@@ -1164,9 +1201,32 @@ function EditorContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handlePlay, handlePause, handleReset, handleLocationClick, locations, selectedLocationIndex]);
 
-  const playbackState = useAnimationStore((s) => s.playbackState);
   const isPlaying = playbackState === "playing";
+  const isPlaybackActive =
+    playbackState === "playing" || playbackState === "paused";
   const hasSegments = segments.length > 0;
+  const showDesktopSidebar = leftPanelOpen && !immersiveMode;
+  const showImmersiveToggle = isPlaybackActive || immersiveMode;
+  const immersiveExpandLocked = isTabletViewport && playbackState === "playing";
+
+  const handleImmersiveToggle = useCallback(() => {
+    if (!showDesktopSidebar && immersiveExpandLocked) {
+      return;
+    }
+
+    if (showDesktopSidebar) {
+      setImmersiveMode(true);
+      return;
+    }
+
+    setLeftPanelOpen(true);
+    setImmersiveMode(false);
+  }, [
+    immersiveExpandLocked,
+    setImmersiveMode,
+    setLeftPanelOpen,
+    showDesktopSidebar,
+  ]);
 
   const dismissHint = useCallback((hintKey: OnboardingHintKey) => {
     setOnboardingState((current) => {
@@ -1235,14 +1295,45 @@ function EditorContent() {
     <div className="flex h-screen flex-col bg-[#FAFAFA]">
       {!isPlaying && <TopToolbar />}
       {!isPlaying && <QuickStyleBar />}
-      <div className="flex flex-1 overflow-hidden">
-        <LeftPanel
-          onLocationClick={handleLocationClick}
-          onEditLayout={handleEditLayout}
-          searchHintMessage={searchHintMessage}
-          onDismissSearchHint={handleSearchHintDismiss}
-          searchRef={searchRef}
-        />
+      <div className="relative flex flex-1 overflow-hidden">
+        <div
+          className={`hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out md:block ${
+            showDesktopSidebar ? "w-[360px]" : "w-0"
+          }`}
+        >
+          <div
+            className={`h-full w-[360px] transition-transform duration-300 ease-in-out ${
+              showDesktopSidebar ? "translate-x-0" : "-translate-x-full"
+            }`}
+          >
+            <LeftPanel
+              onLocationClick={handleLocationClick}
+              onEditLayout={handleEditLayout}
+              searchHintMessage={searchHintMessage}
+              onDismissSearchHint={handleSearchHintDismiss}
+              searchRef={searchRef}
+            />
+          </div>
+        </div>
+        {showImmersiveToggle && (
+          <button
+            type="button"
+            onClick={handleImmersiveToggle}
+            className="absolute top-1/2 z-30 hidden h-11 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-slate-950/65 text-white/80 shadow-[0_16px_40px_-24px_rgba(15,23,42,0.9)] backdrop-blur-sm transition-all duration-300 ease-in-out hover:border-white/30 hover:bg-slate-900/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-white/15 disabled:hover:bg-slate-950/65 disabled:hover:text-white/80 md:flex"
+            style={{
+              left: showDesktopSidebar ? "332px" : "12px",
+            }}
+            aria-label={showDesktopSidebar ? "Collapse sidebar" : "Expand sidebar"}
+            aria-pressed={showDesktopSidebar}
+            disabled={!showDesktopSidebar && immersiveExpandLocked}
+          >
+            {showDesktopSidebar ? (
+              <ChevronLeft className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+        )}
         <div className="relative flex-1 min-w-0 overflow-hidden bg-slate-950">
           {viewportRatio === "free" ? (
             <div ref={stageViewportRef} className="absolute inset-0">
