@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { lineString } from "@turf/helpers";
+import { length } from "@turf/length";
 import { ChevronUp, MapPin } from "lucide-react";
 import { motion, type PanInfo } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import type { Segment } from "@/types";
 import CitySearch from "./CitySearch";
 import RouteList from "./RouteList";
 
@@ -16,6 +19,26 @@ interface BottomSheetProps {
   onDismissSearchHint?: () => void;
 }
 
+function getSegmentDistanceKm(segment: Segment): number {
+  if (!segment.geometry || segment.geometry.coordinates.length < 2) {
+    return 0;
+  }
+
+  try {
+    return length(lineString(segment.geometry.coordinates), { units: "kilometers" });
+  } catch {
+    return 0;
+  }
+}
+
+function formatCompactDistance(distanceKm: number): string {
+  if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+    return "0 km";
+  }
+
+  return `${Math.round(distanceKm).toLocaleString()} km`;
+}
+
 export default function BottomSheet({
   onLocationClick,
   onEditLayout,
@@ -23,6 +46,7 @@ export default function BottomSheet({
   onDismissSearchHint,
 }: BottomSheetProps) {
   const locations = useProjectStore((s) => s.locations);
+  const segments = useProjectStore((s) => s.segments);
   const bottomSheetState = useUIStore((s) => s.bottomSheetState);
   const setBottomSheetState = useUIStore((s) => s.setBottomSheetState);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -40,7 +64,8 @@ export default function BottomSheet({
     return () => window.removeEventListener("resize", updateViewportHeight);
   }, []);
 
-  const collapsedHeight = 120;
+  const collapsedHeight = 60;
+  const expandedHeaderHeight = 78;
   const maxSheetHeight = viewportHeight > 0 ? viewportHeight * 0.85 : 0;
   const halfVisibleHeight = viewportHeight > 0 ? viewportHeight * 0.5 : 0;
   const collapsedOffset = Math.max(maxSheetHeight - collapsedHeight, 0);
@@ -52,6 +77,9 @@ export default function BottomSheet({
   };
   const currentOffset = stateOffsets[bottomSheetState];
   const stopsLabel = `${locations.length} ${locations.length === 1 ? "stop" : "stops"}`;
+  const totalDistanceKm = segments.reduce((sum, segment) => sum + getSegmentDistanceKm(segment), 0);
+  const collapsedSummary = `${stopsLabel} · ${formatCompactDistance(totalDistanceKm)}`;
+  const headerHeight = bottomSheetState === "collapsed" ? collapsedHeight : expandedHeaderHeight;
 
   const snapToNearestState = (offset: number) => {
     const nearestState = (Object.entries(stateOffsets) as Array<
@@ -130,40 +158,52 @@ export default function BottomSheet({
         className="fixed bottom-0 left-0 right-0 z-50 flex touch-pan-x flex-col overflow-hidden rounded-t-[24px] border-t bg-background shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
         style={{ height: maxSheetHeight || "85vh" }}
       >
-        <div className="shrink-0 px-4 pb-2 pt-3" style={{ height: collapsedHeight }}>
+        <div className="shrink-0 px-3 pb-2 pt-2" style={{ height: headerHeight }}>
           <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-gray-300" />
-          <div
-            className="touch-target-mobile mb-2 flex min-h-[44px] items-center justify-between"
-            onClick={toggleSheet}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                toggleSheet();
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            aria-expanded={bottomSheetState !== "collapsed"}
-            aria-label="Toggle route panel"
-          >
-            <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700">
-              <MapPin className="h-4 w-4" />
-              <span>{stopsLabel}</span>
+
+          {bottomSheetState === "collapsed" ? (
+            <div
+              className="touch-target-mobile flex min-h-[44px] items-center justify-center"
+              onClick={toggleSheet}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleSheet();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-expanded={false}
+              aria-label="Expand route panel"
+            >
+              <div className="inline-flex max-w-full items-center gap-2 rounded-full px-2 text-sm font-medium text-foreground/90">
+                <MapPin className="h-4 w-4 shrink-0 text-indigo-600" />
+                <span className="truncate">{collapsedSummary}</span>
+              </div>
             </div>
-            <span className="flex h-11 w-11 items-center justify-center">
-              <ChevronUp
-                className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
-                  bottomSheetState === "collapsed" ? "" : "rotate-180"
-                }`}
+          ) : (
+            <div className="flex min-h-[44px] items-center gap-2">
+              <div className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-indigo-50 px-3 text-xs font-semibold text-indigo-700">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                <span className="whitespace-nowrap">{stopsLabel}</span>
+              </div>
+              <CitySearch
+                className="min-w-0 flex-1 p-0"
+                hintMessage={searchHintMessage}
+                onHintDismiss={onDismissSearchHint}
+                inputClassName="h-11 rounded-full border-border/70 bg-background/95 pl-9 pr-3 text-sm shadow-none"
               />
-            </span>
-          </div>
-          <CitySearch
-            className="p-0"
-            hintMessage={searchHintMessage}
-            onHintDismiss={onDismissSearchHint}
-            inputClassName="h-11"
-          />
+              <button
+                type="button"
+                className="touch-target-mobile flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/60"
+                onClick={toggleSheet}
+                aria-expanded
+                aria-label="Collapse route panel"
+              >
+                <ChevronUp className="h-4 w-4 rotate-180" />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/60">
