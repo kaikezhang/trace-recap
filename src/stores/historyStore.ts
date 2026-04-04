@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, invalidateSerializationCache } from "./projectStore";
 import type { Location, Segment, MapStyle, Photo } from "@/types";
 
@@ -40,15 +41,53 @@ interface HistorySnapshot {
   segmentTimingOverrides: Record<string, number>;
 }
 
+interface HistoryRouteState {
+  locations: LightLocation[];
+  segments: Segment[];
+  segmentTimingOverrides: Record<string, number>;
+}
+
+interface RouteHistoryInput {
+  locations: Location[];
+  segments: Segment[];
+  segmentTimingOverrides: Record<string, number>;
+}
+
+interface SnapshotHistoryEntry {
+  kind: "snapshot";
+  snapshot: HistorySnapshot;
+  undoLabel?: string;
+  redoLabel?: string;
+}
+
+interface RouteHistoryEntry {
+  kind: "route";
+  projectId: string | null;
+  before: HistoryRouteState;
+  after: HistoryRouteState;
+  undoLabel: string;
+  redoLabel: string;
+}
+
+type HistoryEntry = SnapshotHistoryEntry | RouteHistoryEntry;
+
+interface RouteHistoryChange {
+  before: RouteHistoryInput;
+  after: RouteHistoryInput;
+  undoLabel: string;
+  redoLabel?: string;
+}
+
 const MAX_HISTORY = 30;
 
 interface HistoryState {
-  undoStack: HistorySnapshot[];
-  redoStack: HistorySnapshot[];
+  undoStack: HistoryEntry[];
+  redoStack: HistoryEntry[];
   canUndo: boolean;
   canRedo: boolean;
   resetHistory: () => void;
   pushState: () => void;
+  pushRouteChange: (change: RouteHistoryChange) => void;
   undo: () => void;
   redo: () => void;
 }
@@ -130,13 +169,41 @@ function captureSnapshot(): HistorySnapshot {
   };
 }
 
+function captureRouteState(
+  state: RouteHistoryInput,
+): HistoryRouteState {
+  registerPhotoUrls(state.locations);
+
+  return {
+    locations: state.locations.map(stripLocation),
+    segments: structuredClone(state.segments),
+    segmentTimingOverrides: { ...state.segmentTimingOverrides },
+  };
+}
+
 function restoreSnapshot(snapshot: HistorySnapshot): void {
   useProjectStore.setState({
     locations: snapshot.locations.map(rehydrateLocation),
-    segments: snapshot.segments,
+    segments: structuredClone(snapshot.segments),
     mapStyle: snapshot.mapStyle,
-    segmentTimingOverrides: snapshot.segmentTimingOverrides,
+    segmentTimingOverrides: { ...snapshot.segmentTimingOverrides },
   });
+}
+
+function restoreRouteState(snapshot: HistoryRouteState): void {
+  useProjectStore.setState({
+    locations: snapshot.locations.map(rehydrateLocation),
+    segments: structuredClone(snapshot.segments),
+    segmentTimingOverrides: { ...snapshot.segmentTimingOverrides },
+  });
+}
+
+function getEntryProjectId(entry: HistoryEntry): string | null {
+  return entry.kind === "snapshot" ? entry.snapshot.projectId : entry.projectId;
+}
+
+function formatToastTitle(prefix: "Undid" | "Redid", label?: string): string {
+  return label ? `${prefix}: ${label}` : prefix;
 }
 
 export const useHistoryStore = create<HistoryState>((set) => ({
@@ -152,62 +219,117 @@ export const useHistoryStore = create<HistoryState>((set) => ({
   pushState: () => {
     const snapshot = captureSnapshot();
     set((state) => {
-      const undoStack = [...state.undoStack, snapshot].slice(-MAX_HISTORY);
+      const entry: SnapshotHistoryEntry = { kind: "snapshot", snapshot };
+      const undoStack = [...state.undoStack, entry].slice(-MAX_HISTORY);
+      return { undoStack, redoStack: [], canUndo: true, canRedo: false };
+    });
+  },
+
+  pushRouteChange: (change) => {
+    const entry: RouteHistoryEntry = {
+      kind: "route",
+      projectId: useProjectStore.getState().currentProjectId,
+      before: captureRouteState(change.before),
+      after: captureRouteState(change.after),
+      undoLabel: change.undoLabel,
+      redoLabel: change.redoLabel ?? change.undoLabel,
+    };
+
+    set((state) => {
+      const undoStack = [...state.undoStack, entry].slice(-MAX_HISTORY);
       return { undoStack, redoStack: [], canUndo: true, canRedo: false };
     });
   },
 
   undo: () => {
+    let toastTitle: string | null = null;
+
     set((state) => {
       if (state.undoStack.length === 0) return state;
 
       const current = captureSnapshot();
       const undoStack = [...state.undoStack];
-      const snapshot = undoStack.pop()!;
+      const entry = undoStack.pop()!;
 
       // Guard against cross-project corruption
-      if (snapshot.projectId !== current.projectId) {
+      if (getEntryProjectId(entry) !== current.projectId) {
         return { undoStack: [], redoStack: [], canUndo: false, canRedo: false };
       }
 
-      const redoStack = [...state.redoStack, current];
+      const redoStack = [...state.redoStack];
+      if (entry.kind === "snapshot") {
+        restoreSnapshot(entry.snapshot);
+        redoStack.push({
+          kind: "snapshot",
+          snapshot: current,
+          undoLabel: entry.redoLabel,
+          redoLabel: entry.undoLabel,
+        });
+        toastTitle = formatToastTitle("Undid", entry.undoLabel);
+      } else {
+        restoreRouteState(entry.before);
+        redoStack.push(entry);
+        toastTitle = formatToastTitle("Undid", entry.undoLabel);
+      }
 
-      restoreSnapshot(snapshot);
       invalidateSerializationCache();
 
       return {
         undoStack,
         redoStack,
         canUndo: undoStack.length > 0,
-        canRedo: true,
+        canRedo: redoStack.length > 0,
       };
     });
+
+    if (toastTitle) {
+      useUIStore.getState().addToast({ title: toastTitle, variant: "info" });
+    }
   },
 
   redo: () => {
+    let toastTitle: string | null = null;
+
     set((state) => {
       if (state.redoStack.length === 0) return state;
 
       const current = captureSnapshot();
       const redoStack = [...state.redoStack];
-      const snapshot = redoStack.pop()!;
+      const entry = redoStack.pop()!;
 
       // Guard against cross-project corruption
-      if (snapshot.projectId !== current.projectId) {
+      if (getEntryProjectId(entry) !== current.projectId) {
         return { undoStack: [], redoStack: [], canUndo: false, canRedo: false };
       }
 
-      const undoStack = [...state.undoStack, current];
+      const undoStack = [...state.undoStack];
+      if (entry.kind === "snapshot") {
+        restoreSnapshot(entry.snapshot);
+        undoStack.push({
+          kind: "snapshot",
+          snapshot: current,
+          undoLabel: entry.redoLabel,
+          redoLabel: entry.undoLabel,
+        });
+        toastTitle = formatToastTitle("Redid", entry.undoLabel);
+      } else {
+        restoreRouteState(entry.after);
+        undoStack.push(entry);
+        toastTitle = formatToastTitle("Redid", entry.redoLabel);
+      }
 
-      restoreSnapshot(snapshot);
       invalidateSerializationCache();
 
       return {
         undoStack,
         redoStack,
-        canUndo: true,
+        canUndo: undoStack.length > 0,
         canRedo: redoStack.length > 0,
       };
     });
+
+    if (toastTitle) {
+      useUIStore.getState().addToast({ title: toastTitle, variant: "info" });
+    }
   },
 }));

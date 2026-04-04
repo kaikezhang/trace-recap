@@ -1149,6 +1149,65 @@ async function resolveExistingProjectMeta(
   return getProjectMeta(projectId);
 }
 
+type RouteHistoryState = Pick<
+  ProjectState,
+  "locations" | "segments" | "segmentTimingOverrides"
+>;
+
+type LocationUpdateFields = Partial<
+  Pick<
+    Location,
+    | "name"
+    | "nameZh"
+    | "coordinates"
+    | "chapterTitle"
+    | "chapterNote"
+    | "chapterDate"
+    | "chapterEmoji"
+  >
+>;
+
+function getRouteHistoryState(
+  state: RouteHistoryState,
+): RouteHistoryState {
+  return {
+    locations: state.locations,
+    segments: state.segments,
+    segmentTimingOverrides: state.segmentTimingOverrides,
+  };
+}
+
+function pushRouteHistoryChange(params: {
+  before: RouteHistoryState;
+  after: RouteHistoryState;
+  label: string;
+  redoLabel?: string;
+}): void {
+  useHistoryStore.getState().pushRouteChange({
+    before: getRouteHistoryState(params.before),
+    after: getRouteHistoryState(params.after),
+    undoLabel: params.label,
+    redoLabel: params.redoLabel,
+  });
+}
+
+function formatStopLabel(name: string | undefined): string {
+  const trimmed = name?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "Untitled stop";
+}
+
+function buildLocationUpdateLabel(
+  previousLocation: Location,
+  nextLocation: Location,
+  changedKeys: Array<keyof LocationUpdateFields>,
+): string {
+  if (changedKeys.length === 1 && changedKeys[0] === "name") {
+    return `Rename ${formatStopLabel(previousLocation.name)} → ${formatStopLabel(nextLocation.name)}`;
+  }
+
+  return `Edit ${formatStopLabel(nextLocation.name)}`;
+}
+
 async function queueProjectSave(
   projectId: string,
   saveVersion: number,
@@ -1318,125 +1377,214 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   segmentColors: {},
 
   addLocation: (loc) => {
-    useHistoryStore.getState().pushState();
-    return set((state) => {
-      const newLocation: Location = {
-        id: generateId(),
-        name: loc.name,
-        nameZh: loc.nameZh,
-        coordinates: loc.coordinates,
-        isWaypoint: false,
-        photos: [],
-      };
-      const locations = insertLocationAtIndex(
-        state.locations,
-        newLocation,
-        state.locations.length,
-      );
-      return {
-        locations,
-        segments: rebuildSegments(locations, state.segments),
-      };
+    const state = get();
+    const newLocation: Location = {
+      id: generateId(),
+      name: loc.name,
+      nameZh: loc.nameZh,
+      coordinates: loc.coordinates,
+      isWaypoint: false,
+      photos: [],
+    };
+    const locations = insertLocationAtIndex(
+      state.locations,
+      newLocation,
+      state.locations.length,
+    );
+    const nextState = {
+      locations,
+      segments: rebuildSegments(locations, state.segments),
+      segmentTimingOverrides: state.segmentTimingOverrides,
+    };
+
+    pushRouteHistoryChange({
+      before: state,
+      after: nextState,
+      label: `Add ${formatStopLabel(newLocation.name)}`,
     });
+    set(nextState);
   },
 
   addLocationAtCoordinates: async (lngLat, options) => {
     const locationData = await resolveLocationFromCoordinates(lngLat.lng, lngLat.lat);
-    useHistoryStore.getState().pushState();
+    const state = get();
+    const shouldBecomeWaypoint =
+      Boolean(options?.isWaypoint) && state.locations.length >= 2;
+    const insertIndex =
+      typeof options?.insertIndex === "number"
+        ? options.insertIndex
+        : shouldBecomeWaypoint
+          ? state.locations.length - 1
+          : state.locations.length;
+    const newLocation: Location = {
+      id: generateId(),
+      ...locationData,
+      isWaypoint: shouldBecomeWaypoint,
+      photos: [],
+    };
+    const locations = insertLocationAtIndex(
+      state.locations,
+      newLocation,
+      insertIndex,
+    );
+    const nextState = {
+      locations,
+      segments: rebuildSegments(locations, state.segments),
+      segmentTimingOverrides: state.segmentTimingOverrides,
+    };
 
-    return set((state) => {
-      const shouldBecomeWaypoint =
-        Boolean(options?.isWaypoint) && state.locations.length >= 2;
-      const insertIndex =
-        typeof options?.insertIndex === "number"
-          ? options.insertIndex
-          : shouldBecomeWaypoint
-            ? state.locations.length - 1
-            : state.locations.length;
-      const newLocation: Location = {
-        id: generateId(),
-        ...locationData,
-        isWaypoint: shouldBecomeWaypoint,
-        photos: [],
-      };
-      const locations = insertLocationAtIndex(
-        state.locations,
-        newLocation,
-        insertIndex,
-      );
-      return {
-        locations,
-        segments: rebuildSegments(locations, state.segments),
-      };
+    pushRouteHistoryChange({
+      before: state,
+      after: nextState,
+      label: `Add ${formatStopLabel(newLocation.name)}`,
     });
+    set(nextState);
   },
 
   duplicateLocation: (locationId) => {
-    useHistoryStore.getState().pushState();
-    return set((state) => {
-      const locationIndex = state.locations.findIndex((location) => location.id === locationId);
-      if (locationIndex < 0) {
-        return state;
-      }
+    const state = get();
+    const locationIndex = state.locations.findIndex((location) => location.id === locationId);
+    if (locationIndex < 0) {
+      return;
+    }
 
-      const locations = insertLocationAtIndex(
-        state.locations,
-        duplicateLocationEntry(state.locations[locationIndex]),
-        locationIndex + 1,
-      );
-      return {
-        locations,
-        segments: rebuildSegments(locations, state.segments),
-      };
+    const sourceLocation = state.locations[locationIndex];
+    const locations = insertLocationAtIndex(
+      state.locations,
+      duplicateLocationEntry(sourceLocation),
+      locationIndex + 1,
+    );
+    const nextState = {
+      locations,
+      segments: rebuildSegments(locations, state.segments),
+      segmentTimingOverrides: state.segmentTimingOverrides,
+    };
+
+    pushRouteHistoryChange({
+      before: state,
+      after: nextState,
+      label: `Duplicate ${formatStopLabel(sourceLocation.name)}`,
     });
+    set(nextState);
   },
 
   removeLocation: (id) => {
-    useHistoryStore.getState().pushState();
-    return set((state) => {
-      const locations = normalizeEdgeWaypoints(
-        state.locations.filter((l) => l.id !== id),
-      );
-      return {
-        locations,
-        segments: rebuildSegments(locations, state.segments),
-      };
+    const state = get();
+    const location = state.locations.find((entry) => entry.id === id);
+    if (!location) {
+      return;
+    }
+
+    const locations = normalizeEdgeWaypoints(
+      state.locations.filter((entry) => entry.id !== id),
+    );
+    const nextState = {
+      locations,
+      segments: rebuildSegments(locations, state.segments),
+      segmentTimingOverrides: state.segmentTimingOverrides,
+    };
+
+    pushRouteHistoryChange({
+      before: state,
+      after: nextState,
+      label: `Remove ${formatStopLabel(location.name)}`,
     });
+    set(nextState);
   },
 
   reorderLocations: (fromIndex, toIndex) => {
-    useHistoryStore.getState().pushState();
-    return set((state) => {
-      const locations = [...state.locations];
-      const [moved] = locations.splice(fromIndex, 1);
-      locations.splice(toIndex, 0, moved);
-      const normalizedLocations = normalizeEdgeWaypoints(locations);
-      return {
-        locations: normalizedLocations,
-        segments: rebuildSegments(normalizedLocations, state.segments),
-      };
+    const state = get();
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= state.locations.length ||
+      toIndex >= state.locations.length
+    ) {
+      return;
+    }
+
+    const locations = [...state.locations];
+    const [moved] = locations.splice(fromIndex, 1);
+    if (!moved) {
+      return;
+    }
+
+    locations.splice(toIndex, 0, moved);
+    const normalizedLocations = normalizeEdgeWaypoints(locations);
+    const nextState = {
+      locations: normalizedLocations,
+      segments: rebuildSegments(normalizedLocations, state.segments),
+      segmentTimingOverrides: state.segmentTimingOverrides,
+    };
+
+    pushRouteHistoryChange({
+      before: state,
+      after: nextState,
+      label: `Move ${formatStopLabel(moved.name)} to stop ${toIndex + 1}`,
     });
+    set(nextState);
   },
 
-  updateLocation: (id, updates) =>
-    set((state) => ({
-      locations: state.locations.map((l) =>
-        l.id === id ? { ...l, ...updates } : l,
-      ),
-    })),
+  updateLocation: (id, updates) => {
+    const state = get();
+    const previousLocation = state.locations.find((location) => location.id === id);
+    if (!previousLocation) {
+      return;
+    }
+
+    const changedKeys = (Object.keys(updates) as Array<keyof LocationUpdateFields>).filter(
+      (key) =>
+        Object.prototype.hasOwnProperty.call(updates, key) &&
+        previousLocation[key] !== updates[key],
+    );
+
+    if (changedKeys.length === 0) {
+      return;
+    }
+
+    const nextLocation = { ...previousLocation, ...updates };
+    const locations = state.locations.map((location) =>
+      location.id === id ? nextLocation : location,
+    );
+
+    pushRouteHistoryChange({
+      before: state,
+      after: {
+        locations,
+        segments: state.segments,
+        segmentTimingOverrides: state.segmentTimingOverrides,
+      },
+      label: buildLocationUpdateLabel(previousLocation, nextLocation, changedKeys),
+    });
+    set({ locations });
+  },
 
   toggleWaypoint: (locationId) => {
-    useHistoryStore.getState().pushState();
-    return set((state) => {
-      const idx = state.locations.findIndex((l) => l.id === locationId);
-      // First and last locations can never be waypoints
-      if (idx <= 0 || idx >= state.locations.length - 1) return state;
-      return {
-        locations: state.locations.map((l) =>
-          l.id === locationId ? { ...l, isWaypoint: !l.isWaypoint } : l,
-        ),
-      };
+    const state = get();
+    const idx = state.locations.findIndex((location) => location.id === locationId);
+    // First and last locations can never be waypoints
+    if (idx <= 0 || idx >= state.locations.length - 1) {
+      return;
+    }
+
+    const targetLocation = state.locations[idx];
+    const locations = state.locations.map((location) =>
+      location.id === locationId
+        ? { ...location, isWaypoint: !location.isWaypoint }
+        : location,
+    );
+
+    pushRouteHistoryChange({
+      before: state,
+      after: {
+        locations,
+        segments: state.segments,
+        segmentTimingOverrides: state.segmentTimingOverrides,
+      },
+      label: `${targetLocation.isWaypoint ? "Mark" : "Convert"} ${formatStopLabel(targetLocation.name)} ${targetLocation.isWaypoint ? "as destination" : "to waypoint"}`,
     });
+    set({ locations });
   },
 
   setTransportMode: (segmentId, mode) => {
