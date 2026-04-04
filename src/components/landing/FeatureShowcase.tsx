@@ -290,7 +290,7 @@ function FeatureVisual({
           </div>
 
           <div
-            className="relative min-h-[320px] overflow-hidden rounded-[28px] border"
+            className="relative min-h-[240px] overflow-hidden rounded-[28px] border sm:min-h-[320px]"
             style={{
               borderColor: brand.colors.warm[200],
               background:
@@ -409,9 +409,9 @@ function FeatureVisual({
           </div>
         </div>
 
-        <div className="relative mt-6 min-h-[340px]">
+        <div className="relative mt-6 min-h-[280px] sm:min-h-[340px]">
           <div
-            className="absolute left-2 top-8 h-56 w-[66%] rounded-[28px] border p-4"
+            className="absolute left-1 top-8 h-48 w-[60%] rounded-[28px] border p-3 sm:left-2 sm:h-56 sm:w-[66%] sm:p-4"
             style={{
               borderColor: brand.colors.warm[200],
               background:
@@ -455,7 +455,7 @@ function FeatureVisual({
           </div>
 
           <div
-            className="absolute right-2 top-2 h-64 w-[54%] rounded-[32px] border p-4"
+            className="absolute right-1 top-2 h-52 w-[50%] rounded-[32px] border p-3 sm:right-2 sm:h-64 sm:w-[54%] sm:p-4"
             style={{
               borderColor: brand.colors.ocean[100],
               background:
@@ -558,7 +558,7 @@ function FeatureVisual({
         <Pill icon={Upload} label="4K ready" teal />
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,0.82fr)_minmax(220px,0.58fr)]">
+      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,0.58fr)]">
         <div
           className="relative overflow-hidden rounded-[28px] border p-4"
           style={{

@@ -52,7 +52,7 @@ export function FaqSection() {
             FAQ
           </p>
           <h2
-            className="mt-4 text-4xl leading-[0.96] font-semibold sm:text-5xl"
+            className="mt-4 text-3xl leading-[0.96] font-semibold sm:text-4xl lg:text-5xl"
             style={{ color: brand.colors.warm[900], fontFamily: brand.fonts.display }}
           >
             The practical questions people ask before they trust a new travel tool.
@@ -98,7 +98,7 @@ export function FaqSection() {
                   <motion.span
                     animate={{ rotate: isOpen ? 180 : 0 }}
                     transition={{ duration: 0.24 }}
-                    className="shrink-0"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center"
                     style={{ color: brand.colors.primary[600] }}
                   >
                     <ChevronDown className="h-5 w-5" />

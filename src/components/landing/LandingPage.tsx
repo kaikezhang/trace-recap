@@ -577,7 +577,7 @@ export function LandingPage() {
                 </form>
               </div>
 
-              <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-8 lg:grid-cols-4">
                 {footerColumns.map((column) => (
                   <div key={column.title}>
                     <h3
@@ -591,7 +591,7 @@ export function LandingPage() {
                         <Link
                           key={link.label}
                           href={link.href}
-                          className="block text-sm transition-opacity hover:opacity-80"
+                          className="flex min-h-[44px] items-center text-sm transition-opacity hover:opacity-80 sm:min-h-0"
                           style={{ color: brand.colors.warm[600] }}
                         >
                           {link.label}
@@ -682,7 +682,7 @@ function HeroMapDemo() {
           </div>
         </div>
 
-        <div className="relative mt-5 min-h-[560px] overflow-hidden rounded-[28px] border sm:min-h-[640px]">
+        <div className="relative mt-5 min-h-[380px] overflow-hidden rounded-[28px] border sm:min-h-[560px] lg:min-h-[640px]">
           <div
             className="absolute inset-0"
             style={{
@@ -756,7 +756,7 @@ function HeroMapDemo() {
           ].map((city, index) => (
             <span
               key={city.label}
-              className="absolute rounded-full px-3 py-1 text-xs font-medium sm:text-sm"
+              className="absolute hidden rounded-full px-3 py-1 text-xs font-medium min-[480px]:block sm:text-sm"
               style={{
                 ...city,
                 color: brand.colors.warm[700],
@@ -770,7 +770,7 @@ function HeroMapDemo() {
           ))}
 
           <div
-            className="absolute left-[17%] top-[23%] rounded-[18px] border px-3 py-2"
+            className="absolute left-[17%] top-[23%] hidden rounded-[18px] border px-3 py-2 sm:block"
             style={{
               borderColor: brand.colors.primary[100],
               backgroundColor: "rgba(255,247,237,0.94)",
@@ -789,7 +789,7 @@ function HeroMapDemo() {
           </div>
 
           <div
-            className="absolute left-[56%] top-[28%] rounded-[18px] border px-3 py-2"
+            className="absolute left-[56%] top-[28%] hidden rounded-[18px] border px-3 py-2 sm:block"
             style={{
               borderColor: brand.colors.ocean[100],
               backgroundColor: "rgba(240,253,250,0.94)",
