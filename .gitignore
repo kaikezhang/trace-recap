@@ -50,3 +50,12 @@ package-lock.json
 tmp/
 next-env.d.ts
 
+
+# VibeFlow ephemeral runtime data
+.vibeflow/state/
+
+# VibeFlow ephemeral runtime data
+.vibeflow/dashboard/
+
+# VibeFlow ephemeral runtime data
+.vibeflow/events.jsonl
