@@ -547,14 +547,13 @@ export default memo(function MapCanvas() {
     });
   }, [segmentColors, moodColorsEnabled, segments]);
 
-  const isActive = playbackState === "playing" || playbackState === "paused";
   const citySearchInput = typeof document !== "undefined"
     ? document.querySelector<HTMLInputElement>('[data-city-search-input="true"]')
     : null;
 
   return (
     <div className="relative w-full h-full">
-      <div ref={containerRef} className={`w-full h-full ${isActive ? "hide-map-controls" : ""}`} />
+      <div ref={containerRef} className="h-full w-full" />
       <AnimatePresence>
         {!mapLoaded && (
           <motion.div

@@ -9,6 +9,8 @@ interface OnboardingHintProps {
   onDismiss: () => void;
   className?: string;
   arrowClassName?: string;
+  interactive?: boolean;
+  dismissLabel?: string;
 }
 
 export default function OnboardingHint({
@@ -16,38 +18,11 @@ export default function OnboardingHint({
   onDismiss,
   className,
   arrowClassName,
+  interactive = true,
+  dismissLabel = "Click to dismiss",
 }: OnboardingHintProps) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onDismiss}
-      initial={{ opacity: 0, y: 10, scale: 0.97 }}
-      animate={{
-        opacity: 1,
-        y: 0,
-        scale: [1, 1.01, 1],
-      }}
-      exit={{ opacity: 0, y: 6, scale: 0.98 }}
-      transition={{
-        opacity: { duration: 0.22, ease: "easeOut" },
-        y: { duration: 0.22, ease: "easeOut" },
-        scale: {
-          duration: 2.2,
-          ease: "easeInOut",
-          repeat: Number.POSITIVE_INFINITY,
-          repeatDelay: 1.1,
-        },
-      }}
-      className={cn(
-        "absolute z-[80] max-w-xs overflow-visible rounded-2xl border px-3.5 py-3 text-left backdrop-blur-sm",
-        className,
-      )}
-      style={{
-        background: `linear-gradient(180deg, ${brand.colors.primary[50]} 0%, rgba(255, 251, 245, 0.96) 100%)`,
-        borderColor: `${brand.colors.primary[200]}`,
-        boxShadow: brand.shadows.lg,
-      }}
-    >
+  const content = (
+    <>
       <motion.span
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 rounded-[inherit]"
@@ -90,7 +65,7 @@ export default function OnboardingHint({
             {message}
           </span>
           <span className="mt-1.5 block text-[11px] text-stone-500">
-            Click to dismiss
+            {dismissLabel}
           </span>
         </span>
       </span>
@@ -106,6 +81,78 @@ export default function OnboardingHint({
         }}
         aria-hidden="true"
       />
-    </motion.button>
+    </>
+  );
+
+  if (interactive) {
+    return (
+      <motion.button
+        type="button"
+        onClick={onDismiss}
+        initial={{ opacity: 0, y: 10, scale: 0.97 }}
+        animate={{
+          opacity: 1,
+          y: 0,
+          scale: [1, 1.01, 1],
+        }}
+        exit={{ opacity: 0, y: 6, scale: 0.98 }}
+        transition={{
+          opacity: { duration: 0.22, ease: "easeOut" as const },
+          y: { duration: 0.22, ease: "easeOut" as const },
+          scale: {
+            duration: 2.2,
+            ease: "easeInOut" as const,
+            repeat: Number.POSITIVE_INFINITY,
+            repeatDelay: 1.1,
+          },
+        }}
+        className={cn(
+          "absolute z-[80] max-w-xs overflow-visible rounded-2xl border px-3.5 py-3 text-left backdrop-blur-sm",
+          className,
+        )}
+        style={{
+          background: `linear-gradient(180deg, ${brand.colors.primary[50]} 0%, rgba(255, 251, 245, 0.96) 100%)`,
+          borderColor: `${brand.colors.primary[200]}`,
+          boxShadow: brand.shadows.lg,
+        }}
+      >
+        {content}
+      </motion.button>
+    );
+  }
+
+  return (
+    <motion.div
+      role="status"
+      aria-live="polite"
+      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        scale: [1, 1.01, 1],
+      }}
+      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+      transition={{
+        opacity: { duration: 0.22, ease: "easeOut" as const },
+        y: { duration: 0.22, ease: "easeOut" as const },
+        scale: {
+          duration: 2.2,
+          ease: "easeInOut" as const,
+          repeat: Number.POSITIVE_INFINITY,
+          repeatDelay: 1.1,
+        },
+      }}
+      className={cn(
+        "absolute z-[80] max-w-xs overflow-visible rounded-2xl border px-3.5 py-3 text-left backdrop-blur-sm",
+        className,
+      )}
+      style={{
+        background: `linear-gradient(180deg, ${brand.colors.primary[50]} 0%, rgba(255, 251, 245, 0.96) 100%)`,
+        borderColor: `${brand.colors.primary[200]}`,
+        boxShadow: brand.shadows.lg,
+      }}
+    >
+      {content}
+    </motion.div>
   );
 }
