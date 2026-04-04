@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
+import QuickStyleBar from "./QuickStyleBar";
 import LeftPanel from "./LeftPanel";
 import BottomSheet from "./BottomSheet";
 import ExportDialog from "./ExportDialog";
@@ -173,6 +174,7 @@ function EditorContent() {
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const viewportRatio = useUIStore((s) => s.viewportRatio);
+  const speedMultiplier = useUIStore((s) => s.speedMultiplier);
   const setBottomSheetState = useUIStore((s) => s.setBottomSheetState);
 
   const stageViewportRef = useRef<HTMLDivElement>(null);
@@ -513,6 +515,7 @@ function EditorContent() {
       locations,
       segments,
       segmentTimingOverrides,
+      speedMultiplier,
     );
     engineRef.current = engine;
     setTotalDuration(engine.getTotalDuration());
@@ -838,7 +841,7 @@ function EditorContent() {
       engine.destroy();
       clearAlbumSequenceTimersRef.current();
     };
-  }, [map, locations, segmentTimingOverrides, segments]);
+  }, [map, locations, segmentTimingOverrides, segments, speedMultiplier]);
 
   const handlePlay = useCallback(() => {
     // Immediately hide all future segment layers on the map
@@ -1182,6 +1185,7 @@ function EditorContent() {
   return (
     <div className="flex h-screen flex-col bg-[#FAFAFA]">
       {!isPlaying && <TopToolbar />}
+      {!isPlaying && <QuickStyleBar />}
       <div className="flex flex-1 overflow-hidden">
         <LeftPanel
           onLocationClick={handleLocationClick}

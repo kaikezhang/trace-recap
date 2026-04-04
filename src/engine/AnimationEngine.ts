@@ -119,6 +119,7 @@ export class AnimationEngine {
   // Map from group index to the original segment indices
   private groupSegmentIndices: number[][];
   private timingOverrides: Record<string, number>;
+  private speedMultiplier: number;
 
   private animFrameId: number | null = null;
   private startTime: number | null = null;
@@ -129,12 +130,17 @@ export class AnimationEngine {
     map: mapboxgl.Map,
     locations: Location[],
     segments: Segment[],
-    timingOverrides?: Record<string, number>
+    timingOverrides?: Record<string, number>,
+    speedMultiplier = 1,
   ) {
     this.map = map;
     this.locations = locations;
     this.segments = segments;
     this.timingOverrides = timingOverrides ?? {};
+    this.speedMultiplier =
+      Number.isFinite(speedMultiplier) && speedMultiplier > 0
+        ? speedMultiplier
+        : 1;
     this.listeners = new Map();
 
     // Build animation groups
@@ -147,7 +153,7 @@ export class AnimationEngine {
 
     this.camera = new CameraController(this.groups);
     this.iconAnimator = new IconAnimator(map, this.groups);
-    this.timeline = this.computeTimeline();
+    this.timeline = this.applySpeedMultiplier(this.computeTimeline());
     this.totalDuration = this.computeTotalDuration();
   }
 
@@ -317,6 +323,25 @@ export class AnimationEngine {
     if (this.timeline.length === 0) return 0;
     const last = this.timeline[this.timeline.length - 1];
     return last.startTime + last.duration;
+  }
+
+  private applySpeedMultiplier(timeline: SegmentTiming[]): SegmentTiming[] {
+    if (this.speedMultiplier === 1) {
+      return timeline;
+    }
+
+    const scale = 1 / this.speedMultiplier;
+
+    return timeline.map((entry) => ({
+      ...entry,
+      startTime: entry.startTime * scale,
+      duration: entry.duration * scale,
+      phases: entry.phases.map((phase) => ({
+        ...phase,
+        startTime: phase.startTime * scale,
+        duration: phase.duration * scale,
+      })),
+    }));
   }
 
   getTimeline(): SegmentTiming[] {

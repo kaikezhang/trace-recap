@@ -144,6 +144,7 @@ export default function ExportDialog() {
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const cityLabelTopPercent = useUIStore((s) => s.cityLabelTopPercent);
   const viewportRatio = useUIStore((s) => s.viewportRatio);
+  const speedMultiplier = useUIStore((s) => s.speedMultiplier);
   const routeLabelSize = useUIStore((s) => s.routeLabelSize);
   const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
   const photoAnimation = useUIStore((s) => s.photoAnimation);
@@ -167,13 +168,19 @@ export default function ExportDialog() {
       return;
     }
 
-    const engine = new AnimationEngine(map, locations, segments, segmentTimingOverrides);
+    const engine = new AnimationEngine(
+      map,
+      locations,
+      segments,
+      segmentTimingOverrides,
+      speedMultiplier,
+    );
     setEstimatedDuration(engine.getTotalDuration());
 
     return () => {
       engine.destroy();
     };
-  }, [open, map, locations, segments, segmentTimingOverrides, isExporting, downloadUrl]);
+  }, [open, map, locations, segments, segmentTimingOverrides, speedMultiplier, isExporting, downloadUrl]);
 
   const startExport = useCallback(async (settings: ExportSettings) => {
     if (!map || segments.length === 0) return;
@@ -186,9 +193,16 @@ export default function ExportDialog() {
     setExportError(null);
     setEncodingMethod(null);
 
-    const engine = new AnimationEngine(map, locations, segments, segmentTimingOverrides);
+    const engine = new AnimationEngine(
+      map,
+      locations,
+      segments,
+      segmentTimingOverrides,
+      speedMultiplier,
+    );
     const exporter = new VideoExporter(engine, map, {
       ...settings,
+      speedMultiplier,
       cityLabelSize,
       cityLabelLang,
       cityLabelTopPercent,
@@ -233,7 +247,7 @@ export default function ExportDialog() {
       setIsExporting(false);
       exporterRef.current = null;
     }
-  }, [map, locations, segments, segmentTimingOverrides, cityLabelSize, cityLabelLang, cityLabelTopPercent, viewportRatio, routeLabelSize, routeLabelBottomPercent, photoAnimation, photoStyle, photoFrameStyle]);
+  }, [map, locations, segments, segmentTimingOverrides, speedMultiplier, cityLabelSize, cityLabelLang, cityLabelTopPercent, viewportRatio, routeLabelSize, routeLabelBottomPercent, photoAnimation, photoStyle, photoFrameStyle]);
 
   const handleQuickExport = () => {
     void startExport({

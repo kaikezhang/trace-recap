@@ -42,6 +42,7 @@ import { ALLOWED_CAPTION_FONTS } from "@/lib/constants";
 
 export interface RouteUISettings {
   viewportRatio?: AspectRatio;
+  speedMultiplier?: number;
   cityLabelLang?: "en" | "zh";
   cityLabelSize?: number;
   cityLabelTopPercent?: number;
@@ -423,6 +424,19 @@ const VALID_VIEWPORT_RATIOS: AspectRatio[] = ["free", "16:9", "9:16", "4:3", "3:
 const VALID_PHOTO_ANIMATIONS: PhotoAnimation[] = ["scale", "fade", "slide", "flip", "scatter", "typewriter", "none"];
 const VALID_PHOTO_STYLES: PhotoStyle[] = ["classic", "kenburns", "portal", "bloom"];
 const VALID_SCENE_TRANSITIONS: SceneTransition[] = ["cut", "dissolve", "blur-dissolve", "wipe"];
+const MIN_SPEED_MULTIPLIER = 0.5;
+const MAX_SPEED_MULTIPLIER = 2;
+
+function normalizeSpeedMultiplier(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return Math.min(
+    MAX_SPEED_MULTIPLIER,
+    Math.max(MIN_SPEED_MULTIPLIER, Math.round(value * 10) / 10),
+  );
+}
 
 const generateId = () => String(nextId++);
 
@@ -491,6 +505,7 @@ function collectRouteUISettings(): RouteUISettings {
   const uiState = useUIStore.getState();
   return {
     viewportRatio: uiState.viewportRatio,
+    speedMultiplier: uiState.speedMultiplier,
     cityLabelLang: uiState.cityLabelLang,
     cityLabelSize: uiState.cityLabelSize,
     cityLabelTopPercent: uiState.cityLabelTopPercent,
@@ -507,10 +522,13 @@ function collectRouteUISettings(): RouteUISettings {
 }
 
 function parseImportedUISettings(data: ImportRouteData): RouteUISettings {
+  const speedMultiplier = normalizeSpeedMultiplier(data.speedMultiplier);
+
   return {
     ...(VALID_VIEWPORT_RATIOS.includes(data.viewportRatio as AspectRatio)
       ? { viewportRatio: data.viewportRatio }
       : {}),
+    ...(speedMultiplier !== undefined ? { speedMultiplier } : {}),
     ...(data.cityLabelLang === "en" || data.cityLabelLang === "zh"
       ? { cityLabelLang: data.cityLabelLang }
       : {}),
@@ -554,6 +572,7 @@ function applyImportedUISettings(uiSettings: RouteUISettings): void {
   const nextState: Partial<ReturnType<typeof useUIStore.getState>> = {};
 
   if (uiSettings.viewportRatio !== undefined) nextState.viewportRatio = uiSettings.viewportRatio;
+  if (uiSettings.speedMultiplier !== undefined) nextState.speedMultiplier = uiSettings.speedMultiplier;
   if (uiSettings.cityLabelLang !== undefined) nextState.cityLabelLang = uiSettings.cityLabelLang;
   if (uiSettings.cityLabelSize !== undefined) nextState.cityLabelSize = uiSettings.cityLabelSize;
   if (uiSettings.cityLabelTopPercent !== undefined) nextState.cityLabelTopPercent = uiSettings.cityLabelTopPercent;

@@ -19,6 +19,7 @@ interface PersistedUISettings {
   routeLabelBottomPercent: number;
   routeLabelSize: number;
   viewportRatio: AspectRatio;
+  speedMultiplier: number;
   photoAnimation: PhotoAnimation;
   photoStyle: PhotoStyle;
   sceneTransition: SceneTransition;
@@ -55,6 +56,20 @@ const saved = loadPersistedSettings();
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
+const MIN_SPEED_MULTIPLIER = 0.5;
+const MAX_SPEED_MULTIPLIER = 2;
+
+function normalizeSpeedMultiplier(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 1;
+  }
+
+  return Math.min(
+    MAX_SPEED_MULTIPLIER,
+    Math.max(MIN_SPEED_MULTIPLIER, Math.round(value * 10) / 10),
+  );
+}
+
 interface UIState {
   leftPanelOpen: boolean;
   exportDialogOpen: boolean;
@@ -69,6 +84,7 @@ interface UIState {
   routeLabelBottomPercent: number; // Route label bottom position as % of container (default 15)
   routeLabelSize: number; // Route label font size in px (default 14)
   viewportRatio: AspectRatio; // WYSIWYG viewport aspect ratio
+  speedMultiplier: number; // Global animation speed multiplier (0.5x - 2x)
   photoAnimation: PhotoAnimation; // Photo enter/exit animation style
   photoStyle: PhotoStyle; // Photo display style
   sceneTransition: SceneTransition; // Scene transition style between locations
@@ -93,6 +109,7 @@ interface UIState {
   setRouteLabelBottomPercent: (percent: number) => void;
   setRouteLabelSize: (size: number) => void;
   setViewportRatio: (ratio: AspectRatio) => void;
+  setSpeedMultiplier: (multiplier: number) => void;
   setPhotoAnimation: (animation: PhotoAnimation) => void;
   setPhotoStyle: (style: PhotoStyle) => void;
   setSceneTransition: (transition: SceneTransition) => void;
@@ -118,6 +135,7 @@ export const useUIStore = create<UIState>((set) => ({
   routeLabelBottomPercent: saved.routeLabelBottomPercent ?? 15,
   routeLabelSize: saved.routeLabelSize ?? 14,
   viewportRatio: saved.viewportRatio ?? "free",
+  speedMultiplier: normalizeSpeedMultiplier(saved.speedMultiplier),
   photoAnimation: saved.photoAnimation ?? "scale",
   photoStyle: saved.photoStyle ?? "classic",
   sceneTransition: saved.sceneTransition ?? "dissolve",
@@ -143,6 +161,8 @@ export const useUIStore = create<UIState>((set) => ({
   setRouteLabelBottomPercent: (routeLabelBottomPercent) => set({ routeLabelBottomPercent }),
   setRouteLabelSize: (routeLabelSize) => set({ routeLabelSize }),
   setViewportRatio: (viewportRatio) => set({ viewportRatio }),
+  setSpeedMultiplier: (speedMultiplier) =>
+    set({ speedMultiplier: normalizeSpeedMultiplier(speedMultiplier) }),
   setPhotoAnimation: (photoAnimation) => set({ photoAnimation }),
   setPhotoStyle: (photoStyle) => set({ photoStyle }),
   setSceneTransition: (sceneTransition) => set({ sceneTransition }),
@@ -167,6 +187,7 @@ useUIStore.subscribe((state) => {
       routeLabelBottomPercent: state.routeLabelBottomPercent,
       routeLabelSize: state.routeLabelSize,
       viewportRatio: state.viewportRatio,
+      speedMultiplier: state.speedMultiplier,
       photoAnimation: state.photoAnimation,
       photoStyle: state.photoStyle,
       sceneTransition: state.sceneTransition,
