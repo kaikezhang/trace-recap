@@ -319,7 +319,7 @@ export default function ExportDialog() {
   if (downloadUrl) {
     return (
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-md overflow-hidden">
+        <DialogContent className="touch-target-mobile-scope overflow-hidden sm:max-w-md">
           <motion.div
             className="flex flex-col items-center py-6 space-y-5"
             initial={{ opacity: 0, scale: 0.95 }}
@@ -402,7 +402,7 @@ export default function ExportDialog() {
   if (isExporting && progress) {
     return (
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="touch-target-mobile-scope sm:max-w-md">
           <motion.div
             className="flex flex-col items-center py-8 space-y-6"
             initial={{ opacity: 0 }}
@@ -436,7 +436,7 @@ export default function ExportDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="touch-target-mobile-scope sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" style={{ color: brand.colors.primary[500] }} />

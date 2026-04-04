@@ -204,4 +204,32 @@
   .shadow-ocean-glow {
     box-shadow: 0 0 30px rgba(20, 184, 166, 0.15);
   }
+
+  @media (max-width: 767px) {
+    .touch-target-mobile {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .touch-target-mobile-hitbox {
+      position: relative;
+    }
+
+    .touch-target-mobile-hitbox::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 44px;
+      height: 44px;
+      transform: translate(-50%, -50%);
+    }
+
+    .touch-target-mobile-scope button,
+    .touch-target-mobile-scope [role="button"],
+    .touch-target-mobile-scope [data-slot="button"] {
+      min-width: 44px;
+      min-height: 44px;
+    }
+  }
 }

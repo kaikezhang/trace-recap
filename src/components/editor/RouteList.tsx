@@ -387,7 +387,7 @@ export default memo(function RouteList({
           <div className="pl-11 sm:pl-12">
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-[24px] border px-3.5 py-3 text-left transition-colors"
+              className="touch-target-mobile flex w-full items-center gap-3 rounded-[24px] border px-3.5 py-3 text-left transition-colors"
               onClick={() =>
                 setCollapsedGroups((current) => ({
                   ...current,

@@ -256,7 +256,7 @@ export default memo(function PlaybackControls({
     "overflow-hidden transition-all duration-300 ease-in-out",
     isPlaying
       ? "pointer-events-none w-0 -mr-2 opacity-0 md:-mr-3"
-      : "w-8 opacity-100",
+      : "w-11 opacity-100 md:w-8",
   ].join(" ");
   const timeContainerClassName = [
     "overflow-hidden whitespace-nowrap text-right transition-all duration-300 ease-in-out",
@@ -273,7 +273,7 @@ export default memo(function PlaybackControls({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0 text-stone-500 hover:text-stone-700"
+            className="touch-target-mobile h-8 w-8 shrink-0 text-stone-500 hover:text-stone-700"
             onClick={onReset}
             aria-label="Reset playback"
             disabled={isPlaying}
@@ -284,7 +284,7 @@ export default memo(function PlaybackControls({
         <div className="relative">
           <button
             className={[
-              "flex items-center justify-center rounded-full text-white transition-all duration-200 ease-in-out",
+              "touch-target-mobile flex items-center justify-center rounded-full text-white transition-all duration-200 ease-in-out",
               "hover:scale-105 active:scale-95",
               isPlaying ? "h-10 w-10 md:h-8 md:w-8" : "h-14 w-14 md:h-12 md:w-12",
             ].join(" ")}

@@ -292,7 +292,7 @@ export default function TopToolbar() {
             <span className="text-xs select-none" style={{ color: "#d6d3d1" }}>/</span>
 
             <button
-              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors max-w-[140px] md:max-w-[200px] hover:bg-stone-100"
+              className="touch-target-mobile flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors max-w-[140px] md:max-w-[200px] hover:bg-stone-100"
               onClick={() => setProjectListOpen(true)}
               disabled={isSwitchingProject}
               style={{ color: "#78716c" }}
@@ -447,7 +447,7 @@ export default function TopToolbar() {
                     <p className="text-sm font-semibold" style={{ color: "#1c1917" }}>Settings</p>
                     <button
                       onClick={() => setSettingsOpen(false)}
-                      className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-stone-100 transition-colors"
+                      className="touch-target-mobile flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-stone-100"
                       style={{ color: "#78716c" }}
                     >
                       <X className="h-3.5 w-3.5" />
@@ -499,7 +499,7 @@ export default function TopToolbar() {
           <div className="flex md:hidden items-center gap-1.5">
             {/* Export — always visible on mobile */}
             <button
-              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
+              className="touch-target-mobile flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
               style={{ backgroundColor: "#f97316" }}
               onClick={() => setExportDialogOpen(true)}
             >
@@ -511,7 +511,7 @@ export default function TopToolbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="touch-target-mobile h-8 w-8"
               onClick={() => setMobileMenuOpen(true)}
               aria-label="Menu"
               style={{ color: "#78716c" }}
@@ -540,7 +540,7 @@ export default function TopToolbar() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="touch-target-mobile h-7 w-7"
                   onClick={() => setMobileMenuOpen(false)}
                   aria-label="Close menu"
                   style={{ color: "#78716c" }}
@@ -549,7 +549,7 @@ export default function TopToolbar() {
                 </Button>
               </div>
             </div>
-            <div className="px-4 pb-6 space-y-1">
+            <div className="touch-target-mobile-scope space-y-1 px-4 pb-6">
               <MobileActionButton
                 icon={<Undo2 className="h-4 w-4" />}
                 label="Undo"
@@ -610,7 +610,7 @@ export default function TopToolbar() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="touch-target-mobile h-7 w-7"
                   onClick={() => setSettingsOpen(false)}
                   aria-label="Close settings"
                   style={{ color: "#78716c" }}
@@ -658,7 +658,7 @@ export default function TopToolbar() {
       />
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
-        <DialogContent showCloseButton={false}>
+        <DialogContent showCloseButton={false} className="touch-target-mobile-scope">
           <DialogHeader>
             <DialogTitle>Clear Route</DialogTitle>
             <DialogDescription>
@@ -709,7 +709,7 @@ function MobileActionButton({
 }) {
   return (
     <button
-      className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-stone-100 disabled:opacity-40 disabled:pointer-events-none"
+      className="touch-target-mobile flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-stone-100 disabled:pointer-events-none disabled:opacity-40"
       onClick={onClick}
       disabled={disabled}
       style={{ color: destructive ? "#ef4444" : "#1c1917" }}
@@ -785,7 +785,7 @@ function SettingsContent({
   ratioLabels,
 }: SettingsContentProps) {
   return (
-    <>
+    <div className="touch-target-mobile-scope">
       {/* Aspect Ratio */}
       <div className="space-y-2.5">
         <SectionHeader>Aspect Ratio</SectionHeader>
@@ -1050,6 +1050,6 @@ function SettingsContent({
           ))}
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -207,7 +207,7 @@ function EmojiPicker({
     <div ref={ref} className="relative" data-no-seek>
       <button
         onClick={() => setOpen((openState) => !openState)}
-        className="flex h-8 w-11 items-center justify-center rounded-xl border transition-colors"
+        className="touch-target-mobile flex h-8 w-11 items-center justify-center rounded-xl border transition-colors"
         style={{
           borderColor: brand.colors.warm[200],
           backgroundColor: "rgba(255,255,255,0.86)",
@@ -230,7 +230,7 @@ function EmojiPicker({
               boxShadow: brand.shadows.lg,
             }}
           >
-            <div className="grid max-h-[180px] grid-cols-10 gap-0.5 overflow-y-auto">
+            <div className="grid max-h-[260px] grid-cols-5 gap-1 overflow-y-auto sm:max-h-[180px] sm:grid-cols-10 sm:gap-0.5">
               {TRAVEL_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
@@ -238,7 +238,7 @@ function EmojiPicker({
                     onSelect(emoji);
                     setOpen(false);
                   }}
-                  className="flex h-6 w-6 items-center justify-center rounded text-sm transition-colors hover:bg-white"
+                  className="touch-target-mobile flex h-6 w-6 items-center justify-center rounded text-sm transition-colors hover:bg-white"
                   style={{
                     boxShadow: value === emoji ? `inset 0 0 0 1px ${brand.colors.primary[400]}` : undefined,
                     backgroundColor: value === emoji ? brand.colors.primary[100] : "transparent",
@@ -252,12 +252,12 @@ function EmojiPicker({
               className="mt-1.5 flex items-center gap-1.5 border-t pt-1.5"
               style={{ borderColor: brand.colors.warm[200] }}
             >
-              <Input
-                ref={customInputRef}
-                placeholder="Type or paste emoji"
-                className="h-6 flex-1 bg-white/85 px-1 py-0 text-center text-sm"
-                maxLength={2}
-                onKeyDown={(e) => {
+                <Input
+                  ref={customInputRef}
+                  placeholder="Type or paste emoji"
+                  className="h-11 flex-1 bg-white/85 px-2 py-0 text-center text-sm sm:h-6 sm:px-1"
+                  maxLength={2}
+                  onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     const nextValue = customInputRef.current?.value.trim();
                     if (nextValue) {
@@ -280,7 +280,7 @@ function EmojiPicker({
                     onSelect("");
                     setOpen(false);
                   }}
-                  className="shrink-0 rounded-md px-2 py-0.5 text-[10px] transition-colors hover:bg-white"
+                  className="touch-target-mobile shrink-0 rounded-md px-2 py-0.5 text-[10px] transition-colors hover:bg-white"
                   style={{ color: brand.colors.warm[500] }}
                 >
                   Clear
@@ -304,7 +304,9 @@ function WaypointSwitch({
   return (
     <button
       onClick={onToggle}
-      className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+      type="button"
+      aria-label={isWaypoint ? "Switch to destination" : "Switch to stop by"}
+      className="touch-target-mobile-hitbox relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
       style={{
         backgroundColor: isWaypoint ? brand.colors.warm[300] : brand.colors.primary[500],
       }}
@@ -503,7 +505,7 @@ export default memo(function LocationCard({
         >
           <div
             data-drag-handle
-            className={`flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
+            className={`touch-target-mobile flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
               isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
             } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-xl`}
             style={{
@@ -632,7 +634,7 @@ export default memo(function LocationCard({
           </div>
 
           <button
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white"
+            className="touch-target-mobile flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white"
             data-no-seek
             onClick={(e) => {
               e.stopPropagation();
@@ -651,7 +653,7 @@ export default memo(function LocationCard({
 
           <button
             data-delete-btn
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2]"
+            className="touch-target-mobile flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2]"
             onClick={(e) => {
               e.stopPropagation();
               handleRemove();
