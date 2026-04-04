@@ -62,7 +62,9 @@ export default function TopToolbar() {
   const setExportDialogOpen = useUIStore((s) => s.setExportDialogOpen);
   const addToast = useUIStore((s) => s.addToast);
   const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
+  const immersiveMode = useUIStore((s) => s.immersiveMode);
   const setLeftPanelOpen = useUIStore((s) => s.setLeftPanelOpen);
+  const setImmersiveMode = useUIStore((s) => s.setImmersiveMode);
   const saveStatus = useUIStore((s) => s.saveStatus);
   const exportRoute = useProjectStore((s) => s.exportRoute);
   const loadRouteData = useProjectStore((s) => s.loadRouteData);
@@ -289,6 +291,18 @@ export default function TopToolbar() {
     saved: { color: "bg-emerald-500", tooltip: "All changes saved" },
     error: { color: "bg-red-500", tooltip: "Error saving changes" },
   } as const;
+  const isSidebarVisible = leftPanelOpen && !immersiveMode;
+
+  const handleSidebarToggle = () => {
+    if (isSidebarVisible) {
+      setImmersiveMode(false);
+      setLeftPanelOpen(false);
+      return;
+    }
+
+    setLeftPanelOpen(true);
+    setImmersiveMode(false);
+  };
 
   return (
     <>
@@ -306,11 +320,11 @@ export default function TopToolbar() {
               variant="ghost"
               size="icon"
               className="hidden md:inline-flex h-8 w-8"
-              onClick={() => setLeftPanelOpen(!leftPanelOpen)}
-              aria-label={leftPanelOpen ? "Collapse sidebar" : "Expand sidebar"}
+              onClick={handleSidebarToggle}
+              aria-label={isSidebarVisible ? "Collapse sidebar" : "Expand sidebar"}
               style={{ color: "#78716c" }}
             >
-              {leftPanelOpen ? (
+              {isSidebarVisible ? (
                 <PanelLeftClose className="h-4 w-4" />
               ) : (
                 <PanelLeft className="h-4 w-4" />
