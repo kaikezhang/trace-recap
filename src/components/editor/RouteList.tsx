@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useState, type ReactNode } from "react";
 import { lineString } from "@turf/helpers";
 import { length } from "@turf/length";
 import {
@@ -38,6 +38,8 @@ import { useLocationCount, useLocationIds } from "@/stores/selectors";
 import type { Segment, TransportMode } from "@/types";
 import LocationCard from "./LocationCard";
 import TransportSelector from "./TransportSelector";
+
+const EDIT_HINT_STORAGE_KEY = "hasSeenEditHint";
 
 interface RouteListProps {
   onLocationClick?: (index: number) => void;
@@ -247,6 +249,7 @@ export default memo(function RouteList({
   const locationCount = useLocationCount();
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [showEditHint, setShowEditHint] = useState(false);
 
   useEffect(() => {
     if (locationIds.length === 0) {
@@ -258,6 +261,38 @@ export default memo(function RouteList({
       setSelectedLocationId(locationIds[0]);
     }
   }, [locationIds, selectedLocationId]);
+
+  const dismissEditHint = useCallback(() => {
+    setShowEditHint(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(EDIT_HINT_STORAGE_KEY, "true");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (locations.length === 0) {
+      setShowEditHint(false);
+      return;
+    }
+
+    setShowEditHint(window.localStorage.getItem(EDIT_HINT_STORAGE_KEY) !== "true");
+  }, [locations.length]);
+
+  useEffect(() => {
+    if (!showEditHint || typeof window === "undefined") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      dismissEditHint();
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [dismissEditHint, showEditHint]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -346,6 +381,8 @@ export default memo(function RouteList({
               onLocationClick?.(clickedIndex);
             }}
             onEditLayout={onEditLayout}
+            showEditHint={index === 0 && showEditHint}
+            onDismissEditHint={dismissEditHint}
           />
         </div>
       </div>,

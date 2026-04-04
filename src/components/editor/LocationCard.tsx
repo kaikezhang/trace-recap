@@ -10,6 +10,7 @@ import {
   Footprints,
   Image as ImageIcon,
   LayoutTemplate,
+  Pencil,
   Plane,
   Ship,
   Smile,
@@ -33,6 +34,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useLocation } from "@/stores/selectors";
 import type { TransportMode } from "@/types";
+import OnboardingHint from "./OnboardingHint";
 import PhotoManager, { usePhotoDropZone } from "./PhotoManager";
 
 interface LocationCardProps {
@@ -45,6 +47,8 @@ interface LocationCardProps {
   onToggleWaypoint: (id: string) => void;
   onClick?: (index: number) => void;
   onEditLayout?: (locationId: string) => void;
+  showEditHint?: boolean;
+  onDismissEditHint?: () => void;
 }
 
 const TRANSPORT_ICONS: Record<TransportMode, LucideIcon> = {
@@ -331,16 +335,21 @@ export default memo(function LocationCard({
   onToggleWaypoint,
   onClick,
   onEditLayout,
+  showEditHint = false,
+  onDismissEditHint,
 }: LocationCardProps) {
   const location = useLocation(locationId);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [isNameEditing, setIsNameEditing] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
   const updateLocation = useProjectStore((s) => s.updateLocation);
   const duplicateLocation = useProjectStore((s) => s.duplicateLocation);
   const addToast = useUIStore((s) => s.addToast);
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const {
     attributes,
@@ -391,9 +400,46 @@ export default memo(function LocationCard({
 
   useEffect(() => clearLongPressTimer, []);
 
+  useEffect(() => {
+    if (!isNameEditing) {
+      setNameDraft(location.name);
+    }
+  }, [isNameEditing, location.name]);
+
+  useEffect(() => {
+    if (!isNameEditing) {
+      return;
+    }
+
+    nameInputRef.current?.focus();
+    nameInputRef.current?.select();
+  }, [isNameEditing]);
+
   const openContextMenu = (x: number, y: number) => {
     onClick?.(index);
     setContextMenu({ x, y });
+  };
+
+  const dismissEditHint = () => {
+    onDismissEditHint?.();
+  };
+
+  const startNameEditing = () => {
+    onClick?.(index);
+    dismissEditHint();
+    setNameDraft(location.name);
+    setIsNameEditing(true);
+  };
+
+  const stopNameEditing = () => {
+    setNameDraft(location.name);
+    setIsNameEditing(false);
+  };
+
+  const saveNameEdit = () => {
+    updateLocation(locationId, { name: nameDraft });
+    dismissEditHint();
+    setIsNameEditing(false);
   };
 
   const handleRemove = () => {
@@ -533,17 +579,86 @@ export default memo(function LocationCard({
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span
-                className={`truncate font-semibold ${isWaypoint ? "text-sm" : "text-[15px]"}`}
-                style={{ color: brand.colors.warm[900] }}
-              >
-                {location.name || (
-                  <span className="italic" style={{ color: brand.colors.warm[400] }}>
-                    English name
-                  </span>
+            <div className="flex items-start gap-2">
+              <div className="relative min-w-0 flex-1">
+                {isNameEditing ? (
+                  <Input
+                    ref={nameInputRef}
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    onBlur={saveNameEdit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        saveNameEdit();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        stopNameEditing();
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="English name"
+                    data-no-seek
+                    className={`h-8 border-[#fdba74] bg-white/92 px-2.5 py-0 text-sm font-semibold ${
+                      isWaypoint ? "text-sm" : "text-[15px]"
+                    }`}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    data-no-seek
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startNameEditing();
+                    }}
+                    className="inline-flex max-w-full items-center rounded-md text-left hover:underline"
+                    title="Tap to edit stop name"
+                  >
+                    <span
+                      className={`truncate border-b border-dashed border-transparent font-semibold transition-colors hover:border-current ${
+                        isWaypoint ? "text-sm" : "text-[15px]"
+                      }`}
+                      style={{ color: brand.colors.warm[900], cursor: "text" }}
+                    >
+                      {location.name || (
+                        <span className="italic" style={{ color: brand.colors.warm[400] }}>
+                          English name
+                        </span>
+                      )}
+                    </span>
+                  </button>
                 )}
-              </span>
+
+                {showEditHint && (
+                  <OnboardingHint
+                    message="Tap a stop name to edit it"
+                    onDismiss={dismissEditHint}
+                    interactive={false}
+                    className="pointer-events-none left-0 top-[calc(100%+0.5rem)] w-56"
+                    arrowClassName="left-5 -top-[7px] border-b-0 border-r-0"
+                    dismissLabel="This hides automatically"
+                  />
+                )}
+              </div>
+
+              <button
+                type="button"
+                data-no-seek
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startNameEditing();
+                }}
+                disabled={isNameEditing}
+                className="touch-target-mobile inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60"
+                style={{
+                  borderColor: brand.colors.primary[200],
+                  backgroundColor: "rgba(255,255,255,0.8)",
+                  color: brand.colors.primary[600],
+                }}
+                aria-label="Edit stop name"
+                title="Edit stop name"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
 
               {AccentIcon && (
                 <div
