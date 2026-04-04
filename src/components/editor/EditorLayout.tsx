@@ -1298,11 +1298,11 @@ function EditorContent() {
       <div className="relative flex flex-1 overflow-hidden">
         <div
           className={`hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out md:block ${
-            showDesktopSidebar ? "w-[360px]" : "w-0"
+            showDesktopSidebar ? "w-[400px]" : "w-0"
           }`}
         >
           <div
-            className={`h-full w-[360px] transition-transform duration-300 ease-in-out ${
+            className={`h-full w-[400px] transition-transform duration-300 ease-in-out ${
               showDesktopSidebar ? "translate-x-0" : "-translate-x-full"
             }`}
           >
@@ -1321,7 +1321,7 @@ function EditorContent() {
             onClick={handleImmersiveToggle}
             className="absolute top-1/2 z-30 hidden h-11 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-slate-950/65 text-white/80 shadow-[0_16px_40px_-24px_rgba(15,23,42,0.9)] backdrop-blur-sm transition-all duration-300 ease-in-out hover:border-white/30 hover:bg-slate-900/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-white/15 disabled:hover:bg-slate-950/65 disabled:hover:text-white/80 md:flex"
             style={{
-              left: showDesktopSidebar ? "332px" : "12px",
+              left: showDesktopSidebar ? "372px" : "12px",
             }}
             aria-label={showDesktopSidebar ? "Collapse sidebar" : "Expand sidebar"}
             aria-pressed={showDesktopSidebar}

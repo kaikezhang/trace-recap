@@ -106,7 +106,7 @@ export default function LeftPanel({
 
   return (
     <aside
-      className="relative hidden h-full w-[360px] flex-col overflow-hidden border-r md:flex"
+      className="relative hidden h-full w-[400px] flex-col overflow-hidden border-r md:flex"
       style={{
         background: brand.gradients.cardWarm,
         borderColor: brand.colors.warm[200],
