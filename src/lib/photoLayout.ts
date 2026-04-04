@@ -24,6 +24,9 @@ interface LayoutSlot {
 const MIN_ASPECT = 0.25;
 const MIN_CONTAINER_ASPECT = 0.1;
 const PORTRAIT_THRESHOLD = 0.9;
+const SQUARE_LAYOUT_ASPECT_RANGE = 0.28;
+const COMPACT_LAYOUT_MAX_WIDTH_PX = 480;
+const COMPACT_LAYOUT_WIDTH_RANGE_PX = 180;
 
 function safeAspect(aspect: number): number {
   return Math.max(aspect, MIN_ASPECT);
@@ -31,6 +34,10 @@ function safeAspect(aspect: number): number {
 
 function safeContainerAspect(containerAspect: number): number {
   return Math.max(containerAspect, MIN_CONTAINER_ASPECT);
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 function heightForWidth(width: number, photoAspect: number, containerAspect: number): number {
@@ -156,6 +163,43 @@ function scaleRectsToInnerBounds(rects: PhotoRect[], gap: number): PhotoRect[] {
     width: rect.width * scale,
     height: rect.height * scale,
   }));
+}
+
+function constrainAutoLayoutForCompactViewport(
+  rects: PhotoRect[],
+  containerAspect: number,
+  gap: number,
+  photoCount: number,
+  containerWidthPx: number
+): PhotoRect[] {
+  if (rects.length === 0 || containerWidthPx <= 0) {
+    return rects;
+  }
+
+  // Narrow square-ish playback viewports make portrait albums feel oversized;
+  // add inset after layout so existing arrangement choices remain unchanged.
+  const squareLayoutPressure = clamp01(
+    1 - Math.abs(containerAspect - 1) / SQUARE_LAYOUT_ASPECT_RANGE
+  );
+  const compactViewportPressure = clamp01(
+    (COMPACT_LAYOUT_MAX_WIDTH_PX - containerWidthPx) / COMPACT_LAYOUT_WIDTH_RANGE_PX
+  );
+  const constraintPressure = squareLayoutPressure * compactViewportPressure;
+
+  if (constraintPressure <= 0) {
+    return rects;
+  }
+
+  const extraGap =
+    (photoCount === 1
+      ? 0.12
+      : photoCount === 2
+        ? 0.08
+        : photoCount <= 4
+          ? 0.05
+          : 0.03) * constraintPressure;
+
+  return scaleRectsToInnerBounds(rects, gap + extraGap);
 }
 
 function seedFromPhotos(photos: PhotoMeta[]): number {
@@ -344,30 +388,49 @@ export function computeAutoLayout(
 
   // Gap as fraction of container width
   const gap = gapPx / containerWidthPx;
+  let rects: PhotoRect[];
 
   switch (n) {
     case 1:
-      return layoutOne(photos, containerAspect, gap);
+      rects = layoutOne(photos, containerAspect, gap);
+      break;
     case 2:
-      return layoutTwo(photos, containerAspect, gap);
+      rects = layoutTwo(photos, containerAspect, gap);
+      break;
     case 3:
-      return layoutThree(photos, containerAspect, gap);
+      rects = layoutThree(photos, containerAspect, gap);
+      break;
     case 4:
-      return layoutFour(photos, containerAspect, gap);
+      rects = layoutFour(photos, containerAspect, gap);
+      break;
     case 5:
-      return layoutFive(photos, containerAspect, gap);
+      rects = layoutFive(photos, containerAspect, gap);
+      break;
     case 6:
-      return layoutSix(photos, containerAspect, gap);
+      rects = layoutSix(photos, containerAspect, gap);
+      break;
     case 7:
-      return layoutSeven(photos, containerAspect, gap);
+      rects = layoutSeven(photos, containerAspect, gap);
+      break;
     case 8:
-      return layoutEight(photos, containerAspect, gap);
+      rects = layoutEight(photos, containerAspect, gap);
+      break;
     case 9:
-      return layoutNine(photos, containerAspect, gap);
+      rects = layoutNine(photos, containerAspect, gap);
+      break;
     default:
       // For >9 just use 3x3 grid with first 9
-      return layoutNine(photos.slice(0, 9), containerAspect, gap);
+      rects = layoutNine(photos.slice(0, 9), containerAspect, gap);
+      break;
   }
+
+  return constrainAutoLayoutForCompactViewport(
+    rects,
+    containerAspect,
+    gap,
+    Math.min(n, 9),
+    containerWidthPx
+  );
 }
 
 /** 1 photo: fit within the container while preserving the photo aspect. */
