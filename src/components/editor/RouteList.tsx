@@ -74,6 +74,8 @@ function formatDistance(distanceKm: number | null): string | null {
 function formatDuration(seconds: number | null): string | null {
   if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return null;
 
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))} sec`;
+
   const roundedMinutes = Math.max(1, Math.round(seconds / 60));
   if (roundedMinutes < 60) return `${roundedMinutes} min`;
 
