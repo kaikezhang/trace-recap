@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
+import { brand } from "@/lib/brand";
 import OnboardingHint from "./OnboardingHint";
 
 interface PlaybackControlsProps {
@@ -109,10 +110,13 @@ export default memo(function PlaybackControls({
       : "md:absolute md:bottom-4 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2 md:z-10",
   ].join(" ");
   const barClassName = [
-    "flex items-center overflow-hidden rounded-none border border-white/50 shadow-xl transition-all duration-300 ease-in-out md:rounded-2xl",
+    "flex items-center overflow-hidden border shadow-xl transition-all duration-300 ease-in-out rounded-none md:rounded-2xl",
     isPlaying
-      ? "w-full gap-2 bg-white/30 px-3 py-1 backdrop-blur-sm md:gap-3 md:px-4"
-      : "w-full gap-2 bg-white/90 px-3 py-2 backdrop-blur-xl md:w-auto md:gap-3 md:px-4",
+      ? "w-full gap-2 px-3 py-1.5 backdrop-blur-md md:gap-3 md:px-4"
+      : "w-full gap-2 px-3 py-2.5 backdrop-blur-xl md:w-auto md:gap-3 md:px-5",
+    isPlaying
+      ? "bg-stone-900/70 border-white/20"
+      : "bg-white/95 border-stone-200/80",
   ].join(" ");
   const resetContainerClassName = [
     "overflow-hidden transition-all duration-300 ease-in-out",
@@ -124,19 +128,8 @@ export default memo(function PlaybackControls({
     "overflow-hidden whitespace-nowrap text-right transition-all duration-300 ease-in-out",
     isPlaying
       ? "pointer-events-none w-0 -ml-2 opacity-0 md:-ml-3"
-      : "w-[70px] opacity-100",
+      : "w-[82px] opacity-100",
   ].join(" ");
-  const playButtonClassName = [
-    "flex items-center justify-center rounded-full bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all duration-300 ease-in-out hover:scale-105 hover:bg-indigo-600 active:scale-95",
-    isPlaying ? "h-10 w-10 md:h-7 md:w-7" : "h-14 w-14 md:h-12 md:w-12",
-  ].join(" ");
-  const sliderContainerClassName = [
-    "min-w-0 transition-all duration-300 ease-in-out",
-    isPlaying ? "flex-1" : "flex-1 md:w-96 md:flex-none",
-  ].join(" ");
-  const sliderClassName = isPlaying
-    ? "h-4 [&>div:first-child]:h-1 md:[&>div:first-child]:h-1"
-    : "h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5";
 
   return (
     <div ref={containerRef} className={containerClassName}>
@@ -146,7 +139,7 @@ export default memo(function PlaybackControls({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0"
+            className="h-8 w-8 shrink-0 text-stone-500 hover:text-stone-700"
             onClick={onReset}
             aria-label="Reset playback"
             disabled={isPlaying}
@@ -156,7 +149,15 @@ export default memo(function PlaybackControls({
         </div>
         <div className="relative">
           <button
-            className={playButtonClassName}
+            className={[
+              "flex items-center justify-center rounded-full text-white transition-all duration-200 ease-in-out",
+              "hover:scale-105 active:scale-95",
+              isPlaying ? "h-10 w-10 md:h-8 md:w-8" : "h-14 w-14 md:h-12 md:w-12",
+            ].join(" ")}
+            style={{
+              background: `linear-gradient(135deg, ${brand.colors.primary[400]}, ${brand.colors.primary[600]})`,
+              boxShadow: `0 4px 14px 0 rgba(249, 115, 22, 0.35)`,
+            }}
             onClick={isPlaying ? onPause : onPlay}
             aria-label={isPlaying ? "Pause" : "Play"}
           >
@@ -175,9 +176,20 @@ export default memo(function PlaybackControls({
             />
           )}
         </div>
-        <div className={sliderContainerClassName}>
+        <div
+          className={[
+            "min-w-0 transition-all duration-300 ease-in-out",
+            isPlaying ? "flex-1" : "flex-1 md:w-96 md:flex-none",
+          ].join(" ")}
+        >
           <Slider
-            className={sliderClassName}
+            className={[
+              isPlaying
+                ? "h-4 [&>div:first-child]:h-1 md:[&>div:first-child]:h-1"
+                : "h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5",
+              "[&_[data-slot=slider-range]]:bg-orange-500",
+              "[&_[data-slot=slider-thumb]]:border-orange-500",
+            ].join(" ")}
             value={[progress]}
             min={0}
             max={100}
@@ -189,7 +201,13 @@ export default memo(function PlaybackControls({
           />
         </div>
         <div className={timeContainerClassName} aria-hidden={isPlaying}>
-          <span className="text-sm text-muted-foreground md:text-xs">
+          <span
+            className="text-xs tabular-nums tracking-tight"
+            style={{
+              fontFamily: brand.fonts.mono,
+              color: brand.colors.warm[500],
+            }}
+          >
             {formatTime(currentTime)} / {formatTime(totalDuration)}
           </span>
         </div>
