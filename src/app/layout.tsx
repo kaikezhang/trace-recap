@@ -19,10 +19,84 @@ const caveat = Caveat({
   subsets: ["latin"],
 });
 
+const siteName = "TraceRecap";
+const siteTitle = "TraceRecap — Turn Travel Routes into Cinematic Videos";
+const siteDescription =
+  "TraceRecap turns routes, photos, and transport legs into cinematic travel videos you can build in minutes and share anywhere from your browser.";
+const manifestHref = `data:application/manifest+json,${encodeURIComponent(
+  JSON.stringify({
+    name: "TraceRecap",
+    short_name: "TraceRecap",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#fffbf5",
+    theme_color: "#f97316",
+    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
+  }),
+)}`;
+
+function getMetadataBase() {
+  const rawUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    process.env.SITE_URL ??
+    "https://tracerecap.vercel.app";
+
+  const normalizedUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+
+  try {
+    return new URL(normalizedUrl);
+  } catch {
+    return new URL("https://tracerecap.vercel.app");
+  }
+}
+
 export const metadata: Metadata = {
-  title: "TraceRecap",
-  description:
-    "Turn your travel routes into beautiful short videos in under 3 minutes.",
+  metadataBase: getMetadataBase(),
+  title: siteTitle,
+  description: siteDescription,
+  keywords: [
+    "travel",
+    "route",
+    "animation",
+    "video",
+    "map",
+    "recap",
+    "travel video",
+    "route animation",
+    "travel recap",
+  ],
+  manifest: manifestHref,
+  robots: {
+    index: true,
+    follow: true,
+  },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico" },
+    ],
+    shortcut: "/favicon.ico",
+  },
+  openGraph: {
+    title: siteTitle,
+    description: siteDescription,
+    type: "website",
+    siteName,
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "TraceRecap social preview image",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteTitle,
+    description: siteDescription,
+    images: ["/twitter-image"],
+  },
 };
 
 export default function RootLayout({
