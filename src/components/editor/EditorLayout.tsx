@@ -28,6 +28,7 @@ import {
 import { useAnimationStore } from "@/stores/animationStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
+import { ToastViewport } from "@/components/ui/toast";
 import { computeContainedViewportSize } from "@/lib/viewportRatio";
 
 const ONBOARDING_STORAGE_KEY = "trace-recap-onboarded";
@@ -417,6 +418,7 @@ function EditorContent() {
   const [editingLocationId, setEditingLocationId] = useState<string | null>(
     null,
   );
+  const [selectedLocationIndex, setSelectedLocationIndex] = useState<number | null>(null);
   const editingLocation =
     locations.find((l) => l.id === editingLocationId) ?? null;
   const visiblePhotoLocation =
@@ -1093,12 +1095,20 @@ function EditorContent() {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
-        useHistoryStore.getState().undo();
+        const { canUndo, undo } = useHistoryStore.getState();
+        if (canUndo) {
+          undo();
+          useUIStore.getState().addToast({ title: "Undid", variant: "info" });
+        }
         return;
       }
       if (mod && e.key === "z" && e.shiftKey) {
         e.preventDefault();
-        useHistoryStore.getState().redo();
+        const { canRedo, redo } = useHistoryStore.getState();
+        if (canRedo) {
+          redo();
+          useUIStore.getState().addToast({ title: "Redid", variant: "info" });
+        }
         return;
       }
 
@@ -1107,13 +1117,40 @@ function EditorContent() {
         const state = useAnimationStore.getState().playbackState;
         if (state === "playing") handlePause();
         else handlePlay();
-      } else if (e.code === "KeyR") {
+        return;
+      }
+      if (e.code === "KeyR") {
         handleReset();
+        return;
+      }
+      // Number keys 1-9: jump to stop
+      const num = parseInt(e.key, 10);
+      if (num >= 1 && num <= 9) {
+        e.preventDefault();
+        handleLocationClick(num - 1);
+        setSelectedLocationIndex(num - 1);
+        return;
+      }
+      if (e.code === "Escape") {
+        setSelectedLocationIndex(null);
+        setEditingLocationId(null);
+        return;
+      }
+      if (e.code === "Backspace" || e.code === "Delete") {
+        if (selectedLocationIndex !== null && locations[selectedLocationIndex]) {
+          e.preventDefault();
+          const loc = locations[selectedLocationIndex];
+          useProjectStore.getState().removeLocation(loc.id);
+          useUIStore.getState().addToast({ title: `Removed ${loc.name}`, variant: "info" });
+          setSelectedLocationIndex(null);
+        }
+        return;
       }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [handlePlay, handlePause, handleReset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handlePlay, handlePause, handleReset, handleLocationClick, locations, selectedLocationIndex]);
 
   const playbackState = useAnimationStore((s) => s.playbackState);
   const isPlaying = playbackState === "playing";
@@ -1288,11 +1325,14 @@ function EditorContent() {
 }
 
 export default function EditorLayout() {
+  const toasts = useUIStore((s) => s.toasts);
+  const removeToast = useUIStore((s) => s.removeToast);
   return (
     <MapProvider>
       <EditorContent />
       <ExportDialog />
       <ProjectListDialog />
+      <ToastViewport toasts={toasts} onDismiss={removeToast} dismissAfterMs={2500} />
     </MapProvider>
   );
 }

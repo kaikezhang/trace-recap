@@ -70,6 +70,13 @@ function normalizeSpeedMultiplier(value: number | undefined): number {
   );
 }
 
+interface ToastItem {
+  id: string;
+  title: string;
+  description?: string;
+  variant?: "success" | "info" | "warning" | "error";
+}
+
 interface UIState {
   leftPanelOpen: boolean;
   exportDialogOpen: boolean;
@@ -78,6 +85,7 @@ interface UIState {
   searchQuery: string;
   bottomSheetState: BottomSheetState;
   saveStatus: SaveStatus;
+  toasts: ToastItem[];
   cityLabelSize: number; // CSS font size in px (default 18)
   cityLabelLang: "en" | "zh"; // City label language
   cityLabelTopPercent: number; // City label top position as % of container (default 5)
@@ -96,6 +104,8 @@ interface UIState {
   breadcrumbsEnabled: boolean; // Show breadcrumb thumbnails at visited locations
   tripStatsEnabled: boolean; // Show trip stats bar during playback
 
+  addToast: (toast: Omit<ToastItem, "id">) => void;
+  removeToast: (id: string) => void;
   setSaveStatus: (status: SaveStatus) => void;
   setLeftPanelOpen: (open: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
@@ -147,7 +157,15 @@ export const useUIStore = create<UIState>((set) => ({
   breadcrumbsEnabled: saved.breadcrumbsEnabled ?? true,
   tripStatsEnabled: saved.tripStatsEnabled ?? true,
   saveStatus: "idle" as SaveStatus,
+  toasts: [],
 
+  addToast: (toast) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
+  },
+  removeToast: (id) => {
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+  },
   setSaveStatus: (saveStatus) => set({ saveStatus }),
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
