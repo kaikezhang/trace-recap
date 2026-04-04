@@ -57,6 +57,16 @@ const TRANSPORT_LABELS: Record<TransportMode, string> = {
   bicycle: "Bike leg",
 };
 
+const TRANSPORT_ACCENTS: Record<TransportMode, string> = {
+  flight: "#f97316",
+  car: "#a16207",
+  train: "#0891b2",
+  bus: "#a855f7",
+  ferry: "#0e7490",
+  walk: "#78350f",
+  bicycle: "#155e75",
+};
+
 function DragGrip() {
   return (
     <span className="grid grid-cols-2 gap-[3px]">
@@ -313,13 +323,6 @@ export default memo(function LocationCard({
 
   const { isDragOver, dropProps } = usePhotoDropZone(locationId);
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-    opacity: isDragging ? 0.65 : undefined,
-  };
-
   if (!location) return null;
 
   const isFirst = index === 0;
@@ -329,32 +332,50 @@ export default memo(function LocationCard({
   const AccentIcon = transportMode ? TRANSPORT_ICONS[transportMode] : null;
   const transportLabel = transportMode ? TRANSPORT_LABELS[transportMode] : undefined;
 
+  const transformValue = CSS.Transform.toString(transform);
+  const composedTransform = [transformValue, isWaypoint ? "scale(0.92)" : null]
+    .filter(Boolean)
+    .join(" ");
+  const accentColor = transportMode ? TRANSPORT_ACCENTS[transportMode] : brand.colors.primary[500];
+  const style = {
+    transform: composedTransform || undefined,
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.65 : isWaypoint ? 0.72 : 1,
+    transformOrigin: "top center" as const,
+  };
+
   return (
     <div
       ref={setNodeRef}
       {...dropProps}
-      className={`group relative overflow-hidden rounded-[26px] border transition-all duration-200 ${
+      className={`group relative origin-top overflow-hidden border transition-[border-color,box-shadow,background-color] duration-200 ${
         isDragOver ? "ring-2 ring-[#fdba74] ring-offset-1 ring-offset-[#fffbf5]" : ""
-      } ${selected || isExpanded ? "translate-x-[2px]" : ""}`}
+      } ${isWaypoint ? "rounded-[24px]" : "rounded-[30px]"}`}
       style={{
         ...style,
         borderColor: selected || isExpanded ? brand.colors.primary[300] : brand.colors.warm[200],
         background: isWaypoint
-          ? `linear-gradient(160deg, ${brand.colors.warm[50]} 0%, rgba(255,255,255,0.95) 100%)`
-          : "rgba(255,255,255,0.92)",
-        boxShadow: isDragging ? brand.shadows.lg : brand.shadows.md,
+          ? `linear-gradient(160deg, rgba(250,250,249,0.98) 0%, rgba(255,255,255,0.92) 100%)`
+          : `linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(255,247,237,0.9) 100%)`,
+        boxShadow: isDragging
+          ? brand.shadows.lg
+          : selected || isExpanded
+            ? brand.shadows.lg
+            : brand.shadows.md,
       }}
     >
       <div
-        className="absolute inset-y-4 left-0 w-[4px] rounded-r-full"
+        className="absolute inset-y-0 left-0 w-[4px]"
         style={{
-          backgroundColor:
-            selected || isExpanded ? brand.colors.primary[500] : brand.colors.primary[200],
+          backgroundColor: accentColor,
         }}
       />
 
       <div
-        className="flex cursor-pointer items-center gap-3 p-3.5 md:p-4"
+        className={`flex cursor-pointer items-center gap-3 ${
+          isWaypoint ? "p-3 md:p-3.5" : "p-3.5 md:p-4"
+        } max-[420px]:gap-2.5 max-[420px]:p-3`}
         onClick={(e) => {
           const target = e.target as HTMLElement;
           if (
@@ -371,7 +392,9 @@ export default memo(function LocationCard({
       >
         <div
           data-drag-handle
-          className="flex h-10 w-9 shrink-0 cursor-grab items-center justify-center rounded-2xl border active:cursor-grabbing touch-none"
+          className={`flex shrink-0 cursor-grab items-center justify-center border active:cursor-grabbing touch-none ${
+            isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
+          } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-xl`}
           style={{
             borderColor: brand.colors.warm[200],
             backgroundColor: "rgba(255,251,245,0.92)",
@@ -383,19 +406,23 @@ export default memo(function LocationCard({
         </div>
 
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] text-sm font-semibold text-white"
+          className={`flex shrink-0 items-center justify-center font-semibold text-white ${
+            isWaypoint ? "h-8 w-8 rounded-[14px] text-xs" : "h-10 w-10 rounded-[16px] text-sm"
+          } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-[14px] max-[420px]:text-xs`}
           style={{
-            background: `linear-gradient(160deg, ${brand.colors.primary[500]} 0%, ${brand.colors.primary[400]} 100%)`,
+            background: isWaypoint
+              ? `linear-gradient(160deg, ${brand.colors.warm[500]} 0%, ${brand.colors.warm[400]} 100%)`
+              : `linear-gradient(160deg, ${brand.colors.primary[500]} 0%, ${brand.colors.primary[400]} 100%)`,
             boxShadow: brand.shadows.sm,
           }}
         >
-          {index + 1}
+          {location.chapterEmoji || index + 1}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span
-              className="truncate text-[15px] font-semibold"
+              className={`truncate font-semibold ${isWaypoint ? "text-sm" : "text-[15px]"}`}
               style={{ color: brand.colors.warm[900] }}
             >
               {location.name || (
@@ -408,12 +435,12 @@ export default memo(function LocationCard({
             {AccentIcon && (
               <span
                 className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                style={{ backgroundColor: brand.colors.primary[100] }}
+                style={{ backgroundColor: `${accentColor}18` }}
                 title={transportLabel}
               >
                 <AccentIcon
                   className="h-3.5 w-3.5"
-                  style={{ color: brand.colors.primary[600] }}
+                  style={{ color: accentColor }}
                 />
               </span>
             )}
@@ -436,7 +463,7 @@ export default memo(function LocationCard({
             style={{ color: brand.colors.warm[500] }}
           >
             <span className="truncate">
-              {location.nameZh || (isWaypoint ? "Flexible scenic stop" : "Main destination")}
+              {location.chapterDate || location.nameZh || (isWaypoint ? "Flexible scenic stop" : "Main destination")}
             </span>
             <span className="shrink-0">•</span>
             <span className="truncate">
@@ -456,7 +483,12 @@ export default memo(function LocationCard({
 
         <div className="shrink-0">
           {coverPhoto ? (
-            <div className="relative h-14 w-14 overflow-hidden rounded-[18px]" style={{ boxShadow: brand.shadows.sm }}>
+            <div
+              className={`relative overflow-hidden ${
+                isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
+              } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
+              style={{ boxShadow: brand.shadows.sm }}
+            >
               <img
                 src={coverPhoto.url}
                 alt={location.name ? `${location.name} photo` : "Location photo"}
@@ -473,7 +505,9 @@ export default memo(function LocationCard({
             </div>
           ) : (
             <div
-              className="flex h-14 w-14 items-center justify-center rounded-[18px] border"
+              className={`flex items-center justify-center border ${
+                isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
+              } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
               style={{
                 borderColor: brand.colors.warm[200],
                 background: `linear-gradient(160deg, ${brand.colors.sand[100]} 0%, ${brand.colors.primary[50]} 100%)`,
@@ -528,7 +562,9 @@ export default memo(function LocationCard({
             className="overflow-hidden"
           >
             <div
-              className="space-y-4 border-t px-4 pb-4 pt-4"
+              className={`space-y-4 border-t ${
+                isWaypoint ? "px-3.5 pb-3.5 pt-3.5" : "px-4 pb-4 pt-4"
+              }`}
               style={{
                 borderColor: brand.colors.warm[200],
                 background: `linear-gradient(180deg, rgba(255,251,245,0.94) 0%, rgba(255,247,237,0.55) 100%)`,
