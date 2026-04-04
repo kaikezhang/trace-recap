@@ -16,9 +16,7 @@ import {
   ChevronDown,
   Palette,
   X,
-  Loader2,
-  Check,
-  AlertCircle,
+  Menu,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -36,13 +34,16 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
   DropdownMenuTrigger,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
@@ -56,6 +57,7 @@ export default function TopToolbar() {
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const setExportDialogOpen = useUIStore((s) => s.setExportDialogOpen);
   const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
   const setLeftPanelOpen = useUIStore((s) => s.setLeftPanelOpen);
@@ -95,7 +97,6 @@ export default function TopToolbar() {
 
   const [isMobile, setIsMobile] = useState(false);
 
-  // Detect mobile breakpoint
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)");
     setIsMobile(mql.matches);
@@ -123,12 +124,12 @@ export default function TopToolbar() {
 
   // Prevent body scrolling when mobile drawer is open
   useEffect(() => {
-    if (!settingsOpen || !isMobile) return;
+    if ((!settingsOpen && !mobileMenuOpen) || !isMobile) return;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [settingsOpen, isMobile]);
+  }, [settingsOpen, mobileMenuOpen, isMobile]);
 
   const ratioOptions: AspectRatio[] = ["free", "16:9", "9:16", "4:3", "3:4", "1:1"];
   const ratioLabels: Record<AspectRatio, string> = {
@@ -145,7 +146,6 @@ export default function TopToolbar() {
     if (!file) return;
     try {
       if (file.name.endsWith(".zip")) {
-        // Import zip project (photos as separate files)
         const JSZip = (await import("jszip")).default;
         const zip = await JSZip.loadAsync(file);
         const routeFile = zip.file("route.json");
@@ -153,7 +153,6 @@ export default function TopToolbar() {
         const routeText = await routeFile.async("text");
         const data: ImportRouteData = JSON.parse(routeText);
 
-        // Convert photo file references to data URLs for persistence safety
         if (data.locations) {
           for (const loc of data.locations) {
             if (loc.photos) {
@@ -162,7 +161,6 @@ export default function TopToolbar() {
                   const photoFile = zip.file(photo.url);
                   if (photoFile) {
                     const blob = await photoFile.async("blob");
-                    // Convert to data URL immediately — blob URLs die on page reload
                     const dataUrl = await new Promise<string>((resolve) => {
                       const reader = new FileReader();
                       reader.onloadend = () => resolve(reader.result as string);
@@ -179,7 +177,6 @@ export default function TopToolbar() {
         await loadRouteData(data);
         void enrichChineseNames();
       } else {
-        // Import plain JSON
         const text = await file.text();
         const data: ImportRouteData = JSON.parse(text);
         await loadRouteData(data);
@@ -196,12 +193,10 @@ export default function TopToolbar() {
     const zip = new JSZip();
     const routeData = await exportRoute();
 
-    // Build a lookup from location index → in-memory photos (with live blob/data URLs)
     const locations = useProjectStore.getState().locations;
     const livePhotoUrlMap = new Map<string, string>();
     for (const loc of locations) {
       for (const photo of loc.photos) {
-        // Key by caption+focalPoint to match serialized photos back to live ones
         livePhotoUrlMap.set(`${loc.name}:${photo.caption ?? ''}:${photo.focalPoint?.x ?? ''}:${photo.focalPoint?.y ?? ''}:${photo.url.slice(-40)}`, photo.url);
       }
     }
@@ -214,14 +209,12 @@ export default function TopToolbar() {
         continue;
       }
 
-      // Use live in-memory URLs when available (they have valid blob/data URLs)
       const liveLoc = locations[locIdx];
 
       for (let pIdx = 0; pIdx < location.photos.length; pIdx++) {
         const photo = location.photos[pIdx];
         const filename = `photos/photo_${photoIndex++}.jpg`;
         try {
-          // Prefer in-memory photo URL (blob: or data:) over serialized URL
           const liveUrl = liveLoc?.photos[pIdx]?.url;
           const urlToFetch = liveUrl && (liveUrl.startsWith('blob:') || liveUrl.startsWith('data:'))
             ? liveUrl
@@ -232,7 +225,6 @@ export default function TopToolbar() {
             continue;
           }
           const blob = await response.blob();
-          // Validate: real photos should be > 1KB
           if (blob.size < 1024) {
             console.warn(`Export: photo ${filename} too small (${blob.size}B), skipping`);
             continue;
@@ -240,7 +232,6 @@ export default function TopToolbar() {
           zip.file(filename, blob);
           photo.url = filename;
         } catch {
-          // Keep the serialized URL in route.json if the photo blob cannot be materialized.
           console.warn(`Export: exception fetching photo ${filename}`);
         }
       }
@@ -257,206 +248,211 @@ export default function TopToolbar() {
     URL.revokeObjectURL(url);
   };
 
+  const saveStatusConfig = {
+    saving: { color: "bg-orange-400", tooltip: "Saving..." },
+    saved: { color: "bg-emerald-500", tooltip: "All changes saved" },
+    error: { color: "bg-red-500", tooltip: "Error saving changes" },
+  } as const;
+
   return (
     <>
-      <div className="flex h-12 items-center justify-between border-b bg-background px-3 md:px-4">
-        {/* Left: panel toggle + logo + project name */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden md:inline-flex h-8 w-8"
-            onClick={() => setLeftPanelOpen(!leftPanelOpen)}
-            aria-label={leftPanelOpen ? "Collapse sidebar" : "Expand sidebar"}
-          >
-            {leftPanelOpen ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeft className="h-4 w-4" />
-            )}
-          </Button>
-          <Link
-            href="/"
-            className="text-sm md:text-lg font-bold tracking-tight"
-          >
-            TraceRecap
-          </Link>
-          <span className="hidden md:inline text-muted-foreground/40 mx-0.5">/</span>
-          <button
-            className="hidden md:flex items-center gap-1 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors max-w-[180px]"
-            onClick={() => setProjectListOpen(true)}
-            disabled={isSwitchingProject}
-            title="Switch project"
-          >
-            <span className="truncate">{currentProjectName}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
-          </button>
-          <button
-            className="md:hidden flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted"
-            onClick={() => setProjectListOpen(true)}
-            disabled={isSwitchingProject}
-            title="Switch project"
-          >
-            <span className="truncate max-w-[100px]">{currentProjectName}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
-          </button>
-          {/* Save status indicator */}
-          {saveStatus === "saving" && (
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground animate-pulse" title="Saving...">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span className="hidden md:inline">Saving…</span>
-            </span>
-          )}
-          {saveStatus === "saved" && (
-            <span className="flex items-center gap-1 text-[10px] text-green-600" title="Saved">
-              <Check className="h-3 w-3" />
-              <span className="hidden md:inline">Saved</span>
-            </span>
-          )}
-          {saveStatus === "error" && (
-            <span className="flex items-center gap-1 text-[10px] text-red-500" title="Save failed">
-              <AlertCircle className="h-3 w-3" />
-              <span className="hidden md:inline">Save failed</span>
-            </span>
-          )}
-        </div>
-
-        {/* Center: viewport ratio selector (desktop) */}
-        <div className="hidden md:flex items-center gap-1 rounded-lg border p-0.5 bg-muted/50">
-          {ratioOptions.map((ratio) => (
-            <button
-              key={ratio}
-              className={`px-2 py-1 text-xs rounded-md font-medium transition-colors ${
-                viewportRatio === ratio
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-accent"
-              }`}
-              onClick={() => setViewportRatio(ratio)}
-            >
-              {ratioLabels[ratio]}
-            </button>
-          ))}
-        </div>
-
-        {/* Center: viewport ratio selector (mobile dropdown) */}
-        <div className="md:hidden">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <button className="px-2 py-1 text-xs rounded-md font-medium border bg-muted/50">
-                  {ratioLabels[viewportRatio]}
-                </button>
-              }
-            />
-            <DropdownMenuContent align="center" sideOffset={4}>
-              <DropdownMenuRadioGroup
-                value={viewportRatio}
-                onValueChange={(v) => setViewportRatio(v as AspectRatio)}
-              >
-                {ratioOptions.map((ratio) => (
-                  <DropdownMenuRadioItem key={ratio} value={ratio}>
-                    {ratioLabels[ratio]}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {/* Right: undo/redo + more menu */}
-        <div className="flex items-center gap-1.5 md:gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={undo}
-            disabled={!canUndo}
-            aria-label="Undo"
-          >
-            <Undo2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={redo}
-            disabled={!canRedo}
-            aria-label="Redo"
-          >
-            <Redo2 className="h-4 w-4" />
-          </Button>
-
-          {/* Settings gear */}
-          <div className="relative">
+      <TooltipProvider delay={300}>
+        <div
+          className="flex h-12 items-center justify-between px-3 md:px-4"
+          style={{
+            backgroundColor: "#fffbf5",
+            borderBottom: "1px solid #e7e5e4",
+          }}
+        >
+          {/* Left: panel toggle + breadcrumb + save dot */}
+          <div className="flex items-center gap-1.5">
             <Button
-              ref={settingsButtonRef}
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
-              onClick={() => setSettingsOpen((v) => !v)}
-              aria-label="Settings"
+              className="hidden md:inline-flex h-8 w-8"
+              onClick={() => setLeftPanelOpen(!leftPanelOpen)}
+              aria-label={leftPanelOpen ? "Collapse sidebar" : "Expand sidebar"}
+              style={{ color: "#78716c" }}
             >
-              <Settings className="h-4 w-4" />
+              {leftPanelOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeft className="h-4 w-4" />
+              )}
             </Button>
 
-            {/* Desktop: absolute dropdown */}
-            {settingsOpen && !isMobile && (
-              <div
-                ref={settingsPanelRef}
-                className="absolute right-0 top-full mt-2 z-50 w-72 max-h-[80vh] overflow-y-auto rounded-lg border bg-background p-4 shadow-lg space-y-4"
-              >
-                <p className="text-sm font-semibold">Settings</p>
-                <SettingsContent
-                  mapStyle={mapStyle}
-                  setMapStyle={setMapStyle}
-                  cityLabelLang={cityLabelLang}
-                  setCityLabelLang={setCityLabelLang}
-                  cityLabelSize={cityLabelSize}
-                  setCityLabelSize={setCityLabelSize}
-                  cityLabelTopPercent={cityLabelTopPercent}
-                  setCityLabelTopPercent={setCityLabelTopPercent}
-                  routeLabelBottomPercent={routeLabelBottomPercent}
-                  setRouteLabelBottomPercent={setRouteLabelBottomPercent}
-                  routeLabelSize={routeLabelSize}
-                  setRouteLabelSize={setRouteLabelSize}
-                  moodColorsEnabled={moodColorsEnabled}
-                  setMoodColorsEnabled={setMoodColorsEnabled}
-                  albumStyle={albumStyle}
-                  setAlbumStyle={setAlbumStyle}
-                  albumCaptionsEnabled={albumCaptionsEnabled}
-                  setAlbumCaptionsEnabled={setAlbumCaptionsEnabled}
+            <Link
+              href="/"
+              className="text-sm md:text-base font-semibold tracking-tight hover:opacity-80 transition-opacity"
+              style={{ color: "#1c1917" }}
+            >
+              TraceRecap
+            </Link>
+
+            <span className="text-xs select-none" style={{ color: "#d6d3d1" }}>/</span>
+
+            <button
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors max-w-[140px] md:max-w-[200px] hover:bg-stone-100"
+              onClick={() => setProjectListOpen(true)}
+              disabled={isSwitchingProject}
+              style={{ color: "#78716c" }}
+            >
+              <span className="truncate">{currentProjectName}</span>
+              <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+            </button>
+
+            {/* Save status dot */}
+            {saveStatus && saveStatus !== "idle" && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full ${saveStatusConfig[saveStatus].color} ${
+                        saveStatus === "saving" ? "animate-pulse" : ""
+                      }`}
+                    />
+                  }
                 />
-              </div>
+                <TooltipContent side="bottom" sideOffset={6}>
+                  {saveStatusConfig[saveStatus].tooltip}
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
 
-          {/* Mobile: slide-up drawer (rendered via portal to avoid toolbar clipping) */}
-          {settingsOpen && isMobile && (
-            <>
-              {/* Backdrop */}
-              <div
-                className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm"
-                onClick={() => setSettingsOpen(false)}
-              />
-              {/* Drawer */}
-              <div className="fixed bottom-0 left-0 right-0 z-[70] max-h-[85vh] overflow-y-auto overscroll-contain rounded-t-2xl border-t bg-background shadow-2xl pb-[env(safe-area-inset-bottom)]">
-                {/* Drag handle */}
-                <div className="sticky top-0 z-10 bg-background pt-3 pb-2 px-4 rounded-t-2xl">
-                  <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted-foreground/30" />
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold">Settings</p>
+          {/* Right side — desktop */}
+          <div className="hidden md:flex items-center">
+            {/* Undo / Redo group */}
+            <div className="flex items-center gap-0.5">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setSettingsOpen(false)}
-                      aria-label="Close settings"
+                      className="h-8 w-8"
+                      onClick={undo}
+                      disabled={!canUndo}
+                      aria-label="Undo"
+                      style={{ color: "#78716c" }}
+                    />
+                  }
+                >
+                  <Undo2 className="h-4 w-4" />
+                </TooltipTrigger>
+                <TooltipContent>Undo</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={redo}
+                      disabled={!canRedo}
+                      aria-label="Redo"
+                      style={{ color: "#78716c" }}
+                    />
+                  }
+                >
+                  <Redo2 className="h-4 w-4" />
+                </TooltipTrigger>
+                <TooltipContent>Redo</TooltipContent>
+              </Tooltip>
+            </div>
+
+            {/* Divider */}
+            <div className="mx-2 h-5 w-px" style={{ backgroundColor: "#e7e5e4" }} />
+
+            {/* More menu (Import, Save Route, Clear) */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="More options"
+                          style={{ color: "#78716c" }}
+                        />
+                      }
                     >
-                      <X className="h-4 w-4" />
-                    </Button>
+                      <MoreVertical className="h-4 w-4" />
+                    </DropdownMenuTrigger>
+                  }
+                />
+                <TooltipContent>More options</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end" sideOffset={4}>
+                <DropdownMenuItem
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSwitchingProject}
+                >
+                  <Upload className="h-4 w-4" />
+                  Import Route
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportRoute}>
+                  <Save className="h-4 w-4" />
+                  Save Route
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={isSwitchingProject}
+                  onClick={() => setClearDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Clear Route
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Settings gear */}
+            <div className="relative">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      ref={settingsButtonRef}
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setSettingsOpen((v) => !v)}
+                      aria-label="Settings"
+                      style={{ color: settingsOpen ? "#f97316" : "#78716c" }}
+                    />
+                  }
+                >
+                  <Settings className="h-4 w-4" />
+                </TooltipTrigger>
+                <TooltipContent>Settings</TooltipContent>
+              </Tooltip>
+
+              {/* Desktop settings panel */}
+              {settingsOpen && !isMobile && (
+                <div
+                  ref={settingsPanelRef}
+                  className="absolute right-0 top-full mt-2 z-50 w-80 max-h-[80vh] overflow-y-auto rounded-xl p-5 space-y-5"
+                  style={{
+                    backgroundColor: "#fffbf5",
+                    border: "1px solid #e7e5e4",
+                    boxShadow: "0 8px 32px rgba(28, 25, 23, 0.08), 0 2px 8px rgba(28, 25, 23, 0.04)",
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold" style={{ color: "#1c1917" }}>Settings</p>
+                    <button
+                      onClick={() => setSettingsOpen(false)}
+                      className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-stone-100 transition-colors"
+                      style={{ color: "#78716c" }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                </div>
-                <div className="px-4 pb-8 space-y-4">
                   <SettingsContent
                     mapStyle={mapStyle}
                     setMapStyle={setMapStyle}
@@ -476,65 +472,191 @@ export default function TopToolbar() {
                     setAlbumStyle={setAlbumStyle}
                     albumCaptionsEnabled={albumCaptionsEnabled}
                     setAlbumCaptionsEnabled={setAlbumCaptionsEnabled}
+                    viewportRatio={viewportRatio}
+                    setViewportRatio={setViewportRatio}
+                    ratioOptions={ratioOptions}
+                    ratioLabels={ratioLabels}
                   />
                 </div>
-              </div>
-            </>
-          )}
+              )}
+            </div>
 
-          {/* More menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
+            {/* Divider */}
+            <div className="mx-2 h-5 w-px" style={{ backgroundColor: "#e7e5e4" }} />
+
+            {/* Export — primary CTA */}
+            <button
+              className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.97]"
+              style={{ backgroundColor: "#f97316" }}
+              onClick={() => setExportDialogOpen(true)}
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+          </div>
+
+          {/* Right side — mobile */}
+          <div className="flex md:hidden items-center gap-1.5">
+            {/* Export — always visible on mobile */}
+            <button
+              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
+              style={{ backgroundColor: "#f97316" }}
+              onClick={() => setExportDialogOpen(true)}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </button>
+
+            {/* Hamburger */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Menu"
+              style={{ color: "#78716c" }}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      </TooltipProvider>
+
+      {/* Mobile bottom drawer */}
+      {mobileMenuOpen && isMobile && (
+        <>
+          <div
+            className="fixed inset-0 z-[70] bg-black/40"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div
+            className="fixed bottom-0 left-0 right-0 z-[70] max-h-[70vh] overflow-y-auto overscroll-contain rounded-t-2xl shadow-2xl pb-[env(safe-area-inset-bottom)]"
+            style={{ backgroundColor: "#fffbf5", borderTop: "1px solid #e7e5e4" }}
+          >
+            <div className="sticky top-0 z-10 pt-3 pb-2 px-4 rounded-t-2xl" style={{ backgroundColor: "#fffbf5" }}>
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full" style={{ backgroundColor: "#d6d3d1" }} />
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold" style={{ color: "#1c1917" }}>Actions</p>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
-                  aria-label="More options"
+                  className="h-7 w-7"
+                  onClick={() => setMobileMenuOpen(false)}
+                  aria-label="Close menu"
+                  style={{ color: "#78716c" }}
                 >
-                  <MoreVertical className="h-4 w-4" />
+                  <X className="h-4 w-4" />
                 </Button>
-              }
-            />
-            <DropdownMenuContent align="end" sideOffset={4}>
-              <DropdownMenuItem
-                onClick={() => fileInputRef.current?.click()}
+              </div>
+            </div>
+            <div className="px-4 pb-6 space-y-1">
+              <MobileActionButton
+                icon={<Undo2 className="h-4 w-4" />}
+                label="Undo"
+                onClick={() => { undo(); setMobileMenuOpen(false); }}
+                disabled={!canUndo}
+              />
+              <MobileActionButton
+                icon={<Redo2 className="h-4 w-4" />}
+                label="Redo"
+                onClick={() => { redo(); setMobileMenuOpen(false); }}
+                disabled={!canRedo}
+              />
+              <div className="my-2 h-px" style={{ backgroundColor: "#e7e5e4" }} />
+              <MobileActionButton
+                icon={<Upload className="h-4 w-4" />}
+                label="Import Route"
+                onClick={() => { fileInputRef.current?.click(); setMobileMenuOpen(false); }}
                 disabled={isSwitchingProject}
-              >
-                <Upload className="h-4 w-4" />
-                Import Route
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportRoute}>
-                <Save className="h-4 w-4" />
-                Save Route
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem onClick={() => setExportDialogOpen(true)}>
-                <Download className="h-4 w-4" />
-                Export Video
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
+              />
+              <MobileActionButton
+                icon={<Save className="h-4 w-4" />}
+                label="Save Route"
+                onClick={() => { void handleExportRoute(); setMobileMenuOpen(false); }}
+              />
+              <MobileActionButton
+                icon={<Settings className="h-4 w-4" />}
+                label="Settings"
+                onClick={() => { setMobileMenuOpen(false); setSettingsOpen(true); }}
+              />
+              <div className="my-2 h-px" style={{ backgroundColor: "#e7e5e4" }} />
+              <MobileActionButton
+                icon={<Trash2 className="h-4 w-4" />}
+                label="Clear Route"
+                onClick={() => { setClearDialogOpen(true); setMobileMenuOpen(false); }}
                 disabled={isSwitchingProject}
-                onClick={() => setClearDialogOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                Clear Route
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                destructive
+              />
+            </div>
+          </div>
+        </>
+      )}
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,.zip"
-            className="hidden"
-            onChange={handleImport}
+      {/* Mobile settings drawer */}
+      {settingsOpen && isMobile && (
+        <>
+          <div
+            className="fixed inset-0 z-[70] bg-black/40"
+            onClick={() => setSettingsOpen(false)}
           />
-        </div>
-      </div>
+          <div
+            className="fixed bottom-0 left-0 right-0 z-[70] max-h-[85vh] overflow-y-auto overscroll-contain rounded-t-2xl shadow-2xl pb-[env(safe-area-inset-bottom)]"
+            style={{ backgroundColor: "#fffbf5", borderTop: "1px solid #e7e5e4" }}
+          >
+            <div className="sticky top-0 z-10 pt-3 pb-2 px-4 rounded-t-2xl" style={{ backgroundColor: "#fffbf5" }}>
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full" style={{ backgroundColor: "#d6d3d1" }} />
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold" style={{ color: "#1c1917" }}>Settings</p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setSettingsOpen(false)}
+                  aria-label="Close settings"
+                  style={{ color: "#78716c" }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="px-4 pb-8 space-y-5">
+              <SettingsContent
+                mapStyle={mapStyle}
+                setMapStyle={setMapStyle}
+                cityLabelLang={cityLabelLang}
+                setCityLabelLang={setCityLabelLang}
+                cityLabelSize={cityLabelSize}
+                setCityLabelSize={setCityLabelSize}
+                cityLabelTopPercent={cityLabelTopPercent}
+                setCityLabelTopPercent={setCityLabelTopPercent}
+                routeLabelBottomPercent={routeLabelBottomPercent}
+                setRouteLabelBottomPercent={setRouteLabelBottomPercent}
+                routeLabelSize={routeLabelSize}
+                setRouteLabelSize={setRouteLabelSize}
+                moodColorsEnabled={moodColorsEnabled}
+                setMoodColorsEnabled={setMoodColorsEnabled}
+                albumStyle={albumStyle}
+                setAlbumStyle={setAlbumStyle}
+                albumCaptionsEnabled={albumCaptionsEnabled}
+                setAlbumCaptionsEnabled={setAlbumCaptionsEnabled}
+                viewportRatio={viewportRatio}
+                setViewportRatio={setViewportRatio}
+                ratioOptions={ratioOptions}
+                ratioLabels={ratioLabels}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,.zip"
+        className="hidden"
+        onChange={handleImport}
+      />
+
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
@@ -569,7 +691,37 @@ export default function TopToolbar() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Shared settings controls used by both desktop dropdown and mobile */
+/*  Mobile action button                                               */
+/* ------------------------------------------------------------------ */
+
+function MobileActionButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+  destructive,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-stone-100 disabled:opacity-40 disabled:pointer-events-none"
+      onClick={onClick}
+      disabled={disabled}
+      style={{ color: destructive ? "#ef4444" : "#1c1917" }}
+    >
+      <span style={{ color: destructive ? "#ef4444" : "#78716c" }}>{icon}</span>
+      {label}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings content — shared by desktop panel and mobile drawer       */
 /* ------------------------------------------------------------------ */
 
 interface SettingsContentProps {
@@ -591,6 +743,21 @@ interface SettingsContentProps {
   setAlbumStyle: (v: AlbumStyle) => void;
   albumCaptionsEnabled: boolean;
   setAlbumCaptionsEnabled: (v: boolean) => void;
+  viewportRatio: AspectRatio;
+  setViewportRatio: (v: AspectRatio) => void;
+  ratioOptions: AspectRatio[];
+  ratioLabels: Record<AspectRatio, string>;
+}
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <h3
+      className="text-[11px] font-semibold uppercase tracking-wider"
+      style={{ color: "#78716c" }}
+    >
+      {children}
+    </h3>
+  );
 }
 
 function SettingsContent({
@@ -612,28 +779,66 @@ function SettingsContent({
   setAlbumStyle,
   albumCaptionsEnabled,
   setAlbumCaptionsEnabled,
+  viewportRatio,
+  setViewportRatio,
+  ratioOptions,
+  ratioLabels,
 }: SettingsContentProps) {
   return (
     <>
+      {/* Aspect Ratio */}
+      <div className="space-y-2.5">
+        <SectionHeader>Aspect Ratio</SectionHeader>
+        <div className="flex flex-wrap gap-1.5">
+          {ratioOptions.map((ratio) => (
+            <button
+              key={ratio}
+              className="px-3 py-1.5 text-xs rounded-lg font-medium transition-colors"
+              style={
+                viewportRatio === ratio
+                  ? { backgroundColor: "#f97316", color: "#fff" }
+                  : { backgroundColor: "#f5f5f4", color: "#57534e" }
+              }
+              onMouseEnter={(e) => {
+                if (viewportRatio !== ratio) {
+                  e.currentTarget.style.backgroundColor = "#e7e5e4";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (viewportRatio !== ratio) {
+                  e.currentTarget.style.backgroundColor = "#f5f5f4";
+                }
+              }}
+              onClick={() => setViewportRatio(ratio)}
+            >
+              {ratioLabels[ratio]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="h-px" style={{ backgroundColor: "#e7e5e4" }} />
+
       {/* Map Style */}
       <div className="space-y-3">
-        <label className="text-sm font-medium text-muted-foreground">Map Style</label>
+        <SectionHeader>Map Style</SectionHeader>
         {(["classic", "navigation", "creative"] as MapStyleCategory[]).map((cat) => {
           const styles = MAP_STYLE_CONFIGS.filter((c) => c.category === cat);
           return (
             <div key={cat} className="space-y-1.5">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
+              <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "#a8a29e" }}>
                 {MAP_STYLE_CATEGORY_LABELS[cat]}
               </span>
               <div className="grid grid-cols-3 gap-1.5">
                 {styles.map((cfg) => (
                   <button
                     key={cfg.id}
-                    className={`flex flex-col items-center gap-1 rounded-lg p-1.5 text-[10px] font-medium transition-colors ${
+                    className="flex flex-col items-center gap-1 rounded-lg p-1.5 text-[10px] font-medium transition-colors"
+                    style={
                       mapStyle === cfg.id
-                        ? "ring-2 ring-indigo-500 bg-indigo-50 text-indigo-700"
-                        : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-                    }`}
+                        ? { backgroundColor: "#fff7ed", color: "#c2410c", boxShadow: "inset 0 0 0 2px #f97316" }
+                        : { backgroundColor: "#f5f5f4", color: "#57534e" }
+                    }
                     onClick={() => setMapStyle(cfg.id)}
                   >
                     <span
@@ -648,101 +853,117 @@ function SettingsContent({
           );
         })}
       </div>
-      <hr className="border-gray-100" />
-      {/* Language toggle */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">Language</label>
-        <div className="flex gap-2">
-          {([
-            { value: "en", label: "English" },
-            { value: "zh", label: "中文" },
-          ] as const).map((opt) => (
-            <button
-              key={opt.value}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                cityLabelLang === opt.value
-                  ? "bg-indigo-500 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-              onClick={() => setCityLabelLang(opt.value)}
-            >
-              {opt.label}
-            </button>
-          ))}
+
+      <div className="h-px" style={{ backgroundColor: "#e7e5e4" }} />
+
+      {/* City Labels */}
+      <div className="space-y-3">
+        <SectionHeader>City Labels</SectionHeader>
+        {/* Language toggle */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium" style={{ color: "#57534e" }}>Language</label>
+          <div className="flex gap-2">
+            {([
+              { value: "en", label: "English" },
+              { value: "zh", label: "中文" },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                className="px-3.5 py-1 rounded-full text-xs font-medium transition-colors"
+                style={
+                  cityLabelLang === opt.value
+                    ? { backgroundColor: "#f97316", color: "#fff" }
+                    : { backgroundColor: "#f5f5f4", color: "#57534e" }
+                }
+                onClick={() => setCityLabelLang(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Label size */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium" style={{ color: "#57534e" }}>
+            Size: {cityLabelSize}px
+          </label>
+          <Slider
+            value={[cityLabelSize]}
+            min={12}
+            max={48}
+            step={1}
+            onValueChange={(v) => {
+              const val = Array.isArray(v) ? v[0] : v;
+              setCityLabelSize(val);
+            }}
+          />
+        </div>
+        {/* Label position */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium" style={{ color: "#57534e" }}>
+            Position: {cityLabelTopPercent}%
+          </label>
+          <Slider
+            value={[cityLabelTopPercent]}
+            min={0}
+            max={30}
+            step={1}
+            onValueChange={(v) => {
+              const val = Array.isArray(v) ? v[0] : v;
+              setCityLabelTopPercent(val);
+            }}
+          />
         </div>
       </div>
-      {/* Label size slider */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">
-          Label Size: {cityLabelSize}px
-        </label>
-        <Slider
-          value={[cityLabelSize]}
-          min={12}
-          max={48}
-          step={1}
-          onValueChange={(v) => {
-            const val = Array.isArray(v) ? v[0] : v;
-            setCityLabelSize(val);
-          }}
-        />
+
+      <div className="h-px" style={{ backgroundColor: "#e7e5e4" }} />
+
+      {/* Route Labels */}
+      <div className="space-y-3">
+        <SectionHeader>Route Labels</SectionHeader>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium" style={{ color: "#57534e" }}>
+            Position: {routeLabelBottomPercent}%
+          </label>
+          <Slider
+            value={[routeLabelBottomPercent]}
+            min={5}
+            max={40}
+            step={1}
+            onValueChange={(v) => {
+              const val = Array.isArray(v) ? v[0] : v;
+              setRouteLabelBottomPercent(val);
+            }}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium" style={{ color: "#57534e" }}>
+            Size: {routeLabelSize}px
+          </label>
+          <Slider
+            value={[routeLabelSize]}
+            min={10}
+            max={32}
+            step={1}
+            onValueChange={(v) => {
+              const val = Array.isArray(v) ? v[0] : v;
+              setRouteLabelSize(val);
+            }}
+          />
+        </div>
       </div>
-      {/* City label position slider */}
+
+      <div className="h-px" style={{ backgroundColor: "#e7e5e4" }} />
+
+      {/* Mood Colors */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">
-          City Label Position: {cityLabelTopPercent}%
-        </label>
-        <Slider
-          value={[cityLabelTopPercent]}
-          min={0}
-          max={30}
-          step={1}
-          onValueChange={(v) => {
-            const val = Array.isArray(v) ? v[0] : v;
-            setCityLabelTopPercent(val);
-          }}
-        />
-      </div>
-      {/* Route label position slider */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">
-          Route Label Position: {routeLabelBottomPercent}%
-        </label>
-        <Slider
-          value={[routeLabelBottomPercent]}
-          min={5}
-          max={40}
-          step={1}
-          onValueChange={(v) => {
-            const val = Array.isArray(v) ? v[0] : v;
-            setRouteLabelBottomPercent(val);
-          }}
-        />
-      </div>
-      {/* Route label size slider */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">
-          Route Label Size: {routeLabelSize}px
-        </label>
-        <Slider
-          value={[routeLabelSize]}
-          min={10}
-          max={32}
-          step={1}
-          onValueChange={(v) => {
-            const val = Array.isArray(v) ? v[0] : v;
-            setRouteLabelSize(val);
-          }}
-        />
-      </div>
-      <hr className="border-gray-100" />
-      {/* Mood Colors toggle */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          <Palette className="h-4 w-4" />
-          Mood Colors
-        </label>
-        <p className="text-[11px] text-muted-foreground/70">
+        <SectionHeader>
+          <span className="flex items-center gap-1.5">
+            <Palette className="h-3.5 w-3.5" />
+            Mood Colors
+          </span>
+        </SectionHeader>
+        <p className="text-[11px]" style={{ color: "#a8a29e" }}>
           Color route lines using dominant colors from attached photos
         </p>
         <div className="flex gap-2">
@@ -752,11 +973,12 @@ function SettingsContent({
           ] as const).map((opt) => (
             <button
               key={String(opt.value)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              className="px-3.5 py-1 rounded-full text-xs font-medium transition-colors"
+              style={
                 moodColorsEnabled === opt.value
-                  ? "bg-indigo-500 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+                  ? { backgroundColor: "#f97316", color: "#fff" }
+                  : { backgroundColor: "#f5f5f4", color: "#57534e" }
+              }
               onClick={() => setMoodColorsEnabled(opt.value)}
             >
               {opt.label}
@@ -764,18 +986,22 @@ function SettingsContent({
           ))}
         </div>
       </div>
-      <hr className="border-gray-100" />
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">Album Style</label>
+
+      <div className="h-px" style={{ backgroundColor: "#e7e5e4" }} />
+
+      {/* Album Style */}
+      <div className="space-y-3">
+        <SectionHeader>Album Style</SectionHeader>
         <div className="grid grid-cols-2 gap-2">
           {ALBUM_STYLE_CONFIGS.map((config) => (
             <button
               key={config.id}
-              className={`flex flex-col items-center gap-1.5 rounded-lg p-2 text-[10px] font-medium transition-colors ${
+              className="flex flex-col items-center gap-1.5 rounded-lg p-2 text-[10px] font-medium transition-colors"
+              style={
                 albumStyle === config.id
-                  ? "bg-indigo-50 text-indigo-700 ring-2 ring-indigo-500"
-                  : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-              }`}
+                  ? { backgroundColor: "#fff7ed", color: "#c2410c", boxShadow: "inset 0 0 0 2px #f97316" }
+                  : { backgroundColor: "#f5f5f4", color: "#57534e" }
+              }
               onClick={() => setAlbumStyle(config.id)}
             >
               <div className="flex h-6 w-full overflow-hidden rounded">
@@ -797,10 +1023,11 @@ function SettingsContent({
           ))}
         </div>
       </div>
-      {/* Album Captions toggle */}
+
+      {/* Album Captions */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground">Album Captions</label>
-        <p className="text-[11px] text-muted-foreground/70">
+        <label className="text-xs font-medium" style={{ color: "#57534e" }}>Album Captions</label>
+        <p className="text-[11px]" style={{ color: "#a8a29e" }}>
           Show photo captions inside the album book
         </p>
         <div className="flex gap-2">
@@ -810,11 +1037,12 @@ function SettingsContent({
           ] as const).map((opt) => (
             <button
               key={String(opt.value)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              className="px-3.5 py-1 rounded-full text-xs font-medium transition-colors"
+              style={
                 albumCaptionsEnabled === opt.value
-                  ? "bg-indigo-500 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+                  ? { backgroundColor: "#f97316", color: "#fff" }
+                  : { backgroundColor: "#f5f5f4", color: "#57534e" }
+              }
               onClick={() => setAlbumCaptionsEnabled(opt.value)}
             >
               {opt.label}
