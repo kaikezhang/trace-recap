@@ -29,7 +29,7 @@ import { getExportViewportSize } from "@/lib/viewportRatio";
 import { FPS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { brand } from "@/lib/brand";
-import type { ExportResolution, ExportSettings } from "@/types";
+import type { AspectRatio, ExportResolution, ExportSettings } from "@/types";
 
 const RESOLUTION_OPTIONS: Array<{
   value: ExportResolution;
@@ -42,6 +42,15 @@ const RESOLUTION_OPTIONS: Array<{
   { value: "1080p", label: "Full HD", subtitle: "1080p", pixels: "1920 × 1080", icon: Monitor },
   { value: "4K", label: "Ultra HD", subtitle: "4K", pixels: "3840 × 2160", icon: Monitor },
 ];
+
+const ASPECT_RATIO_LABELS: Record<AspectRatio, string> = {
+  free: "Free",
+  "16:9": "16:9",
+  "9:16": "9:16",
+  "4:3": "4:3",
+  "3:4": "3:4",
+  "1:1": "1:1",
+};
 
 function estimateExportSizeBytes(
   width: number,
@@ -301,6 +310,7 @@ export default function ExportDialog() {
     : null;
   const estimatedSizeLabel =
     estimatedSize ?? (!canvas || segments.length === 0 ? "Unavailable" : "Calculating...");
+  const musicStatus = "No music";
 
   const phaseLabel = (phase: ExportProgress["phase"]) => {
     switch (phase) {
@@ -511,6 +521,56 @@ export default function ExportDialog() {
             <span className="text-sm font-semibold" style={{ color: brand.colors.primary[700] }}>
               {estimatedSizeLabel}
             </span>
+          </div>
+
+          <div
+            className="rounded-xl border px-4 py-4"
+            style={{
+              borderColor: brand.colors.warm[200],
+              background: `linear-gradient(135deg, ${brand.colors.warm[50]}, ${brand.colors.primary[50]})`,
+              boxShadow: brand.shadows.sm,
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium" style={{ color: brand.colors.warm[700] }}>
+                Export Settings
+              </p>
+              <span
+                className="rounded-full px-2 py-1 text-[11px] font-medium"
+                style={{
+                  color: brand.colors.primary[700],
+                  backgroundColor: brand.colors.primary[100],
+                }}
+              >
+                Change in editor toolbar
+              </span>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              <div
+                className="flex items-center justify-between rounded-lg px-3 py-2"
+                style={{ backgroundColor: "rgba(255, 255, 255, 0.72)" }}
+              >
+                <span className="text-sm" style={{ color: brand.colors.warm[600] }}>
+                  Aspect Ratio
+                </span>
+                <span className="text-sm font-semibold" style={{ color: brand.colors.warm[800] }}>
+                  {ASPECT_RATIO_LABELS[viewportRatio]}
+                </span>
+              </div>
+
+              <div
+                className="flex items-center justify-between rounded-lg px-3 py-2"
+                style={{ backgroundColor: "rgba(255, 255, 255, 0.72)" }}
+              >
+                <span className="text-sm" style={{ color: brand.colors.warm[600] }}>
+                  Music
+                </span>
+                <span className="text-sm font-semibold" style={{ color: brand.colors.warm[800] }}>
+                  {musicStatus}
+                </span>
+              </div>
+            </div>
           </div>
 
           <AnimatePresence>
