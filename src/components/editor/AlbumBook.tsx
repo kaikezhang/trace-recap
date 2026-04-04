@@ -10,6 +10,7 @@ import {
   type AlbumStyleConfig,
 } from "@/lib/albumStyles";
 import { useUIStore } from "@/stores/uiStore";
+import { parseViewportRatio } from "@/lib/viewportRatio";
 import PaperTexture from "./PaperTexture";
 import PhotoFrame from "./PhotoFrame";
 
@@ -210,6 +211,12 @@ export default function AlbumBook({
   const leftPhotos = useMemo(() => photos.slice(0, split.left), [photos, split.left]);
   const rightPhotos = useMemo(() => photos.slice(split.left), [photos, split.left]);
 
+  const viewportRatio = useUIStore((s) => s.viewportRatio);
+  const parsed = parseViewportRatio(viewportRatio);
+  // Shrink album in square/portrait viewports so it doesn't dominate the frame
+  const isCompactViewport = parsed != null && parsed.width / parsed.height <= 1;
+  const albumWidth = isCompactViewport ? "min(52vw, 280px)" : "min(75vw, 420px)";
+
   return (
     <motion.div
       layout
@@ -227,7 +234,7 @@ export default function AlbumBook({
       <div
         className="relative overflow-hidden"
         style={{
-          width: "min(75vw, 420px)",
+          width: albumWidth,
           aspectRatio: "5 / 3",
           borderRadius: config.borderRadius,
           border:
