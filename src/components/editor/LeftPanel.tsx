@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, type RefObject } from "react";
-import { lineString } from "@turf/helpers";
-import { length } from "@turf/length";
+import { type RefObject } from "react";
 import { Camera, MapPinned, Route } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { brand } from "@/lib/brand";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import CitySearch, { type CitySearchHandle } from "./CitySearch";
+import MiniRoutePreview from "./MiniRoutePreview";
 import RouteList from "./RouteList";
 
 interface LeftPanelProps {
@@ -17,12 +16,6 @@ interface LeftPanelProps {
   searchHintMessage?: string;
   onDismissSearchHint?: () => void;
   searchRef?: RefObject<CitySearchHandle | null>;
-}
-
-function formatDistance(distanceKm: number): string {
-  if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} m`;
-  if (distanceKm < 100) return `${distanceKm.toFixed(1)} km`;
-  return `${Math.round(distanceKm)} km`;
 }
 
 export default function LeftPanel({
@@ -38,25 +31,6 @@ export default function LeftPanel({
 
   const nonWaypointLocations = locations.filter((location) => !location.isWaypoint);
   const totalPhotos = locations.reduce((sum, location) => sum + location.photos.length, 0);
-
-  const distanceEstimate = useMemo(() => {
-    const locationLookup = new Map(locations.map((location) => [location.id, location]));
-
-    return segments.reduce((sum, segment) => {
-      if (segment.geometry && segment.geometry.coordinates.length > 1) {
-        return sum + length(lineString(segment.geometry.coordinates), { units: "kilometers" });
-      }
-
-      const fromLocation = locationLookup.get(segment.fromId);
-      const toLocation = locationLookup.get(segment.toId);
-      if (!fromLocation || !toLocation) return sum;
-
-      return sum + length(
-        lineString([fromLocation.coordinates, toLocation.coordinates]),
-        { units: "kilometers" },
-      );
-    }, 0);
-  }, [locations, segments]);
 
   if (!leftPanelOpen) return null;
 
@@ -127,7 +101,7 @@ export default function LeftPanel({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className="mt-5 grid grid-cols-[128px_minmax(0,1fr)] gap-3">
           <div
             className="rounded-[20px] border px-4 py-3"
             style={{
@@ -156,33 +130,11 @@ export default function LeftPanel({
             </p>
           </div>
 
-          <div
-            className="rounded-[20px] border px-4 py-3"
-            style={{
-              backgroundColor: "rgba(255,255,255,0.76)",
-              borderColor: brand.colors.ocean[200],
-              boxShadow: brand.shadows.sm,
-            }}
-          >
-            <div
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full"
-              style={{ backgroundColor: brand.colors.ocean[100] }}
-            >
-              <MapPinned
-                className="h-4 w-4"
-                style={{ color: brand.colors.ocean[700] }}
-              />
-            </div>
-            <p
-              className="mt-3 text-[11px] font-medium uppercase tracking-[0.18em]"
-              style={{ color: brand.colors.warm[500] }}
-            >
-              Distance
-            </p>
-            <p className="mt-1 text-2xl font-semibold" style={{ color: brand.colors.warm[900] }}>
-              {formatDistance(distanceEstimate)}
-            </p>
-          </div>
+          <MiniRoutePreview
+            locations={locations}
+            segments={segments}
+            className="min-w-0 overflow-hidden"
+          />
         </div>
 
         <div
