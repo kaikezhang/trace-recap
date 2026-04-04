@@ -1112,7 +1112,6 @@ function EditorContent() {
         const { canUndo, undo } = useHistoryStore.getState();
         if (canUndo) {
           undo();
-          useUIStore.getState().addToast({ title: "Undid", variant: "info" });
         }
         return;
       }
@@ -1121,7 +1120,6 @@ function EditorContent() {
         const { canRedo, redo } = useHistoryStore.getState();
         if (canRedo) {
           redo();
-          useUIStore.getState().addToast({ title: "Redid", variant: "info" });
         }
         return;
       }
