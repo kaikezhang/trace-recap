@@ -1,12 +1,38 @@
 "use client";
 
-import { memo, useEffect, useRef } from "react";
-import { Play, Pause, RotateCcw } from "lucide-react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
+  Bike,
+  Bus,
+  Car,
+  Footprints,
+  Pause,
+  Plane,
+  Play,
+  RotateCcw,
+  Ship,
+  TrainFront,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAnimationStore } from "@/stores/animationStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { brand } from "@/lib/brand";
+import type { TransportMode } from "@/types";
 import OnboardingHint from "./OnboardingHint";
 
 interface PlaybackControlsProps {
@@ -26,6 +52,32 @@ function formatTime(seconds: number): string {
   return `${m}:${String(rem).padStart(2, "0")}`;
 }
 
+function formatSegmentDuration(seconds: number): string {
+  return `${seconds.toFixed(1)}s`;
+}
+
+const MODE_VISUALS: Record<
+  TransportMode,
+  { color: string; glow: string; Icon: LucideIcon }
+> = {
+  flight: { color: "#f97316", glow: "#fb923c", Icon: Plane },
+  car: { color: "#f59e0b", glow: "#fbbf24", Icon: Car },
+  train: { color: "#06b6d4", glow: "#22d3ee", Icon: TrainFront },
+  bus: { color: "#a855f7", glow: "#c084fc", Icon: Bus },
+  ferry: { color: "#14b8a6", glow: "#2dd4bf", Icon: Ship },
+  walk: { color: "#92400e", glow: "#b45309", Icon: Footprints },
+  bicycle: { color: "#0f766e", glow: "#14b8a6", Icon: Bike },
+};
+
+interface ScrubberTick {
+  id: string;
+  duration: number;
+  fromCity: string;
+  left: number;
+  mode: TransportMode;
+  toCity: string;
+}
+
 export default memo(function PlaybackControls({
   onPlay,
   onPause,
@@ -38,12 +90,87 @@ export default memo(function PlaybackControls({
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentTime = useAnimationStore((s) => s.currentTime);
   const totalDuration = useAnimationStore((s) => s.totalDuration);
+  const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
+  const timeline = useAnimationStore((s) => s.timeline);
+  const locations = useProjectStore((s) => s.locations);
+  const segments = useProjectStore((s) => s.segments);
   const bottomSheetState = useUIStore((s) => s.bottomSheetState);
   const exportDialogOpen = useUIStore((s) => s.exportDialogOpen);
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrubberRef = useRef<HTMLDivElement>(null);
+  const [hoveredTickId, setHoveredTickId] = useState<string | null>(null);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
+  const thumbLeft = Math.min(Math.max(progress, 0.5), 99.5);
+  const activeTimelineEntry = timeline[currentSegmentIndex];
+  const activeSegment =
+    (activeTimelineEntry
+      ? segments.find((segment) => segment.id === activeTimelineEntry.segmentId)
+      : null) ?? segments[currentSegmentIndex] ?? null;
+  const activeModeVisual = activeSegment
+    ? MODE_VISUALS[activeSegment.transportMode]
+    : null;
+  const scrubberTicks = useMemo<ScrubberTick[]>(() => {
+    if (timeline.length === 0 || totalDuration <= 0) return [];
+
+    const locationById = new Map(locations.map((location) => [location.id, location]));
+    const segmentById = new Map(segments.map((segment) => [segment.id, segment]));
+
+    return timeline.reduce<ScrubberTick[]>((ticks, entry, index) => {
+      const segment = segmentById.get(entry.segmentId) ?? segments[index];
+      if (!segment) return ticks;
+
+      const fromCity = locationById.get(segment.fromId)?.name;
+      const toCity = locationById.get(segment.toId)?.name;
+      if (!fromCity || !toCity) return ticks;
+
+      const endTime = entry.startTime + entry.duration;
+      const left = Math.min(Math.max((endTime / totalDuration) * 100, 0.5), 99.5);
+
+      ticks.push({
+        id: entry.segmentId,
+        duration: entry.duration,
+        fromCity,
+        left,
+        mode: segment.transportMode,
+        toCity,
+      });
+      return ticks;
+    }, []);
+  }, [locations, segments, timeline, totalDuration]);
+
+  const updateHoveredTick = (clientX: number) => {
+    const scrubber = scrubberRef.current;
+    if (!scrubber || scrubberTicks.length === 0) {
+      setHoveredTickId(null);
+      return;
+    }
+
+    const rect = scrubber.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const thresholdPx = Math.max(8, Math.min(14, rect.width * 0.02));
+    let closestTickId: string | null = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    for (const tick of scrubberTicks) {
+      const tickX = (tick.left / 100) * rect.width;
+      const distance = Math.abs(localX - tickX);
+      if (distance <= thresholdPx && distance < closestDistance) {
+        closestTickId = tick.id;
+        closestDistance = distance;
+      }
+    }
+
+    setHoveredTickId(closestTickId);
+  };
+
+  const handleScrubberPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (event.pointerType !== "mouse") return;
+    updateHoveredTick(event.clientX);
+  };
 
   useEffect(() => {
     if (!onPlayingMobileInsetChange || typeof window === "undefined") return;
@@ -91,6 +218,13 @@ export default memo(function PlaybackControls({
       onPlayingMobileInsetChange(0);
     };
   }, [exportDialogOpen, isPlaying, onPlayingMobileInsetChange]);
+
+  useEffect(() => {
+    if (!hoveredTickId) return;
+    if (!scrubberTicks.some((tick) => tick.id === hoveredTickId)) {
+      setHoveredTickId(null);
+    }
+  }, [hoveredTickId, scrubberTicks]);
 
   // Hide controls when export dialog is open
   if (exportDialogOpen) return null;
@@ -182,23 +316,96 @@ export default memo(function PlaybackControls({
             isPlaying ? "flex-1" : "flex-1 md:w-96 md:flex-none",
           ].join(" ")}
         >
-          <Slider
-            className={[
-              isPlaying
-                ? "h-4 [&>div:first-child]:h-1 md:[&>div:first-child]:h-1"
-                : "h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5",
-              "[&_[data-slot=slider-range]]:bg-orange-500",
-              "[&_[data-slot=slider-thumb]]:border-orange-500",
-            ].join(" ")}
-            value={[progress]}
-            min={0}
-            max={100}
-            step={0.1}
-            onValueChange={(v) => {
-              const val = Array.isArray(v) ? v[0] : v;
-              onSeek(val / 100);
-            }}
-          />
+          <div
+            ref={scrubberRef}
+            className="relative"
+            onPointerLeave={() => setHoveredTickId(null)}
+            onPointerMove={handleScrubberPointerMove}
+          >
+            {activeModeVisual && totalDuration > 0 && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 z-0 size-5 -translate-y-1/2 rounded-full"
+                style={{
+                  left: `calc(${thumbLeft}% - 10px)`,
+                  background: `${activeModeVisual.glow}2b`,
+                  boxShadow: `0 0 0 4px ${activeModeVisual.color}22, 0 0 20px ${activeModeVisual.glow}55`,
+                }}
+              />
+            )}
+            <Slider
+              className={[
+                "relative z-10",
+                isPlaying
+                  ? "h-4 [&>div:first-child]:h-1 md:[&>div:first-child]:h-1"
+                  : "h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5",
+                "[&_[data-slot=slider-range]]:bg-orange-500",
+                "[&_[data-slot=slider-thumb]]:border-orange-500",
+              ].join(" ")}
+              value={[progress]}
+              min={0}
+              max={100}
+              step={0.1}
+              onValueChange={(v) => {
+                const val = Array.isArray(v) ? v[0] : v;
+                onSeek(val / 100);
+              }}
+            />
+            {scrubberTicks.length > 0 && (
+              <div className="pointer-events-none absolute inset-0 z-20">
+                {scrubberTicks.map((tick) => {
+                  const { Icon, color, glow } = MODE_VISUALS[tick.mode];
+
+                  return (
+                    <Tooltip key={tick.id} open={hoveredTickId === tick.id}>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute top-1/2 block h-6 w-4 -translate-x-1/2 -translate-y-1/2"
+                            style={{ left: `${tick.left}%` }}
+                          >
+                            <span
+                              className="absolute left-1/2 top-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                              style={{
+                                backgroundColor: color,
+                                boxShadow: `0 0 10px ${glow}66`,
+                              }}
+                            />
+                          </span>
+                        }
+                      />
+                      <TooltipContent
+                        side="top"
+                        sideOffset={10}
+                        className="rounded-xl border border-white/10 bg-stone-950/95 px-3 py-2 text-stone-50 shadow-2xl backdrop-blur-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="flex h-7 w-7 items-center justify-center rounded-full"
+                            style={{
+                              backgroundColor: `${color}24`,
+                              color,
+                            }}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                          </span>
+                          <div className="leading-tight">
+                            <p className="font-medium text-stone-50">
+                              {tick.fromCity} {"\u2192"} {tick.toCity}
+                            </p>
+                            <p className="mt-1 text-[11px] text-stone-300">
+                              Duration: {formatSegmentDuration(tick.duration)}
+                            </p>
+                          </div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
         <div className={timeContainerClassName} aria-hidden={isPlaying}>
           <span
