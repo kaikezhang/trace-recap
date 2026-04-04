@@ -114,7 +114,16 @@ export default function ChapterPinsOverlay() {
 
       const projected = map.project(location.coordinates);
       const x = projected.x;
-      const y = projected.y;
+      let y = projected.y;
+
+      // Clamp Y so album pins have enough room above to avoid cutoff.
+      // Album height ≈ 200px (book + label + stem). For non-visited pins,
+      // ensure pin bottom anchor is far enough from the top of the container.
+      const isAlbumPin = entry.state === "album-open" || entry.state === "album-collecting";
+      if (isAlbumPin) {
+        const minY = 210;
+        y = Math.max(y, minY);
+      }
 
       // Update DOM element position directly (no React re-render)
       const el = pinElementsRef.current.get(entry.locationId);
@@ -225,7 +234,7 @@ export default function ChapterPinsOverlay() {
   if (!chapterPinsEnabled || !isAnimating) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[8] overflow-hidden">
+    <div className="pointer-events-none absolute inset-0 z-[8]">
       {pinEntries.map((entry) => {
         const location = locations.find((l) => l.id === entry.locationId);
         if (!location) return null;
