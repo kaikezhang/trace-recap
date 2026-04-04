@@ -79,6 +79,7 @@ interface ToastItem {
 
 interface UIState {
   leftPanelOpen: boolean;
+  headerCollapsed: boolean;
   immersiveMode: boolean;
   exportDialogOpen: boolean;
   aiPanelOpen: boolean;
@@ -109,6 +110,8 @@ interface UIState {
   removeToast: (id: string) => void;
   setSaveStatus: (status: SaveStatus) => void;
   setLeftPanelOpen: (open: boolean) => void;
+  setHeaderCollapsed: (collapsed: boolean) => void;
+  toggleHeaderCollapsed: () => void;
   setImmersiveMode: (immersive: boolean) => void;
   setExportDialogOpen: (open: boolean) => void;
   setAIPanelOpen: (open: boolean) => void;
@@ -136,6 +139,7 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set) => ({
   leftPanelOpen: true,
+  headerCollapsed: true,
   immersiveMode: false,
   exportDialogOpen: false,
   aiPanelOpen: false,
@@ -171,6 +175,9 @@ export const useUIStore = create<UIState>((set) => ({
   },
   setSaveStatus: (saveStatus) => set({ saveStatus }),
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
+  setHeaderCollapsed: (headerCollapsed) => set({ headerCollapsed }),
+  toggleHeaderCollapsed: () =>
+    set((state) => ({ headerCollapsed: !state.headerCollapsed })),
   setImmersiveMode: (immersiveMode) => set({ immersiveMode }),
   setExportDialogOpen: (exportDialogOpen) => set({ exportDialogOpen }),
   setAIPanelOpen: (aiPanelOpen) => set({ aiPanelOpen }),
