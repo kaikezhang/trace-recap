@@ -4,6 +4,12 @@ import { memo, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useMap } from "./MapContext";
 import {
   getEmptyRouteData,
@@ -55,14 +61,21 @@ export default memo(function MapCanvas() {
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const segmentLayersRef = useRef<Set<string>>(new Set());
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    lng: number;
+    lat: number;
+  } | null>(null);
   const { setMap } = useMap();
-  const addLocation = useProjectStore((s) => s.addLocation);
+  const addLocationAtCoordinates = useProjectStore((s) => s.addLocationAtCoordinates);
   const locations = useLocationsForMap();
   const segments = useProjectStore((s) => s.segments);
   const segmentColors = useProjectStore((s) => s.segmentColors);
   const setSegmentColor = useProjectStore((s) => s.setSegmentColor);
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const moodColorsEnabled = useUIStore((s) => s.moodColorsEnabled);
+  const addToast = useUIStore((s) => s.addToast);
   const photoFingerprint = usePhotoFingerprint();
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentSegmentIndex = useAnimationStore((s) => s.currentSegmentIndex);
@@ -98,36 +111,44 @@ export default memo(function MapCanvas() {
     if (!map) return;
 
     const handleClick = async (e: mapboxgl.MapMouseEvent) => {
-      const { lng, lat } = e.lngLat;
-      try {
-        // Reverse geocode for English name, then forward geocode that name → Chinese
-        const resEn = await fetch(`/api/geocode?lng=${lng}&lat=${lat}`);
-        const dataEn = await resEn.json();
-        const name =
-          dataEn.features?.[0]?.text ||
-          dataEn.features?.[0]?.place_name ||
-          `${lat.toFixed(2)}, ${lng.toFixed(2)}`;
-        // Forward geocode English name → Chinese (avoids granularity mismatch)
-        let nameZh: string | undefined;
-        try {
-          const resZh = await fetch(`/api/geocode?q=${encodeURIComponent(name)}&language=zh-Hans`);
-          const dataZh = await resZh.json();
-          nameZh = dataZh.features?.[0]?.text || dataZh.features?.[0]?.place_name || undefined;
-        } catch { /* non-critical */ }
-        addLocation({ name, nameZh, coordinates: [lng, lat] });
-      } catch {
-        addLocation({
-          name: `${lat.toFixed(2)}, ${lng.toFixed(2)}`,
-          coordinates: [lng, lat],
-        });
-      }
+      setContextMenu(null);
+      await addLocationAtCoordinates({
+        lng: e.lngLat.lng,
+        lat: e.lngLat.lat,
+      });
     };
 
     map.on("click", handleClick);
     return () => {
       map.off("click", handleClick);
     };
-  }, [addLocation]);
+  }, [addLocationAtCoordinates]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const handleContextMenu = (e: mapboxgl.MapMouseEvent & { point: mapboxgl.Point }) => {
+      const originalTarget = e.originalEvent.target as HTMLElement | null;
+      if (originalTarget?.closest(".mapboxgl-marker")) {
+        return;
+      }
+
+      e.originalEvent.preventDefault();
+      const rect = map.getContainer().getBoundingClientRect();
+      setContextMenu({
+        x: rect.left + e.point.x,
+        y: rect.top + e.point.y,
+        lng: e.lngLat.lng,
+        lat: e.lngLat.lat,
+      });
+    };
+
+    map.on("contextmenu", handleContextMenu);
+    return () => {
+      map.off("contextmenu", handleContextMenu);
+    };
+  }, []);
 
   // Auto-extract dominant colors from photos for each segment's destination
   useEffect(() => {
@@ -196,6 +217,10 @@ export default memo(function MapCanvas() {
         el.style.cssText =
           "width:28px;height:28px;border-radius:50%;background:#6366f1;color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.2);cursor:pointer;";
         el.textContent = String(index + 1);
+        el.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
         marker = new mapboxgl.Marker({ element: el })
           .setLngLat(loc.coordinates)
           .addTo(map);
@@ -523,6 +548,9 @@ export default memo(function MapCanvas() {
   }, [segmentColors, moodColorsEnabled, segments]);
 
   const isActive = playbackState === "playing" || playbackState === "paused";
+  const citySearchInput = typeof document !== "undefined"
+    ? document.querySelector<HTMLInputElement>('[data-city-search-input="true"]')
+    : null;
 
   return (
     <div className="relative w-full h-full">
@@ -537,6 +565,75 @@ export default memo(function MapCanvas() {
           />
         )}
       </AnimatePresence>
+      <DropdownMenu
+        open={Boolean(contextMenu)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setContextMenu(null);
+          }
+        }}
+      >
+        <DropdownMenuTrigger
+          render={(
+            <button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              className="pointer-events-none fixed h-0 w-0 opacity-0"
+              style={{
+                left: contextMenu?.x ?? 0,
+                top: contextMenu?.y ?? 0,
+              }}
+            />
+          )}
+        />
+        <DropdownMenuContent align="start" side="bottom" sideOffset={6} className="w-44">
+          <DropdownMenuItem
+            disabled={!contextMenu}
+            onClick={async () => {
+              if (!contextMenu) return;
+              await addLocationAtCoordinates({
+                lng: contextMenu.lng,
+                lat: contextMenu.lat,
+              });
+              setContextMenu(null);
+            }}
+          >
+            Add Stop Here
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!contextMenu}
+            onClick={async () => {
+              if (!contextMenu) return;
+              await addLocationAtCoordinates(
+                {
+                  lng: contextMenu.lng,
+                  lat: contextMenu.lat,
+                },
+                { isWaypoint: true },
+              );
+              if (locations.length < 2) {
+                addToast({
+                  title: "Added as a regular stop",
+                  description: "Waypoints need both a start and end destination.",
+                  variant: "info",
+                });
+              }
+              setContextMenu(null);
+            }}
+          >
+            Add as Waypoint
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              citySearchInput?.focus();
+              setContextMenu(null);
+            }}
+          >
+            Search Nearby
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 });

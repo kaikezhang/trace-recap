@@ -207,6 +207,11 @@ interface ProjectState {
   addLocation: (
     location: Omit<Location, "id" | "photos" | "isWaypoint">,
   ) => void;
+  addLocationAtCoordinates: (
+    lngLat: { lng: number; lat: number },
+    options?: { isWaypoint?: boolean; insertIndex?: number },
+  ) => Promise<void>;
+  duplicateLocation: (locationId: string) => void;
   removeLocation: (id: string) => void;
   reorderLocations: (fromIndex: number, toIndex: number) => void;
   updateLocation: (
@@ -812,6 +817,140 @@ function rebuildSegments(
   return segments;
 }
 
+function normalizeEdgeWaypoints(locations: Location[]): Location[] {
+  if (locations.length === 0) return locations;
+
+  const nextLocations = [...locations];
+  if (nextLocations[0]?.isWaypoint) {
+    nextLocations[0] = { ...nextLocations[0], isWaypoint: false };
+  }
+
+  const lastIndex = nextLocations.length - 1;
+  if (lastIndex > 0 && nextLocations[lastIndex]?.isWaypoint) {
+    nextLocations[lastIndex] = { ...nextLocations[lastIndex], isWaypoint: false };
+  }
+
+  return nextLocations;
+}
+
+function insertLocationAtIndex(
+  locations: Location[],
+  location: Location,
+  index: number,
+): Location[] {
+  const nextLocations = [...locations];
+  const safeIndex = Math.max(0, Math.min(index, nextLocations.length));
+  nextLocations.splice(safeIndex, 0, location);
+  return normalizeEdgeWaypoints(nextLocations);
+}
+
+function clonePhotoLayout(
+  photoLayout: PhotoLayout | undefined,
+  photoIdMap: Map<string, string>,
+): PhotoLayout | undefined {
+  if (!photoLayout) {
+    return undefined;
+  }
+
+  return {
+    ...photoLayout,
+    customProportions: photoLayout.customProportions
+      ? {
+          rows: photoLayout.customProportions.rows
+            ? [...photoLayout.customProportions.rows]
+            : undefined,
+          cols: photoLayout.customProportions.cols
+            ? [...photoLayout.customProportions.cols]
+            : undefined,
+        }
+      : undefined,
+    order: photoLayout.order
+      ?.map((photoId) => photoIdMap.get(photoId))
+      .filter((photoId): photoId is string => Boolean(photoId)),
+    freeTransforms: photoLayout.freeTransforms?.reduce<NonNullable<PhotoLayout["freeTransforms"]>>((acc, transform) => {
+      const nextPhotoId = photoIdMap.get(transform.photoId);
+      if (!nextPhotoId) {
+        return acc;
+      }
+
+      acc.push({
+        ...transform,
+        photoId: nextPhotoId,
+        ...(transform.caption
+          ? { caption: { ...transform.caption } }
+          : {}),
+      });
+      return acc;
+    }, []),
+  };
+}
+
+function duplicateLocationEntry(location: Location): Location {
+  const nextLocationId = generateId();
+  const photoIdMap = new Map<string, string>();
+  const photos = location.photos.map((photo) => {
+    const nextPhotoId = generateId();
+    photoIdMap.set(photo.id, nextPhotoId);
+    registerPhotoUrl(nextPhotoId, photo.url);
+
+    return {
+      ...photo,
+      id: nextPhotoId,
+      locationId: nextLocationId,
+      ...(photo.focalPoint ? { focalPoint: { ...photo.focalPoint } } : {}),
+    };
+  });
+
+  return {
+    ...location,
+    id: nextLocationId,
+    coordinates: [...location.coordinates] as [number, number],
+    photos,
+    ...(location.photoLayout
+      ? { photoLayout: clonePhotoLayout(location.photoLayout, photoIdMap) }
+      : {}),
+  };
+}
+
+async function resolveLocationFromCoordinates(
+  lng: number,
+  lat: number,
+): Promise<Pick<Location, "name" | "nameZh" | "coordinates">> {
+  try {
+    const reverseResponse = await fetch(`/api/geocode?lng=${lng}&lat=${lat}`);
+    const reverseData = await reverseResponse.json();
+    const name =
+      reverseData.features?.[0]?.text ||
+      reverseData.features?.[0]?.place_name ||
+      `${lat.toFixed(2)}, ${lng.toFixed(2)}`;
+
+    let nameZh: string | undefined;
+    try {
+      const zhResponse = await fetch(
+        `/api/geocode?q=${encodeURIComponent(name)}&language=zh-Hans`,
+      );
+      const zhData = await zhResponse.json();
+      nameZh =
+        zhData.features?.[0]?.text ||
+        zhData.features?.[0]?.place_name ||
+        undefined;
+    } catch {
+      // Chinese reverse lookup is a nice-to-have fallback.
+    }
+
+    return {
+      name,
+      nameZh,
+      coordinates: [lng, lat],
+    };
+  } catch {
+    return {
+      name: `${lat.toFixed(2)}, ${lng.toFixed(2)}`,
+      coordinates: [lng, lat],
+    };
+  }
+}
+
 function buildProjectMeta(
   id: string,
   name: string,
@@ -1189,7 +1328,62 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         isWaypoint: false,
         photos: [],
       };
-      const locations = [...state.locations, newLocation];
+      const locations = insertLocationAtIndex(
+        state.locations,
+        newLocation,
+        state.locations.length,
+      );
+      return {
+        locations,
+        segments: rebuildSegments(locations, state.segments),
+      };
+    });
+  },
+
+  addLocationAtCoordinates: async (lngLat, options) => {
+    const locationData = await resolveLocationFromCoordinates(lngLat.lng, lngLat.lat);
+    useHistoryStore.getState().pushState();
+
+    return set((state) => {
+      const shouldBecomeWaypoint =
+        Boolean(options?.isWaypoint) && state.locations.length >= 2;
+      const insertIndex =
+        typeof options?.insertIndex === "number"
+          ? options.insertIndex
+          : shouldBecomeWaypoint
+            ? state.locations.length - 1
+            : state.locations.length;
+      const newLocation: Location = {
+        id: generateId(),
+        ...locationData,
+        isWaypoint: shouldBecomeWaypoint,
+        photos: [],
+      };
+      const locations = insertLocationAtIndex(
+        state.locations,
+        newLocation,
+        insertIndex,
+      );
+      return {
+        locations,
+        segments: rebuildSegments(locations, state.segments),
+      };
+    });
+  },
+
+  duplicateLocation: (locationId) => {
+    useHistoryStore.getState().pushState();
+    return set((state) => {
+      const locationIndex = state.locations.findIndex((location) => location.id === locationId);
+      if (locationIndex < 0) {
+        return state;
+      }
+
+      const locations = insertLocationAtIndex(
+        state.locations,
+        duplicateLocationEntry(state.locations[locationIndex]),
+        locationIndex + 1,
+      );
       return {
         locations,
         segments: rebuildSegments(locations, state.segments),
@@ -1200,11 +1394,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   removeLocation: (id) => {
     useHistoryStore.getState().pushState();
     return set((state) => {
-      const locations = state.locations.filter((l) => l.id !== id);
-      // Ensure first and last locations are never waypoints
-      if (locations.length > 0) {
-        locations[0] = { ...locations[0], isWaypoint: false };
-      }
+      const locations = normalizeEdgeWaypoints(
+        state.locations.filter((l) => l.id !== id),
+      );
       return {
         locations,
         segments: rebuildSegments(locations, state.segments),
@@ -1218,13 +1410,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const locations = [...state.locations];
       const [moved] = locations.splice(fromIndex, 1);
       locations.splice(toIndex, 0, moved);
-      // Ensure first and last locations are never waypoints
-      if (locations.length > 0) {
-        locations[0] = { ...locations[0], isWaypoint: false };
-      }
+      const normalizedLocations = normalizeEdgeWaypoints(locations);
       return {
-        locations,
-        segments: rebuildSegments(locations, state.segments),
+        locations: normalizedLocations,
+        segments: rebuildSegments(normalizedLocations, state.segments),
       };
     });
   },

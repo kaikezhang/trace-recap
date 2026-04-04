@@ -6,8 +6,10 @@ import {
   Bus,
   Car,
   ChevronRight,
+  Copy,
   Footprints,
   Image as ImageIcon,
+  LayoutTemplate,
   Plane,
   Ship,
   Smile,
@@ -19,8 +21,16 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { brand } from "@/lib/brand";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useLocation } from "@/stores/selectors";
 import type { TransportMode } from "@/types";
 import PhotoManager, { usePhotoDropZone } from "./PhotoManager";
@@ -69,15 +79,27 @@ const TRANSPORT_ACCENTS: Record<TransportMode, string> = {
 
 function DragGrip() {
   return (
-    <span className="grid grid-cols-2 gap-[3px]">
+    <span className="grid grid-cols-2 gap-1">
       {Array.from({ length: 6 }, (_, index) => (
         <span
           key={index}
-          className="h-[3px] w-[3px] rounded-full"
+          className="h-1 w-1 rounded-full transition-colors"
           style={{ backgroundColor: brand.colors.warm[400] }}
         />
       ))}
     </span>
+  );
+}
+
+const LONG_PRESS_DURATION_MS = 550;
+
+function shouldIgnoreContextMenuTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+
+  return Boolean(
+    target.closest(
+      "button, input, textarea, select, label, a, [data-drag-handle], [data-no-seek], [data-delete-btn], [data-context-menu-ignore]",
+    ),
   );
 }
 
@@ -300,7 +322,7 @@ function WaypointSwitch({
 export default memo(function LocationCard({
   locationId,
   index,
-  total: _total,
+  total,
   transportMode,
   selected = false,
   onRemove,
@@ -310,7 +332,13 @@ export default memo(function LocationCard({
 }: LocationCardProps) {
   const location = useLocation(locationId);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const updateLocation = useProjectStore((s) => s.updateLocation);
+  const duplicateLocation = useProjectStore((s) => s.duplicateLocation);
+  const addToast = useUIStore((s) => s.addToast);
+  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchOriginRef = useRef<{ x: number; y: number } | null>(null);
 
   const {
     attributes,
@@ -326,17 +354,24 @@ export default memo(function LocationCard({
   if (!location) return null;
 
   const isFirst = index === 0;
+  const canToggleWaypoint = index > 0 && index < total - 1;
   const isWaypoint = location.isWaypoint;
   const photoCount = location.photos.length;
   const coverPhoto = location.photos[0];
-  const AccentIcon = transportMode ? TRANSPORT_ICONS[transportMode] : null;
-  const transportLabel = transportMode ? TRANSPORT_LABELS[transportMode] : undefined;
+  const AccentIcon = !isFirst && transportMode ? TRANSPORT_ICONS[transportMode] : null;
+  const transportLabel = !isFirst && transportMode ? TRANSPORT_LABELS[transportMode] : undefined;
 
   const transformValue = CSS.Transform.toString(transform);
-  const composedTransform = [transformValue, isWaypoint ? "scale(0.92)" : null]
+  const composedTransform = [
+    transformValue,
+    !isDragging && isHovered ? "translateY(-1px)" : null,
+    isWaypoint ? "scale(0.92)" : null,
+  ]
     .filter(Boolean)
     .join(" ");
-  const accentColor = transportMode ? TRANSPORT_ACCENTS[transportMode] : brand.colors.primary[500];
+  const accentColor = !isFirst && transportMode
+    ? TRANSPORT_ACCENTS[transportMode]
+    : brand.colors.primary[500];
   const style = {
     transform: composedTransform || undefined,
     transition,
@@ -345,314 +380,346 @@ export default memo(function LocationCard({
     transformOrigin: "top center" as const,
   };
 
-  return (
-    <div
-      ref={setNodeRef}
-      {...dropProps}
-      className={`group relative origin-top overflow-hidden border transition-[border-color,box-shadow,background-color] duration-200 ${
-        isDragOver ? "ring-2 ring-[#fdba74] ring-offset-1 ring-offset-[#fffbf5]" : ""
-      } ${isWaypoint ? "rounded-[24px]" : "rounded-[30px]"}`}
-      style={{
-        ...style,
-        borderColor: selected || isExpanded ? brand.colors.primary[300] : brand.colors.warm[200],
-        background: isWaypoint
-          ? `linear-gradient(160deg, rgba(250,250,249,0.98) 0%, rgba(255,255,255,0.92) 100%)`
-          : `linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(255,247,237,0.9) 100%)`,
-        boxShadow: isDragging
-          ? brand.shadows.lg
-          : selected || isExpanded
-            ? brand.shadows.lg
-            : brand.shadows.md,
-      }}
-    >
-      <div
-        className="absolute inset-y-0 left-0 w-[4px]"
-        style={{
-          backgroundColor: accentColor,
-        }}
-      />
+  const clearLongPressTimer = () => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+  };
 
+  useEffect(() => clearLongPressTimer, []);
+
+  const openContextMenu = (x: number, y: number) => {
+    onClick?.(index);
+    setContextMenu({ x, y });
+  };
+
+  const handleRemove = () => {
+    onRemove(locationId);
+    addToast({
+      title: "Location removed",
+      description: location.name
+        ? `${location.name} was removed from the route.`
+        : "The location was removed from the route.",
+      variant: "info",
+    });
+  };
+
+  return (
+    <>
       <div
-        className={`flex cursor-pointer items-center gap-3 ${
-          isWaypoint ? "p-3 md:p-3.5" : "p-3.5 md:p-4"
-        } max-[420px]:gap-2.5 max-[420px]:p-3`}
-        onClick={(e) => {
+        ref={setNodeRef}
+        {...dropProps}
+        className={`group relative origin-top overflow-hidden border transition-[transform,border-color,box-shadow,background-color] duration-200 ${
+          isDragOver ? "ring-2 ring-[#fdba74] ring-offset-1 ring-offset-[#fffbf5]" : ""
+        } ${isWaypoint ? "rounded-[24px]" : "rounded-[30px]"}`}
+        style={{
+          ...style,
+          borderColor: selected || isExpanded ? brand.colors.primary[300] : brand.colors.warm[200],
+          background: isWaypoint
+            ? `linear-gradient(160deg, rgba(250,250,249,0.98) 0%, rgba(255,255,255,0.92) 100%)`
+            : `linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(255,247,237,0.9) 100%)`,
+          boxShadow: isDragging
+            ? brand.shadows.lg
+            : selected || isExpanded || isHovered
+              ? brand.shadows.lg
+              : brand.shadows.md,
+        }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onContextMenu={(e) => {
           const target = e.target as HTMLElement;
-          if (
-            target.closest("[data-drag-handle]") ||
-            target.closest("[data-delete-btn]") ||
-            target.closest("[data-no-seek]") ||
-            target.closest("input")
-          ) {
+          if (shouldIgnoreContextMenuTarget(target)) {
             return;
           }
-          setIsExpanded((expanded) => !expanded);
-          onClick?.(index);
+
+          e.preventDefault();
+          e.stopPropagation();
+          openContextMenu(e.clientX, e.clientY);
+        }}
+        onTouchStart={(e) => {
+          const target = e.target as HTMLElement;
+          if (shouldIgnoreContextMenuTarget(target) || e.touches.length !== 1) {
+            return;
+          }
+
+          const touch = e.touches[0];
+          touchOriginRef.current = { x: touch.clientX, y: touch.clientY };
+          clearLongPressTimer();
+          longPressTimeoutRef.current = setTimeout(() => {
+            openContextMenu(touch.clientX, touch.clientY);
+          }, LONG_PRESS_DURATION_MS);
+        }}
+        onTouchMove={(e) => {
+          if (!touchOriginRef.current) {
+            return;
+          }
+
+          const touch = e.touches[0];
+          if (!touch) {
+            clearLongPressTimer();
+            return;
+          }
+
+          const deltaX = Math.abs(touch.clientX - touchOriginRef.current.x);
+          const deltaY = Math.abs(touch.clientY - touchOriginRef.current.y);
+          if (deltaX > 10 || deltaY > 10) {
+            clearLongPressTimer();
+          }
+        }}
+        onTouchEnd={() => {
+          clearLongPressTimer();
+          touchOriginRef.current = null;
+        }}
+        onTouchCancel={() => {
+          clearLongPressTimer();
+          touchOriginRef.current = null;
         }}
       >
         <div
-          data-drag-handle
-          className={`flex shrink-0 cursor-grab items-center justify-center border active:cursor-grabbing touch-none ${
-            isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
-          } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-xl`}
+          className="absolute inset-y-0 left-0 w-[3px]"
           style={{
-            borderColor: brand.colors.warm[200],
-            backgroundColor: "rgba(255,251,245,0.92)",
+            backgroundColor: accentColor,
           }}
-          {...attributes}
-          {...listeners}
-        >
-          <DragGrip />
-        </div>
+        />
 
         <div
-          className={`flex shrink-0 items-center justify-center font-semibold text-white ${
-            isWaypoint ? "h-8 w-8 rounded-[14px] text-xs" : "h-10 w-10 rounded-[16px] text-sm"
-          } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-[14px] max-[420px]:text-xs`}
-          style={{
-            background: isWaypoint
-              ? `linear-gradient(160deg, ${brand.colors.warm[500]} 0%, ${brand.colors.warm[400]} 100%)`
-              : `linear-gradient(160deg, ${brand.colors.primary[500]} 0%, ${brand.colors.primary[400]} 100%)`,
-            boxShadow: brand.shadows.sm,
-          }}
-        >
-          {location.chapterEmoji || index + 1}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span
-              className={`truncate font-semibold ${isWaypoint ? "text-sm" : "text-[15px]"}`}
-              style={{ color: brand.colors.warm[900] }}
-            >
-              {location.name || (
-                <span className="italic" style={{ color: brand.colors.warm[400] }}>
-                  English name
-                </span>
-              )}
-            </span>
-
-            {AccentIcon && (
-              <span
-                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                style={{ backgroundColor: `${accentColor}18` }}
-                title={transportLabel}
-              >
-                <AccentIcon
-                  className="h-3.5 w-3.5"
-                  style={{ color: accentColor }}
-                />
-              </span>
-            )}
-
-            {isWaypoint && (
-              <span
-                className="shrink-0 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
-                style={{
-                  color: brand.colors.warm[600],
-                  backgroundColor: brand.colors.warm[100],
-                }}
-              >
-                Stopover
-              </span>
-            )}
-          </div>
-
-          <div
-            className="mt-1 flex items-center gap-2 overflow-hidden text-xs"
-            style={{ color: brand.colors.warm[500] }}
-          >
-            <span className="truncate">
-              {location.chapterDate || location.nameZh || (isWaypoint ? "Flexible scenic stop" : "Main destination")}
-            </span>
-            <span className="shrink-0">•</span>
-            <span className="truncate">
-              {photoCount > 0 ? `${photoCount} photo${photoCount === 1 ? "" : "s"}` : "No photos yet"}
-            </span>
-          </div>
-
-          {location.chapterNote && (
-            <p
-              className="mt-1 truncate text-xs"
-              style={{ color: brand.colors.warm[600] }}
-            >
-              {location.chapterNote}
-            </p>
-          )}
-        </div>
-
-        <div className="shrink-0">
-          {coverPhoto ? (
-            <div
-              className={`relative overflow-hidden ${
-                isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
-              } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
-              style={{ boxShadow: brand.shadows.sm }}
-            >
-              <img
-                src={coverPhoto.url}
-                alt={location.name ? `${location.name} photo` : "Location photo"}
-                className="h-full w-full object-cover"
-              />
-              {photoCount > 1 && (
-                <div
-                  className="absolute bottom-1 right-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-white"
-                  style={{ backgroundColor: "rgba(28,25,23,0.72)" }}
-                >
-                  +{photoCount - 1}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div
-              className={`flex items-center justify-center border ${
-                isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
-              } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
-              style={{
-                borderColor: brand.colors.warm[200],
-                background: `linear-gradient(160deg, ${brand.colors.sand[100]} 0%, ${brand.colors.primary[50]} 100%)`,
-              }}
-            >
-              <ImageIcon
-                className="h-4 w-4"
-                style={{ color: brand.colors.warm[400] }}
-              />
-            </div>
-          )}
-        </div>
-
-        <button
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white"
-          data-no-seek
+          className={`flex cursor-pointer items-center gap-3 ${
+            isWaypoint ? "p-3 md:p-3.5" : "p-3.5 md:p-4"
+          } max-[420px]:gap-2.5 max-[420px]:p-3`}
           onClick={(e) => {
-            e.stopPropagation();
+            const target = e.target as HTMLElement;
+            if (
+              target.closest("[data-drag-handle]") ||
+              target.closest("[data-delete-btn]") ||
+              target.closest("[data-no-seek]") ||
+              target.closest("input")
+            ) {
+              return;
+            }
             setIsExpanded((expanded) => !expanded);
             onClick?.(index);
           }}
-          aria-label={isExpanded ? "Collapse location details" : "Expand location details"}
         >
-          <ChevronRight
-            className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
-              isExpanded ? "rotate-90" : ""
-            }`}
-            style={{ color: brand.colors.warm[500] }}
-          />
-        </button>
-
-        <button
-          data-delete-btn
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2]"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(locationId);
-          }}
-          aria-label="Remove location"
-        >
-          <X className="h-4 w-4" style={{ color: brand.colors.warm[500] }} />
-        </button>
-      </div>
-
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: "easeInOut" }}
-            className="overflow-hidden"
+          <div
+            data-drag-handle
+            className={`flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
+              isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
+            } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-xl`}
+            style={{
+              borderColor: brand.colors.warm[200],
+              backgroundColor: isHovered ? "rgba(255,255,255,0.98)" : "rgba(255,251,245,0.92)",
+            }}
+            {...attributes}
+            {...listeners}
           >
-            <div
-              className={`space-y-4 border-t ${
-                isWaypoint ? "px-3.5 pb-3.5 pt-3.5" : "px-4 pb-4 pt-4"
-              }`}
-              style={{
-                borderColor: brand.colors.warm[200],
-                background: `linear-gradient(180deg, rgba(255,251,245,0.94) 0%, rgba(255,247,237,0.55) 100%)`,
-              }}
-            >
-              <div className="flex flex-col gap-1.5">
-                <EditableName
-                  value={location.name}
-                  placeholder="English name"
-                  onSave={(value) => updateLocation(locationId, { name: value })}
-                  className="block text-sm font-semibold"
-                />
-                <EditableName
-                  value={location.nameZh ?? ""}
-                  placeholder="中文名"
-                  onSave={(value) => updateLocation(locationId, { nameZh: value || undefined })}
-                  className="block text-xs"
-                />
-              </div>
+            <DragGrip />
+          </div>
 
-              {!isFirst && (
+          <div
+            className={`flex shrink-0 items-center justify-center font-semibold text-white ${
+              isWaypoint ? "h-8 w-8 rounded-[14px] text-xs" : "h-10 w-10 rounded-[16px] text-sm"
+            } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-[14px] max-[420px]:text-xs`}
+            style={{
+              background: isWaypoint
+                ? `linear-gradient(160deg, ${brand.colors.warm[500]} 0%, ${brand.colors.warm[400]} 100%)`
+                : `linear-gradient(160deg, ${brand.colors.primary[500]} 0%, ${brand.colors.primary[400]} 100%)`,
+              boxShadow: brand.shadows.sm,
+            }}
+          >
+            {location.chapterEmoji || index + 1}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span
+                className={`truncate font-semibold ${isWaypoint ? "text-sm" : "text-[15px]"}`}
+                style={{ color: brand.colors.warm[900] }}
+              >
+                {location.name || (
+                  <span className="italic" style={{ color: brand.colors.warm[400] }}>
+                    English name
+                  </span>
+                )}
+              </span>
+
+              {AccentIcon && (
                 <div
-                  className="flex items-center justify-between rounded-2xl border px-3 py-2.5"
-                  style={{
-                    borderColor: brand.colors.warm[200],
-                    backgroundColor: "rgba(255,255,255,0.68)",
-                  }}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+                  style={{ backgroundColor: `${accentColor}18` }}
+                  title={transportLabel}
                 >
-                  <div>
-                    <p className="text-xs font-medium" style={{ color: brand.colors.warm[800] }}>
-                      Stop by
-                    </p>
-                    <p className="text-[11px]" style={{ color: brand.colors.warm[500] }}>
-                      Keep this point as a quick pass-through instead of a chapter stop.
-                    </p>
-                  </div>
-                  <WaypointSwitch
-                    isWaypoint={!!isWaypoint}
-                    onToggle={() => onToggleWaypoint(locationId)}
+                  <AccentIcon
+                    className="h-3.5 w-3.5"
+                    style={{ color: accentColor }}
                   />
                 </div>
               )}
+              {isWaypoint && (
+                <span
+                  className="shrink-0 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
+                  style={{
+                    color: brand.colors.warm[600],
+                    backgroundColor: brand.colors.warm[100],
+                  }}
+                >
+                  Stopover
+                </span>
+              )}
+            </div>
 
-              {!isWaypoint && (
-                <div className="grid gap-3">
+            <div
+              className="mt-1 flex items-center gap-2 overflow-hidden text-xs"
+              style={{ color: brand.colors.warm[500] }}
+            >
+              <span className="truncate">
+                {location.chapterDate || location.nameZh || (isWaypoint ? "Flexible scenic stop" : "Main destination")}
+              </span>
+              <span className="shrink-0">•</span>
+              <span className="truncate">
+                {photoCount > 0 ? `${photoCount} photo${photoCount === 1 ? "" : "s"}` : "No photos yet"}
+              </span>
+            </div>
+
+            {location.chapterNote && (
+              <p
+                className="mt-1 truncate text-xs"
+                style={{ color: brand.colors.warm[600] }}
+              >
+                {location.chapterNote}
+              </p>
+            )}
+          </div>
+
+          <div className="shrink-0">
+            {coverPhoto ? (
+              <div
+                className={`relative overflow-hidden ${
+                  isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
+                } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
+                style={{ boxShadow: brand.shadows.sm }}
+              >
+                <img
+                  src={coverPhoto.url}
+                  alt={location.name ? `${location.name} photo` : "Location photo"}
+                  className="h-full w-full object-cover"
+                />
+                {photoCount > 1 && (
                   <div
-                    className="rounded-2xl border px-3 py-3"
+                    className="absolute bottom-1 right-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-white"
+                    style={{ backgroundColor: "rgba(28,25,23,0.72)" }}
+                  >
+                    +{photoCount - 1}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                className={`flex items-center justify-center border ${
+                  isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
+                } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
+                style={{
+                  borderColor: brand.colors.warm[200],
+                  background: `linear-gradient(160deg, ${brand.colors.sand[100]} 0%, ${brand.colors.primary[50]} 100%)`,
+                }}
+              >
+                <ImageIcon
+                  className="h-4 w-4"
+                  style={{ color: brand.colors.warm[400] }}
+                />
+              </div>
+            )}
+          </div>
+
+          <button
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white"
+            data-no-seek
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded((expanded) => !expanded);
+              onClick?.(index);
+            }}
+            aria-label={isExpanded ? "Collapse location details" : "Expand location details"}
+          >
+            <ChevronRight
+              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
+                isExpanded ? "rotate-90" : ""
+              }`}
+              style={{ color: brand.colors.warm[500] }}
+            />
+          </button>
+
+          <button
+            data-delete-btn
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2]"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRemove();
+            }}
+            aria-label="Remove location"
+          >
+            <X className="h-4 w-4" style={{ color: brand.colors.warm[500] }} />
+          </button>
+        </div>
+
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <div
+                className={`space-y-4 border-t ${
+                  isWaypoint ? "px-3.5 pb-3.5 pt-3.5" : "px-4 pb-4 pt-4"
+                }`}
+                style={{
+                  borderColor: brand.colors.warm[200],
+                  background: `linear-gradient(180deg, rgba(255,251,245,0.94) 0%, rgba(255,247,237,0.55) 100%)`,
+                }}
+              >
+                <div className="flex flex-col gap-1.5">
+                  <EditableName
+                    value={location.name}
+                    placeholder="English name"
+                    onSave={(value) => updateLocation(locationId, { name: value })}
+                    className="block text-sm font-semibold"
+                  />
+                  <EditableName
+                    value={location.nameZh ?? ""}
+                    placeholder="中文名"
+                    onSave={(value) => updateLocation(locationId, { nameZh: value || undefined })}
+                    className="block text-xs"
+                  />
+                </div>
+
+                {!isFirst && (
+                  <div
+                    className="flex items-center justify-between rounded-2xl border px-3 py-2.5"
                     style={{
                       borderColor: brand.colors.warm[200],
-                      backgroundColor: "rgba(255,255,255,0.7)",
+                      backgroundColor: "rgba(255,255,255,0.68)",
                     }}
                   >
-                    <span
-                      className="block text-[10px] font-medium uppercase tracking-[0.18em]"
-                      style={{ color: brand.colors.warm[500] }}
-                    >
-                      Chapter
-                    </span>
-                    <EditableName
-                      value={location.chapterTitle ?? ""}
-                      placeholder="Chapter title"
-                      onSave={(value) => updateLocation(locationId, { chapterTitle: value || undefined })}
-                      className="mt-1.5 block text-sm"
+                    <div>
+                      <p className="text-xs font-medium" style={{ color: brand.colors.warm[800] }}>
+                        Stop by
+                      </p>
+                      <p className="text-[11px]" style={{ color: brand.colors.warm[500] }}>
+                        Keep this point as a quick pass-through instead of a chapter stop.
+                      </p>
+                    </div>
+                    <WaypointSwitch
+                      isWaypoint={!!isWaypoint}
+                      onToggle={() => onToggleWaypoint(locationId)}
                     />
                   </div>
+                )}
 
-                  <div
-                    className="rounded-2xl border px-3 py-3"
-                    style={{
-                      borderColor: brand.colors.warm[200],
-                      backgroundColor: "rgba(255,255,255,0.7)",
-                    }}
-                  >
-                    <span
-                      className="block text-[10px] font-medium uppercase tracking-[0.18em]"
-                      style={{ color: brand.colors.warm[500] }}
-                    >
-                      Note
-                    </span>
-                    <EditableName
-                      value={location.chapterNote ?? ""}
-                      placeholder="e.g. Temples and gardens"
-                      onSave={(value) => updateLocation(locationId, { chapterNote: value || undefined })}
-                      className="mt-1.5 block text-sm"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-[1fr_auto] gap-3">
+                {!isWaypoint && (
+                  <div className="grid gap-3">
                     <div
                       className="rounded-2xl border px-3 py-3"
                       style={{
@@ -664,45 +731,166 @@ export default memo(function LocationCard({
                         className="block text-[10px] font-medium uppercase tracking-[0.18em]"
                         style={{ color: brand.colors.warm[500] }}
                       >
-                        Date
+                        Chapter
                       </span>
                       <EditableName
-                        value={location.chapterDate ?? ""}
-                        placeholder="e.g. Mar 15-17"
-                        onSave={(value) => updateLocation(locationId, { chapterDate: value || undefined })}
+                        value={location.chapterTitle ?? ""}
+                        placeholder="Chapter title"
+                        onSave={(value) => updateLocation(locationId, { chapterTitle: value || undefined })}
                         className="mt-1.5 block text-sm"
                       />
                     </div>
 
                     <div
-                      className="flex flex-col items-center rounded-2xl border px-3 py-3"
+                      className="rounded-2xl border px-3 py-3"
                       style={{
                         borderColor: brand.colors.warm[200],
                         backgroundColor: "rgba(255,255,255,0.7)",
                       }}
                     >
                       <span
-                        className="text-[10px] font-medium uppercase tracking-[0.18em]"
+                        className="block text-[10px] font-medium uppercase tracking-[0.18em]"
                         style={{ color: brand.colors.warm[500] }}
                       >
-                        Icon
+                        Note
                       </span>
-                      <div className="mt-1.5">
-                        <EmojiPicker
-                          value={location.chapterEmoji ?? ""}
-                          onSelect={(value) => updateLocation(locationId, { chapterEmoji: value || undefined })}
+                      <EditableName
+                        value={location.chapterNote ?? ""}
+                        placeholder="e.g. Temples and gardens"
+                        onSave={(value) => updateLocation(locationId, { chapterNote: value || undefined })}
+                        className="mt-1.5 block text-sm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-[1fr_auto] gap-3">
+                      <div
+                        className="rounded-2xl border px-3 py-3"
+                        style={{
+                          borderColor: brand.colors.warm[200],
+                          backgroundColor: "rgba(255,255,255,0.7)",
+                        }}
+                      >
+                        <span
+                          className="block text-[10px] font-medium uppercase tracking-[0.18em]"
+                          style={{ color: brand.colors.warm[500] }}
+                        >
+                          Date
+                        </span>
+                        <EditableName
+                          value={location.chapterDate ?? ""}
+                          placeholder="e.g. Mar 15-17"
+                          onSave={(value) => updateLocation(locationId, { chapterDate: value || undefined })}
+                          className="mt-1.5 block text-sm"
                         />
+                      </div>
+
+                      <div
+                        className="flex flex-col items-center rounded-2xl border px-3 py-3"
+                        style={{
+                          borderColor: brand.colors.warm[200],
+                          backgroundColor: "rgba(255,255,255,0.7)",
+                        }}
+                      >
+                        <span
+                          className="text-[10px] font-medium uppercase tracking-[0.18em]"
+                          style={{ color: brand.colors.warm[500] }}
+                        >
+                          Icon
+                        </span>
+                        <div className="mt-1.5">
+                          <EmojiPicker
+                            value={location.chapterEmoji ?? ""}
+                            onSelect={(value) => updateLocation(locationId, { chapterEmoji: value || undefined })}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <PhotoManager locationId={locationId} onEditLayout={onEditLayout} />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+                <PhotoManager locationId={locationId} onEditLayout={onEditLayout} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <DropdownMenu
+        open={Boolean(contextMenu)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setContextMenu(null);
+          }
+        }}
+      >
+        <DropdownMenuTrigger
+          render={(
+            <button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              data-context-menu-ignore
+              className="pointer-events-none fixed h-0 w-0 opacity-0"
+              style={{
+                left: contextMenu?.x ?? 0,
+                top: contextMenu?.y ?? 0,
+              }}
+            />
+          )}
+        />
+        <DropdownMenuContent align="start" side="bottom" sideOffset={6} className="w-48">
+          <DropdownMenuItem
+            onClick={() => {
+              setIsExpanded(true);
+              onClick?.(index);
+              setContextMenu(null);
+            }}
+          >
+            <ImageIcon className="h-4 w-4" />
+            Edit Photos
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!onEditLayout}
+            onClick={() => {
+              onEditLayout?.(locationId);
+              setContextMenu(null);
+            }}
+          >
+            <LayoutTemplate className="h-4 w-4" />
+            Edit Layout
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!canToggleWaypoint}
+            onClick={() => {
+              onToggleWaypoint(locationId);
+              setContextMenu(null);
+            }}
+          >
+            <span className="text-sm leading-none">{isWaypoint ? "●" : "○"}</span>
+            Toggle Waypoint
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              duplicateLocation(locationId);
+              setContextMenu(null);
+            }}
+          >
+            <Copy className="h-4 w-4" />
+            Duplicate
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => {
+              handleRemove();
+              setContextMenu(null);
+            }}
+          >
+            <X className="h-4 w-4" />
+            Remove
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 });

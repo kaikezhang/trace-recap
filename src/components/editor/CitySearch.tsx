@@ -147,6 +147,7 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             ref={inputRef}
+            data-city-search-input="true"
             placeholder={PLACEHOLDER_CITIES[placeholderIndex]}
             value={query}
             onChange={(e) => search(e.target.value)}
