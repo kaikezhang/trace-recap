@@ -252,7 +252,8 @@ export default memo(function PlaybackControls({
   // Otherwise, position above the BottomSheet
   const controlsBottomClass = isPlaying
     ? "bottom-0"
-    : bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[132px]";
+    : bottomSheetState === "half" ? "bottom-[50vh]" : "bottom-[68px]";
+  // 68px = 60px collapsed bottom sheet + 8px gap
   const hideOnMobile = !isPlaying && bottomSheetState === "full";
   const containerClassName = [
     hideOnMobile ? "hidden md:flex" : "flex",
