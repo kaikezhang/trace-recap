@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { brand } from "@/lib/brand";
 import type { Location, Segment, TransportMode } from "@/types";
 
@@ -32,6 +32,14 @@ const INNER_PADDING_X = 16;
 const INNER_PADDING_Y = 12;
 const MIN_LONGITUDE_SPAN = 0.18;
 const MIN_MERCATOR_SPAN = 0.12;
+const STATIC_IMAGE_WIDTH = 280;
+const STATIC_IMAGE_HEIGHT = 80;
+const MAPBOX_STYLE = "mapbox/navigation-day-v1";
+const MAPBOX_MARKER_COLOR = "f97316";
+const MAPBOX_PATH_COLOR = "f97316";
+const MAPBOX_PATH_OPACITY = "0.82";
+const MAPBOX_PATH_WIDTH = 3;
+const MAPBOX_PADDING = 20;
 
 const MODE_COLORS: Record<TransportMode, string> = {
   flight: brand.colors.primary[500],
@@ -68,20 +76,180 @@ function getLocationAccent(locationId: string, segments: Segment[]): string {
   return brand.colors.primary[400];
 }
 
+function buildStaticMapUrl(locations: Location[]): string | null {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+  if (!token || locations.length < 2) return null;
+
+  const pathCoords = locations
+    .map((location) => `${location.coordinates[0]},${location.coordinates[1]}`)
+    .join(",");
+
+  if (!pathCoords) return null;
+
+  const overlays = [
+    `path-${MAPBOX_PATH_WIDTH}+${MAPBOX_PATH_COLOR}-${MAPBOX_PATH_OPACITY}(${pathCoords})`,
+    ...locations
+      .filter((location) => !location.isWaypoint)
+      .map(
+        (location) =>
+          `pin-s+${MAPBOX_MARKER_COLOR}(${location.coordinates[0]},${location.coordinates[1]})`,
+      ),
+  ]
+    .map((overlay) => encodeURIComponent(overlay))
+    .join(",");
+
+  return `https://api.mapbox.com/styles/v1/${MAPBOX_STYLE}/static/${overlays}/auto/${STATIC_IMAGE_WIDTH}x${STATIC_IMAGE_HEIGHT}@2x?access_token=${encodeURIComponent(token)}&padding=${MAPBOX_PADDING}`;
+}
+
+function FallbackRouteSvg({
+  hasRoute,
+  preview,
+}: {
+  hasRoute: boolean;
+  preview: {
+    points: ProjectedPoint[];
+    segments: RouteSegment[];
+    labels: ProjectedPoint[];
+  };
+}) {
+  return (
+    <svg
+      width="100%"
+      height="80"
+      viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+      role="img"
+      aria-label="Trip route preview"
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <linearGradient id="mini-route-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop
+            offset="0%"
+            stopColor="rgba(255,251,245,0.96)"
+          />
+          <stop
+            offset="100%"
+            stopColor="rgba(255,247,237,0.82)"
+          />
+        </linearGradient>
+      </defs>
+
+      <rect
+        x="0.5"
+        y="0.5"
+        width={VIEWBOX_WIDTH - 1}
+        height={VIEWBOX_HEIGHT - 1}
+        rx="20"
+        fill="url(#mini-route-bg)"
+        stroke={brand.colors.ocean[200]}
+      />
+
+      {hasRoute ? (
+        <>
+          {preview.segments.map((segment) => (
+            <line
+              key={segment.key}
+              x1={segment.from.x}
+              y1={segment.from.y}
+              x2={segment.to.x}
+              y2={segment.to.y}
+              stroke={segment.color}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+
+          {preview.points.map((point) =>
+            point.isWaypoint ? (
+              <circle
+                key={point.id}
+                cx={point.x}
+                cy={point.y}
+                r="3.5"
+                fill="rgba(255,255,255,0.9)"
+                stroke={point.accent}
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : (
+              <circle
+                key={point.id}
+                cx={point.x}
+                cy={point.y}
+                r="6"
+                fill={point.accent}
+                stroke="rgba(255,255,255,0.96)"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            ),
+          )}
+
+          {preview.labels.map((label, index) => {
+            const placeAbove = label.y > VIEWBOX_HEIGHT / 2;
+            const anchor = label.x > VIEWBOX_WIDTH - 72 ? "end" : "start";
+            const dx = anchor === "end" ? -10 : 10;
+            const dy = placeAbove ? -10 : 16;
+
+            return (
+              <text
+                key={`${label.id}-${index}`}
+                x={label.x + dx}
+                y={label.y + dy}
+                fill={brand.colors.warm[600]}
+                fontFamily={brand.fonts.mono}
+                fontSize="10"
+                textAnchor={anchor}
+              >
+                {truncateLabel(label.name)}
+              </text>
+            );
+          })}
+        </>
+      ) : (
+        <text
+          x="50%"
+          y="50%"
+          fill={brand.colors.warm[500]}
+          fontFamily={brand.fonts.mono}
+          fontSize="10"
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
+          Add stops to sketch your route
+        </text>
+      )}
+    </svg>
+  );
+}
+
 export default function MiniRoutePreview({
   locations,
   segments,
   className,
 }: MiniRoutePreviewProps) {
-  const preview = useMemo(() => {
-    const routeLocations = locations.filter(
-      (location) =>
-        Array.isArray(location.coordinates) &&
-        location.coordinates.length === 2 &&
-        Number.isFinite(location.coordinates[0]) &&
-        Number.isFinite(location.coordinates[1]),
-    );
+  const [imageFailed, setImageFailed] = useState(false);
 
+  const routeLocations = useMemo(
+    () =>
+      locations.filter(
+        (location) =>
+          Array.isArray(location.coordinates) &&
+          location.coordinates.length === 2 &&
+          Number.isFinite(location.coordinates[0]) &&
+          Number.isFinite(location.coordinates[1]),
+      ),
+    [locations],
+  );
+
+  const staticMapUrl = useMemo(() => buildStaticMapUrl(routeLocations), [routeLocations]);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [staticMapUrl]);
+
+  const preview = useMemo(() => {
     if (routeLocations.length < 2) {
       return {
         points: [] as ProjectedPoint[],
@@ -176,9 +344,10 @@ export default function MiniRoutePreview({
       segments: routeSegments,
       labels: labels.length > 1 ? [labels[0], labels[labels.length - 1]] : labels,
     };
-  }, [locations, segments]);
+  }, [routeLocations, segments]);
 
   const hasRoute = preview.points.length > 1;
+  const showStaticMap = hasRoute && staticMapUrl && !imageFailed;
 
   return (
     <div
@@ -189,116 +358,28 @@ export default function MiniRoutePreview({
         background:
           "linear-gradient(180deg, rgba(255,251,245,0.92) 0%, rgba(255,247,237,0.84) 100%)",
         boxShadow: brand.shadows.sm,
+        overflow: "hidden",
       }}
     >
-      <svg
-        width="100%"
-        height="80"
-        viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
-        role="img"
-        aria-label="Trip route preview"
-        preserveAspectRatio="none"
-      >
-        <defs>
-          <linearGradient id="mini-route-bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop
-              offset="0%"
-              stopColor="rgba(255,251,245,0.96)"
-            />
-            <stop
-              offset="100%"
-              stopColor="rgba(255,247,237,0.82)"
-            />
-          </linearGradient>
-        </defs>
-
-        <rect
-          x="0.5"
-          y="0.5"
-          width={VIEWBOX_WIDTH - 1}
-          height={VIEWBOX_HEIGHT - 1}
-          rx="20"
-          fill="url(#mini-route-bg)"
-          stroke={brand.colors.ocean[200]}
+      {showStaticMap ? (
+        <img
+          src={staticMapUrl}
+          alt="Trip route preview"
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+          style={{
+            display: "block",
+            width: "100%",
+            height: STATIC_IMAGE_HEIGHT,
+            objectFit: "cover",
+          }}
         />
-
-        {hasRoute ? (
-          <>
-            {preview.segments.map((segment) => (
-              <line
-                key={segment.key}
-                x1={segment.from.x}
-                y1={segment.from.y}
-                x2={segment.to.x}
-                y2={segment.to.y}
-                stroke={segment.color}
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-
-            {preview.points.map((point) =>
-              point.isWaypoint ? (
-                <circle
-                  key={point.id}
-                  cx={point.x}
-                  cy={point.y}
-                  r="3.5"
-                  fill="rgba(255,255,255,0.9)"
-                  stroke={point.accent}
-                  strokeWidth="1.5"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : (
-                <circle
-                  key={point.id}
-                  cx={point.x}
-                  cy={point.y}
-                  r="6"
-                  fill={point.accent}
-                  stroke="rgba(255,255,255,0.96)"
-                  strokeWidth="1.5"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ),
-            )}
-
-            {preview.labels.map((label, index) => {
-              const placeAbove = label.y > VIEWBOX_HEIGHT / 2;
-              const anchor = label.x > VIEWBOX_WIDTH - 72 ? "end" : "start";
-              const dx = anchor === "end" ? -10 : 10;
-              const dy = placeAbove ? -10 : 16;
-
-              return (
-                <text
-                  key={`${label.id}-${index}`}
-                  x={label.x + dx}
-                  y={label.y + dy}
-                  fill={brand.colors.warm[600]}
-                  fontFamily={brand.fonts.mono}
-                  fontSize="10"
-                  textAnchor={anchor}
-                >
-                  {truncateLabel(label.name)}
-                </text>
-              );
-            })}
-          </>
-        ) : (
-          <text
-            x="50%"
-            y="50%"
-            fill={brand.colors.warm[500]}
-            fontFamily={brand.fonts.mono}
-            fontSize="10"
-            textAnchor="middle"
-            dominantBaseline="middle"
-          >
-            Add stops to sketch your route
-          </text>
-        )}
-      </svg>
+      ) : (
+        <FallbackRouteSvg
+          hasRoute={hasRoute}
+          preview={preview}
+        />
+      )}
     </div>
   );
 }
