@@ -1,7 +1,3 @@
-"use client";
-
-import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { brand } from "@/lib/brand";
 
@@ -39,8 +35,6 @@ const faqs = [
 ] as const;
 
 export function FaqSection() {
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
-
   return (
     <section id="faq" className="mt-24 sm:mt-28 lg:mt-36">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)] lg:gap-12">
@@ -68,26 +62,21 @@ export function FaqSection() {
 
         <div className="space-y-4">
           {faqs.map((item, index) => {
-            const isOpen = openIndex === index;
-
             return (
-              <div
+              <details
                 key={item.question}
-                className="overflow-hidden border"
+                className="group overflow-hidden border"
+                name="faq"
+                open={index === 0}
                 style={{
-                  borderColor: isOpen
-                    ? brand.colors.primary[200]
-                    : brand.colors.warm[200],
+                  borderColor: brand.colors.warm[200],
                   backgroundColor: "rgba(255,255,255,0.78)",
                   borderRadius: index % 2 === 0 ? "28px 18px 24px 20px" : "22px 28px 18px 24px",
-                  boxShadow: isOpen ? brand.shadows.lg : brand.shadows.sm,
+                  boxShadow: brand.shadows.sm,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setOpenIndex(isOpen ? null : index)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left sm:px-6"
-                  aria-expanded={isOpen}
+                <summary
+                  className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 text-left sm:px-6"
                 >
                   <span
                     className="text-base font-medium sm:text-lg"
@@ -95,42 +84,29 @@ export function FaqSection() {
                   >
                     {item.question}
                   </span>
-                  <motion.span
-                    animate={{ rotate: isOpen ? 180 : 0 }}
-                    transition={{ duration: 0.24 }}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center"
+                  <span
+                    className="flex h-11 w-11 shrink-0 items-center justify-center transition-transform duration-200 group-open:rotate-180"
                     style={{ color: brand.colors.primary[600] }}
                   >
                     <ChevronDown className="h-5 w-5" />
-                  </motion.span>
-                </button>
+                  </span>
+                </summary>
 
-                <AnimatePresence initial={false}>
-                  {isOpen ? (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-                    >
-                      <div className="px-5 pb-5 sm:px-6 sm:pb-6">
-                        <div
-                          className="mb-4 h-px"
-                          style={{
-                            background: `linear-gradient(90deg, ${brand.colors.primary[200]} 0%, ${brand.colors.ocean[200]} 100%)`,
-                          }}
-                        />
-                        <p
-                          className="max-w-2xl text-sm leading-7 sm:text-base"
-                          style={{ color: brand.colors.warm[600] }}
-                        >
-                          {item.answer}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </div>
+                <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+                  <div
+                    className="mb-4 h-px"
+                    style={{
+                      background: `linear-gradient(90deg, ${brand.colors.primary[200]} 0%, ${brand.colors.ocean[200]} 100%)`,
+                    }}
+                  />
+                  <p
+                    className="max-w-2xl text-sm leading-7 sm:text-base"
+                    style={{ color: brand.colors.warm[600] }}
+                  >
+                    {item.answer}
+                  </p>
+                </div>
+              </details>
             );
           })}
         </div>

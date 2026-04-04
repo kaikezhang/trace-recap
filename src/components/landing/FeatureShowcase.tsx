@@ -1,6 +1,3 @@
-"use client";
-
-import { motion } from "framer-motion";
 import {
   ArrowRight,
   Camera,
@@ -49,28 +46,10 @@ const features = [
   },
 ] as const;
 
-const reveal = {
-  rest: { opacity: 1, y: 30 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.75,
-      ease: [0.16, 1, 0.3, 1] as const,
-    },
-  },
-};
-
 export function FeatureShowcase() {
   return (
     <section id="features" className="mt-24 sm:mt-28 lg:mt-36">
-      <motion.div
-        variants={reveal}
-        initial="rest"
-        whileInView="visible"
-        viewport={{ once: true, amount: 0.35 }}
-        className="max-w-3xl"
-      >
+      <div className="max-w-3xl">
         <p
           className="text-sm tracking-[0.24em] uppercase"
           style={{ color: brand.colors.primary[700] }}
@@ -91,19 +70,15 @@ export function FeatureShowcase() {
           The editor stays tactile and cinematic: routes stay readable, photos
           stay emotional, and exports stay fast.
         </p>
-      </motion.div>
+      </div>
 
       <div className="mt-14 space-y-20 lg:mt-20 lg:space-y-28">
         {features.map((feature, index) => {
           const reverse = index % 2 === 1;
 
           return (
-            <motion.article
+            <article
               key={feature.title}
-              variants={reveal}
-              initial="rest"
-              whileInView="visible"
-              viewport={{ once: true, amount: 0.25 }}
               className={cn(
                 "grid items-center gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)] lg:gap-14",
                 reverse && "lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]",
@@ -170,19 +145,15 @@ export function FeatureShowcase() {
                 </div>
               </div>
 
-              <motion.div
+              <div
                 className={cn(
                   "relative",
                   reverse ? "lg:order-1 lg:-translate-x-2" : "lg:translate-x-2",
                 )}
-                initial={{ opacity: 1, scale: 0.98, rotate: reverse ? -2 : 2 }}
-                whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
               >
                 <FeatureVisual kind={feature.kind} />
-              </motion.div>
-            </motion.article>
+              </div>
+            </article>
           );
         })}
       </div>
@@ -607,15 +578,12 @@ function FeatureVisual({
                     <span>84%</span>
                   </div>
                   <div className="h-2 rounded-full bg-white/10">
-                    <motion.div
+                    <div
                       className="h-2 rounded-full"
                       style={{
+                        width: "84%",
                         background: brand.gradients.route,
                       }}
-                      initial={{ width: "24%" }}
-                      whileInView={{ width: "84%" }}
-                      viewport={{ once: true, amount: 0.5 }}
-                      transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
                     />
                   </div>
                 </div>
