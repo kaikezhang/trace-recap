@@ -488,7 +488,11 @@ export default function ExportDialog() {
                       className="text-[11px]"
                       style={{ color: isSelected ? brand.colors.primary[500] : brand.colors.warm[400] }}
                     >
-                      {option.pixels}
+                      {(() => {
+                        if (!canvas) return option.pixels;
+                        const vp = getExportViewportSize(viewportRatio, canvas.width, canvas.height, option.value);
+                        return `${vp.width} × ${vp.height}`;
+                      })()}
                     </span>
                   </motion.button>
                 );

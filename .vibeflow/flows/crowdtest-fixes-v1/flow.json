@@ -1,0 +1,19 @@
+{
+  "flow_id": "crowdtest-fixes-v1",
+  "status": "active",
+  "spec": ".vibeflow/specs/spec-crowdtest-fixes-v1.md",
+  "budget": "production",
+  "repo_slug": "kaikezhang/trace-recap",
+  "created_at": "2026-04-04T20:05:00Z",
+  "tasks": [
+    {"id": "task-01", "title": "Demo auto-play (#137)", "wave": 0, "status": "pending", "agent": "wanwan", "issue": 137},
+    {"id": "task-02", "title": "Export resolution labels dynamic (#138)", "wave": 0, "status": "pending", "agent": "wanwan", "issue": 138},
+    {"id": "task-03", "title": "Share/Copy Link button (#136)", "wave": 1, "status": "pending", "agent": "codex", "issue": 136},
+    {"id": "task-04", "title": "Fix undo catastrophic reset (#135)", "wave": 1, "status": "pending", "agent": "codex", "issue": 135},
+    {"id": "task-05", "title": "Fix playback hint overlay pointer-events (#139)", "wave": 1, "status": "pending", "agent": "codex", "issue": 139},
+    {"id": "task-06", "title": "Mobile touch targets >= 44px (#140)", "wave": 1, "status": "pending", "agent": "codex", "issue": 140},
+    {"id": "task-07", "title": "Edit stop discoverability (#141)", "wave": 2, "status": "pending", "agent": "codex", "issue": 141},
+    {"id": "task-08", "title": "Export dialog aspect ratio + music (#142)", "wave": 2, "status": "pending", "agent": "codex", "issue": 142},
+    {"id": "task-09", "title": "Immersive playback mode (#143)", "wave": 2, "status": "pending", "agent": "codex", "issue": 143}
+  ]
+}
