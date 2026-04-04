@@ -102,6 +102,7 @@ export default memo(function PlaybackControls({
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
+  const showPlaybackHint = Boolean(hintMessage && onHintDismiss);
   const thumbLeft = Math.min(Math.max(progress, 0.5), 99.5);
   const activeTimelineEntry = timeline[currentSegmentIndex];
   const activeSegment =
@@ -226,6 +227,24 @@ export default memo(function PlaybackControls({
     }
   }, [hoveredTickId, scrubberTicks]);
 
+  useEffect(() => {
+    if (!showPlaybackHint || typeof window === "undefined" || !onHintDismiss) {
+      return;
+    }
+
+    const dismissHint = () => {
+      onHintDismiss();
+    };
+
+    const timeoutId = window.setTimeout(dismissHint, 3000);
+    window.addEventListener("pointerdown", dismissHint, true);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("pointerdown", dismissHint, true);
+    };
+  }, [onHintDismiss, showPlaybackHint]);
+
   // Hide controls when export dialog is open
   if (exportDialogOpen) return null;
 
@@ -301,11 +320,13 @@ export default memo(function PlaybackControls({
               <Play className="ml-0.5 h-5 w-5" />
             )}
           </button>
-          {hintMessage && onHintDismiss && (
+          {showPlaybackHint && (
             <OnboardingHint
-              message={hintMessage}
-              onDismiss={onHintDismiss}
-              className="bottom-[calc(100%+0.75rem)] left-1/2 w-56 -translate-x-1/2"
+              message={hintMessage!}
+              onDismiss={onHintDismiss!}
+              interactive={false}
+              dismissLabel="Dismisses after a moment"
+              className="pointer-events-none bottom-[calc(100%+0.75rem)] left-1/2 w-56 -translate-x-1/2"
               arrowClassName="left-1/2 -bottom-[7px] -translate-x-1/2 border-l-0 border-t-0"
             />
           )}

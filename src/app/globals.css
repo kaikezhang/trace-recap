@@ -152,13 +152,6 @@
   }
 }
 
-/* Hide Mapbox navigation controls during playback */
-.hide-map-controls .mapboxgl-ctrl-top-right {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease;
-}
-
 @layer utilities {
   /* Warm travel-inspired mesh gradient */
   .gradient-mesh {
