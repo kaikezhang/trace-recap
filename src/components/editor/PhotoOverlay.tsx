@@ -216,7 +216,7 @@ interface PhotoOverlayProps {
   photoLayout?: PhotoLayout;
   opacity?: number; // 0-1, for fade-out transition
   bottomInsetPx?: number;
-  containerMode?: "viewport" | "parent"; // 'parent' uses 100% sizing instead of vw/vh
+  containerMode?: "viewport" | "parent"; // deprecated — always uses viewport-based sizing now
   originCoordinates?: [number, number];
   incomingOriginCoordinates?: [number, number];
   portalAccentColor?: string;
@@ -351,10 +351,6 @@ export default function PhotoOverlay({
     if (usesPortalLayout) {
       return { width: "100%", height: "100%" };
     }
-    if (containerMode === "parent") {
-      // Match the same inset as viewport mode for WYSIWYG fidelity
-      return { width: "95%", height: "88%" };
-    }
     if (viewportRatio === "9:16") {
       return { width: "98%", height: "92%" };
     }
@@ -368,7 +364,7 @@ export default function PhotoOverlay({
       };
     }
     return { width: "95%", height: "88%" };
-  }, [bottomInsetPx, viewportRatio, containerMode, usesPortalLayout]);
+  }, [bottomInsetPx, viewportRatio, usesPortalLayout]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });

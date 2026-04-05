@@ -811,12 +811,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       return { width: 0, height: 0 };
     }
 
-    if (viewportRatio === "free") {
-      return { width: panelSize.width, height: panelSize.height };
-    }
-
-    // Always fit to viewport aspect ratio — both normal and expanded modes
-    // This ensures 0-1 normalized coords render identically in editor and playback
+    // Always fit to viewport aspect ratio (including free mode) for WYSIWYG fidelity
     const { width: pw, height: ph } = panelSize;
     const targetRatio = previewAspect;
     const panelRatio = pw / ph;
@@ -830,34 +825,18 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       w = ph * targetRatio;
     }
     return { width: w, height: h };
-  }, [panelSize, previewAspect, viewportRatio]);
+  }, [panelSize, previewAspect]);
 
   // Compute fitted preview container style — always preserve aspect ratio for WYSIWYG
   const previewContainerStyle = useMemo<React.CSSProperties>(() => {
-    if (viewportRatio === "free") {
-      return { width: "100%", height: "100%" };
-    }
-
     const pw = previewPixelSize.width;
     const ph = previewPixelSize.height;
     if (!pw || !ph) {
       return { width: "100%", height: "100%" };
     }
 
-    // Fit the target aspect ratio within the available panel, whether expanded or not
-    const targetRatio = previewAspect;
-    const panelRatio = pw / ph;
-
-    let w: number, h: number;
-    if (targetRatio > panelRatio) {
-      w = pw;
-      h = pw / targetRatio;
-    } else {
-      h = ph;
-      w = ph * targetRatio;
-    }
-    return { width: `${w}px`, height: `${h}px` };
-  }, [previewAspect, previewPixelSize.height, previewPixelSize.width, viewportRatio]);
+    return { width: `${pw}px`, height: `${ph}px` };
+  }, [previewPixelSize.height, previewPixelSize.width]);
 
   const orderedPhotos = useMemo(
     () => getOrderedPhotos(location.photos, photoOrder),
@@ -1248,7 +1227,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           visible={true}
           photoLayout={layout}
           opacity={previewOpacity}
-          containerMode="parent"
           originCoordinates={location.coordinates}
           portalAccentColor={portalAccentColor}
           portalProgressOverride={1}
