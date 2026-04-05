@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { Upload, X, LayoutGrid, Undo2, Redo2 } from "lucide-react";
+import { Upload, Trash2, LayoutGrid, Undo2, Redo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { compressImage } from "@/lib/imageUtils";
 import { useProjectStore } from "@/stores/projectStore";
@@ -119,7 +119,7 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
           {/* Photo grid with add button */}
           <div className="grid grid-cols-4 gap-1.5">
             {location.photos.map((photo) => (
-              <div key={photo.id} className="relative group">
+              <div key={photo.id} className="relative">
                 <div className="relative aspect-square">
                   <img
                     src={photo.url}
@@ -127,17 +127,19 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
                     className="w-full h-full rounded-lg object-cover bg-muted"
                   />
                   <button
-                    className="absolute -top-1 -right-1 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+                    type="button"
+                    aria-label="Delete photo"
+                    className="absolute -right-2 -top-2 flex h-11 w-11 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm md:-right-1 md:-top-1 md:h-9 md:w-9"
                     onClick={() => removePhoto(locationId, photo.id)}
                   >
-                    <X className="h-2.5 w-2.5" />
+                    <Trash2 className="h-4 w-4 md:h-3.5 md:w-3.5" />
                   </button>
                 </div>
                 <input
                   type="text"
                   value={photo.caption ?? ""}
                   placeholder="Add caption..."
-                  className="w-full mt-1 px-1 py-0.5 text-[10px] text-gray-600 bg-transparent border border-transparent rounded hover:border-gray-300 focus:border-indigo-400 focus:outline-none truncate"
+                  className="mt-1 min-h-11 w-full rounded-md border border-transparent bg-transparent px-2 py-2 text-xs text-gray-600 hover:border-gray-300 focus:border-indigo-400 focus:outline-none md:min-h-9 md:px-2 md:py-1.5 md:text-[11px] truncate"
                   onChange={(e) => {
                     setPhotoCaption(locationId, photo.id, e.target.value);
                   }}
@@ -178,32 +180,32 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-xs gap-1"
+              className="min-h-11 px-3 text-sm gap-1.5 md:min-h-9 md:text-xs"
               onClick={() => onEditLayout(locationId)}
             >
-              <LayoutGrid className="h-3 w-3" />
+              <LayoutGrid className="h-4 w-4 md:h-3.5 md:w-3.5" />
               Layout
             </Button>
           )}
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-11 w-11 md:h-9 md:w-9"
             onClick={undo}
             disabled={!canUndo}
             aria-label="Undo"
           >
-            <Undo2 className="h-3.5 w-3.5" />
+            <Undo2 className="h-4.5 w-4.5 md:h-4 md:w-4" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-11 w-11 md:h-9 md:w-9"
             onClick={redo}
             disabled={!canRedo}
             aria-label="Redo"
           >
-            <Redo2 className="h-3.5 w-3.5" />
+            <Redo2 className="h-4.5 w-4.5 md:h-4 md:w-4" />
           </Button>
         </div>
       )}
