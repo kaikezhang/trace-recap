@@ -1,10 +1,11 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Bike,
   Bus,
   Car,
+  ChevronDown,
   Copy,
   Footprints,
   Image as ImageIcon,
@@ -363,6 +364,116 @@ function WaypointSwitch({
   );
 }
 
+type LocationSection = "basics" | "chapter" | "photos";
+type OpenSections = Record<LocationSection, boolean>;
+
+const DEFAULT_OPEN_SECTIONS: OpenSections = {
+  basics: true,
+  chapter: false,
+  photos: false,
+};
+
+function createExclusiveOpenSections(section: LocationSection | null): OpenSections {
+  return {
+    basics: section === "basics",
+    chapter: section === "chapter",
+    photos: section === "photos",
+  };
+}
+
+function hasOpenSections(openSections: OpenSections): boolean {
+  return Object.values(openSections).some(Boolean);
+}
+
+function SectionDisclosure({
+  title,
+  icon: Icon,
+  isOpen,
+  onToggle,
+  contentId,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  isOpen: boolean;
+  onToggle: () => void;
+  contentId: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className="overflow-hidden rounded-[22px] border"
+      style={{
+        borderColor: brand.colors.warm[200],
+        backgroundColor: "rgba(255,255,255,0.66)",
+      }}
+    >
+      <button
+        type="button"
+        data-no-seek
+        aria-expanded={isOpen}
+        aria-controls={contentId}
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74] focus-visible:ring-inset"
+      >
+        <span
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+          style={{
+            backgroundColor: brand.colors.primary[50],
+            color: brand.colors.primary[600],
+          }}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <span
+          className="min-w-0 flex-1 text-sm font-semibold"
+          style={{ color: brand.colors.warm[900] }}
+        >
+          {title}
+        </span>
+        <span
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border"
+          style={{
+            borderColor: brand.colors.warm[200],
+            backgroundColor: "rgba(255,255,255,0.88)",
+            color: brand.colors.warm[700],
+          }}
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ease-out ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </span>
+      </button>
+
+      <div
+        id={contentId}
+        className="grid"
+        style={{
+          gridTemplateRows: isOpen ? "1fr" : "0fr",
+          transition: "grid-template-rows 220ms ease-out",
+        }}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div
+            className="border-t px-3 pb-3 pt-2.5 md:px-3.5 md:pb-3.5"
+            style={{
+              borderColor: brand.colors.warm[200],
+              opacity: isOpen ? 1 : 0,
+              transform: isOpen ? "translateY(0)" : "translateY(-4px)",
+              visibility: isOpen ? "visible" : "hidden",
+              transition: "opacity 220ms ease-out, transform 220ms ease-out",
+            }}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default memo(function LocationCard({
   locationId,
   index,
@@ -382,6 +493,8 @@ export default memo(function LocationCard({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isNameEditing, setIsNameEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+  const [openSections, setOpenSections] = useState<OpenSections>(DEFAULT_OPEN_SECTIONS);
   const updateLocation = useProjectStore((s) => s.updateLocation);
   const duplicateLocation = useProjectStore((s) => s.duplicateLocation);
   const addToast = useUIStore((s) => s.addToast);
@@ -447,6 +560,14 @@ export default memo(function LocationCard({
   useEffect(() => clearLongPressTimer, []);
 
   useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)");
+    setIsMobile(mql.matches);
+    const handleChange = (event: MediaQueryListEvent) => setIsMobile(event.matches);
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, []);
+
+  useEffect(() => {
     if (!isNameEditing) {
       setNameDraft(location.name);
     }
@@ -461,6 +582,23 @@ export default memo(function LocationCard({
     nameInputRef.current?.select();
   }, [isNameEditing]);
 
+  useEffect(() => {
+    if (!isMobile) {
+      return;
+    }
+
+    setOpenSections((current) => {
+      const openSection = (Object.entries(current).find(([, isOpen]) => isOpen)?.[0] ??
+        "basics") as LocationSection;
+
+      if (Object.values(current).filter(Boolean).length <= 1) {
+        return current;
+      }
+
+      return createExclusiveOpenSections(openSection);
+    });
+  }, [isMobile]);
+
   const openContextMenu = (x: number, y: number) => {
     onClick?.(index);
     setContextMenu({ x, y });
@@ -470,9 +608,40 @@ export default memo(function LocationCard({
     onDismissEditHint?.();
   };
 
+  const ensureSectionOpen = (section: LocationSection) => {
+    setOpenSections((current) => {
+      if (isMobile) {
+        return createExclusiveOpenSections(section);
+      }
+
+      return { ...current, [section]: true };
+    });
+  };
+
   const toggleExpanded = () => {
-    setIsExpanded((expanded) => !expanded);
+    setIsExpanded((expanded) => {
+      const nextExpanded = !expanded;
+      if (nextExpanded) {
+        setOpenSections((current) => (
+          hasOpenSections(current) ? current : DEFAULT_OPEN_SECTIONS
+        ));
+      }
+      return nextExpanded;
+    });
     onClick?.(index);
+  };
+
+  const toggleSection = (section: LocationSection) => {
+    onClick?.(index);
+    setOpenSections((current) => {
+      const nextOpen = !current[section];
+
+      if (isMobile) {
+        return nextOpen ? createExclusiveOpenSections(section) : createExclusiveOpenSections(null);
+      }
+
+      return { ...current, [section]: nextOpen };
+    });
   };
 
   const startNameEditing = () => {
@@ -1015,93 +1184,67 @@ export default memo(function LocationCard({
                   background: `linear-gradient(180deg, rgba(255,251,245,0.94) 0%, rgba(255,247,237,0.55) 100%)`,
                 }}
               >
-                <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2 md:flex md:flex-col md:gap-1.5">
-                  <div className="min-w-0">
-                    <EditableName
-                      value={location.name}
-                      placeholder="English name"
-                      onSave={(value) => updateLocation(locationId, { name: value })}
-                      className="block truncate text-sm font-semibold"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <EditableName
-                      value={location.nameLocal ?? ""}
-                      placeholder="Local name"
-                      onSave={(value) => updateLocation(locationId, { nameLocal: value || undefined })}
-                      className="block truncate text-xs"
-                    />
-                  </div>
-                </div>
-
-                {!isFirst && (
-                  <div
-                    className="flex items-center justify-between rounded-2xl border px-3 py-2.5"
-                    style={{
-                      borderColor: brand.colors.warm[200],
-                      backgroundColor: "rgba(255,255,255,0.68)",
-                    }}
-                  >
-                    <div>
-                      <p className="text-xs font-medium" style={{ color: brand.colors.warm[800] }}>
-                        Pass-through
-                      </p>
-                      <p className="text-[11px]" style={{ color: brand.colors.warm[500] }}>
-                        Mark as a brief stop the route passes through, without its own chapter.
-                      </p>
+                <SectionDisclosure
+                  title="Basics"
+                  icon={Pencil}
+                  isOpen={openSections.basics}
+                  onToggle={() => toggleSection("basics")}
+                  contentId={`location-card-basics-${locationId}`}
+                >
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2 md:flex md:flex-col md:gap-1.5">
+                      <div className="min-w-0">
+                        <EditableName
+                          value={location.name}
+                          placeholder="English name"
+                          onSave={(value) => updateLocation(locationId, { name: value })}
+                          className="block truncate text-sm font-semibold"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <EditableName
+                          value={location.nameLocal ?? ""}
+                          placeholder="Local name"
+                          onSave={(value) => updateLocation(locationId, { nameLocal: value || undefined })}
+                          className="block truncate text-xs"
+                        />
+                      </div>
                     </div>
-                    <WaypointSwitch
-                      isWaypoint={!!isWaypoint}
-                      onToggle={() => onToggleWaypoint(locationId)}
-                    />
+
+                    {!isFirst && (
+                      <div
+                        className="flex items-center justify-between rounded-2xl border px-3 py-2.5"
+                        style={{
+                          borderColor: brand.colors.warm[200],
+                          backgroundColor: "rgba(255,255,255,0.68)",
+                        }}
+                      >
+                        <div>
+                          <p className="text-xs font-medium" style={{ color: brand.colors.warm[800] }}>
+                            Pass-through
+                          </p>
+                          <p className="text-[11px]" style={{ color: brand.colors.warm[500] }}>
+                            Mark as a brief stop the route passes through, without its own chapter.
+                          </p>
+                        </div>
+                        <WaypointSwitch
+                          isWaypoint={!!isWaypoint}
+                          onToggle={() => onToggleWaypoint(locationId)}
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
+                </SectionDisclosure>
 
                 {!isWaypoint && (
-                  <div className="grid gap-2 md:gap-3">
-                    <div
-                      className="rounded-2xl border px-3 py-3"
-                      style={{
-                        borderColor: brand.colors.warm[200],
-                        backgroundColor: "rgba(255,255,255,0.7)",
-                      }}
-                    >
-                      <span
-                        className="block text-[10px] font-medium uppercase tracking-[0.18em]"
-                        style={{ color: brand.colors.warm[500] }}
-                      >
-                        Chapter
-                      </span>
-                      <EditableName
-                        value={location.chapterTitle ?? ""}
-                        placeholder="Chapter title"
-                        onSave={(value) => updateLocation(locationId, { chapterTitle: value || undefined })}
-                        className="mt-1.5 block text-sm"
-                      />
-                    </div>
-
-                    <div
-                      className="rounded-2xl border px-3 py-3"
-                      style={{
-                        borderColor: brand.colors.warm[200],
-                        backgroundColor: "rgba(255,255,255,0.7)",
-                      }}
-                    >
-                      <span
-                        className="block text-[10px] font-medium uppercase tracking-[0.18em]"
-                        style={{ color: brand.colors.warm[500] }}
-                      >
-                        Note
-                      </span>
-                      <EditableName
-                        value={location.chapterNote ?? ""}
-                        placeholder="e.g. Temples and gardens"
-                        onSave={(value) => updateLocation(locationId, { chapterNote: value || undefined })}
-                        className="mt-1.5 block text-sm"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-[1fr_auto] gap-2 md:gap-3">
+                  <SectionDisclosure
+                    title="Chapter"
+                    icon={Smile}
+                    isOpen={openSections.chapter}
+                    onToggle={() => toggleSection("chapter")}
+                    contentId={`location-card-chapter-${locationId}`}
+                  >
+                    <div className="grid gap-2 md:gap-3">
                       <div
                         className="rounded-2xl border px-3 py-3"
                         style={{
@@ -1113,41 +1256,93 @@ export default memo(function LocationCard({
                           className="block text-[10px] font-medium uppercase tracking-[0.18em]"
                           style={{ color: brand.colors.warm[500] }}
                         >
-                          Date
+                          Chapter
                         </span>
                         <EditableName
-                          value={location.chapterDate ?? ""}
-                          placeholder="e.g. Mar 15-17"
-                          onSave={(value) => updateLocation(locationId, { chapterDate: value || undefined })}
+                          value={location.chapterTitle ?? ""}
+                          placeholder="Chapter title"
+                          onSave={(value) => updateLocation(locationId, { chapterTitle: value || undefined })}
                           className="mt-1.5 block text-sm"
                         />
                       </div>
 
                       <div
-                        className="flex flex-col items-center rounded-2xl border px-3 py-3"
+                        className="rounded-2xl border px-3 py-3"
                         style={{
                           borderColor: brand.colors.warm[200],
                           backgroundColor: "rgba(255,255,255,0.7)",
                         }}
                       >
                         <span
-                          className="text-[10px] font-medium uppercase tracking-[0.18em]"
+                          className="block text-[10px] font-medium uppercase tracking-[0.18em]"
                           style={{ color: brand.colors.warm[500] }}
                         >
-                          Icon
+                          Note
                         </span>
-                        <div className="mt-1.5">
-                          <EmojiPicker
-                            value={location.chapterEmoji ?? ""}
-                            onSelect={(value) => updateLocation(locationId, { chapterEmoji: value || undefined })}
+                        <EditableName
+                          value={location.chapterNote ?? ""}
+                          placeholder="e.g. Temples and gardens"
+                          onSave={(value) => updateLocation(locationId, { chapterNote: value || undefined })}
+                          className="mt-1.5 block text-sm"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-[1fr_auto] gap-2 md:gap-3">
+                        <div
+                          className="rounded-2xl border px-3 py-3"
+                          style={{
+                            borderColor: brand.colors.warm[200],
+                            backgroundColor: "rgba(255,255,255,0.7)",
+                          }}
+                        >
+                          <span
+                            className="block text-[10px] font-medium uppercase tracking-[0.18em]"
+                            style={{ color: brand.colors.warm[500] }}
+                          >
+                            Date
+                          </span>
+                          <EditableName
+                            value={location.chapterDate ?? ""}
+                            placeholder="e.g. Mar 15-17"
+                            onSave={(value) => updateLocation(locationId, { chapterDate: value || undefined })}
+                            className="mt-1.5 block text-sm"
                           />
+                        </div>
+
+                        <div
+                          className="flex flex-col items-center rounded-2xl border px-3 py-3"
+                          style={{
+                            borderColor: brand.colors.warm[200],
+                            backgroundColor: "rgba(255,255,255,0.7)",
+                          }}
+                        >
+                          <span
+                            className="text-[10px] font-medium uppercase tracking-[0.18em]"
+                            style={{ color: brand.colors.warm[500] }}
+                          >
+                            Icon
+                          </span>
+                          <div className="mt-1.5">
+                            <EmojiPicker
+                              value={location.chapterEmoji ?? ""}
+                              onSelect={(value) => updateLocation(locationId, { chapterEmoji: value || undefined })}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </SectionDisclosure>
                 )}
 
-                <PhotoManager locationId={locationId} onEditLayout={onEditLayout} />
+                <SectionDisclosure
+                  title="Photos"
+                  icon={ImageIcon}
+                  isOpen={openSections.photos}
+                  onToggle={() => toggleSection("photos")}
+                  contentId={`location-card-photos-${locationId}`}
+                >
+                  <PhotoManager locationId={locationId} onEditLayout={onEditLayout} />
+                </SectionDisclosure>
               </div>
             </motion.div>
           )}
@@ -1181,6 +1376,7 @@ export default memo(function LocationCard({
           <DropdownMenuItem
             onClick={() => {
               setIsExpanded(true);
+              ensureSectionOpen("photos");
               onClick?.(index);
               setContextMenu(null);
             }}
