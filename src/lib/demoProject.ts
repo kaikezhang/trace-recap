@@ -52,7 +52,7 @@ export const demoProject: ImportRouteData = {
         template: "full",
         gap: 0,
         borderRadius: 0,
-        photoStyle: "kenburns",
+        photoStyle: "classic",
         enterAnimation: "scale",
         sceneTransition: "blur-dissolve",
         captionFontSize: 18,

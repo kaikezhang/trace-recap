@@ -259,7 +259,8 @@ function getPortraitHeroHeight(innerHeight: number, photoCount: number): number 
 function layoutPortraitReadableGallery(
   photos: PhotoMeta[],
   containerAspect: number,
-  gap: number
+  gap: number,
+  template?: LayoutTemplate
 ): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
@@ -282,6 +283,27 @@ function layoutPortraitReadableGallery(
   }
 
   if (n === 2) {
+    // Polaroid template: side-by-side cards with slight rotation for personality
+    if (template === "polaroid") {
+      const cardW = (innerWidth - gap) * 0.46;
+      const cardH = innerHeight * 0.72;
+      const yCenter = gap + (innerHeight - cardH) / 2;
+      return [
+        { x: gap + innerWidth * 0.02, y: yCenter - innerHeight * 0.02, width: cardW, height: cardH, rotation: -3 },
+        { x: gap + innerWidth - cardW - innerWidth * 0.02, y: yCenter + innerHeight * 0.02, width: cardW, height: cardH, rotation: 2.5 },
+      ];
+    }
+
+    // Hero template: dominant first photo (78%) + small strip (17%)
+    if (template === "hero") {
+      const heroHeight = innerHeight * 0.78;
+      const bottomHeight = innerHeight * 0.17;
+      return [
+        { x: gap, y: gap, width: innerWidth, height: heroHeight },
+        { x: gap + innerWidth * 0.15, y: gap + heroHeight + gap, width: innerWidth * 0.7, height: bottomHeight },
+      ];
+    }
+
     const landscapeCount = photos.filter((p) => p.aspect > 1.2).length;
 
     // Both landscape: stack vertically, each full width
@@ -571,7 +593,7 @@ export function computePhotoLayout(
   const gap = gapPx / widthPx;
 
   if (shouldUsePortraitFriendlyLayout(viewportRatio)) {
-    return layoutPortraitReadableGallery(photos, containerAspect, gap);
+    return layoutPortraitReadableGallery(photos, containerAspect, gap, layout?.template);
   }
 
   if (layout?.mode === "manual" && layout.template) {
