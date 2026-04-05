@@ -9,6 +9,7 @@ interface PhotoFrameProps {
   frameStyle: PhotoFrameStyle;
   photoId: string;
   caption?: string;
+  captionStyle?: CSSProperties;
   className?: string;
   mediaClassName?: string;
   style?: CSSProperties;
@@ -60,6 +61,7 @@ export default function PhotoFrame({
   frameStyle,
   photoId,
   caption,
+  captionStyle,
   className,
   mediaClassName,
   style,
@@ -142,6 +144,7 @@ export default function PhotoFrame({
               color: config.inlineCaptionColor,
               letterSpacing: config.inlineCaptionLetterSpacing,
               lineHeight: 1.05,
+              ...captionStyle,
             }}
           >
             <span className="line-clamp-2">{trimmedCaption}</span>
