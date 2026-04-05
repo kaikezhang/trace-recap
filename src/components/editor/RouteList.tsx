@@ -43,6 +43,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Input } from "@/components/ui/input";
 import { brand } from "@/lib/brand";
+import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import type { Location, Segment, TransportMode } from "@/types";
@@ -52,10 +53,12 @@ import TransportSelector from "./TransportSelector";
 const EDIT_HINT_STORAGE_KEY = "hasSeenEditHint";
 
 interface RouteListProps {
+  mobileSheet?: boolean;
   onLocationClick?: (index: number) => void;
   onEditLayout?: (locationId: string) => void;
   selectedLocationIndex?: number | null;
   onSelectedLocationIndexChange?: (index: number | null) => void;
+  onAddStopRequest?: () => void;
 }
 
 const TRANSPORT_ICONS: Record<TransportMode, LucideIcon> = {
@@ -160,19 +163,21 @@ function isEditableTarget(target: EventTarget | null): boolean {
 function TimelineNode({
   isWaypoint,
   selected,
+  mobileSheet = false,
 }: {
   isWaypoint: boolean;
   selected: boolean;
+  mobileSheet?: boolean;
 }) {
-  const size = isWaypoint ? 10 : 12;
+  const size = mobileSheet ? (isWaypoint ? 9 : 11) : isWaypoint ? 10 : 12;
 
   return (
     <span
       aria-hidden
       className="pointer-events-none absolute rounded-full border-2 bg-white"
       style={{
-        left: isWaypoint ? 21 : 20,
-        top: isWaypoint ? 26 : 28,
+        left: mobileSheet ? (isWaypoint ? 9 : 8) : isWaypoint ? 21 : 20,
+        top: mobileSheet ? (isWaypoint ? 24 : 25) : isWaypoint ? 26 : 28,
         width: size,
         height: size,
         borderColor: selected ? brand.colors.primary[500] : brand.colors.ocean[500],
@@ -196,6 +201,7 @@ function TimelineSegmentCard({
   onToggle,
   indented = false,
   showConnector = true,
+  mobileSheet = false,
 }: {
   segment: Segment;
   fromLabel: string;
@@ -205,14 +211,16 @@ function TimelineSegmentCard({
   onToggle: () => void;
   indented?: boolean;
   showConnector?: boolean;
+  mobileSheet?: boolean;
 }) {
   const Icon = TRANSPORT_ICONS[segment.transportMode];
   const accent = TRANSPORT_ACCENTS[segment.transportMode];
   const formattedDistance = formatDistance(distanceKm);
   const transportLabel = TRANSPORT_META_LABELS[segment.transportMode];
+  const timelinePaddingClassName = mobileSheet ? "pl-8" : "pl-11 sm:pl-12";
 
   return (
-    <div className={`relative ${indented ? "ml-6" : ""} pl-11 sm:pl-12`}>
+    <div className={cn("relative", indented ? (mobileSheet ? "ml-4" : "ml-6") : "", timelinePaddingClassName)}>
       <div
         className="relative overflow-hidden rounded-[20px] border"
         style={{
@@ -227,7 +235,7 @@ function TimelineSegmentCard({
       >
         <button
           type="button"
-          className="touch-target-mobile flex min-h-9 w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+          className="touch-target-mobile flex min-h-11 w-full items-center justify-between gap-3 px-3 py-3 text-left"
           aria-expanded={expanded}
           aria-label={`${expanded ? "Collapse" : "Expand"} ${segment.transportMode} segment details`}
           onClick={onToggle}
@@ -295,8 +303,9 @@ function TimelineSegmentCard({
       {showConnector && (
         <span
           aria-hidden
-          className="pointer-events-none absolute left-[54px] top-full h-4 w-px"
+          className="pointer-events-none absolute top-full h-4 w-px"
           style={{
+            left: mobileSheet ? 39 : 54,
             background: `linear-gradient(180deg, ${accent} 0%, rgba(255,255,255,0) 100%)`,
           }}
         />
@@ -306,10 +315,12 @@ function TimelineSegmentCard({
 }
 
 export default memo(function RouteList({
+  mobileSheet = false,
   onLocationClick,
   onEditLayout,
   selectedLocationIndex,
   onSelectedLocationIndexChange,
+  onAddStopRequest,
 }: RouteListProps) {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
@@ -338,11 +349,13 @@ export default memo(function RouteList({
   const isSelectionControlled = selectedLocationIndex !== undefined;
   const totalStops = locations.length;
   const showToolbar = totalStops >= 5;
-  const autoShowFilter = totalStops >= 10;
+  const autoShowFilter = !mobileSheet && totalStops >= 10;
   const normalizedFilterQuery = filterQuery.trim().toLocaleLowerCase();
   const isFiltering = normalizedFilterQuery.length > 0;
   const showFilterInput = autoShowFilter || filterOpen;
   const dragDisabled = isFiltering;
+  const timelinePaddingClassName = mobileSheet ? "pl-8" : "pl-11 sm:pl-12";
+  const railLeft = mobileSheet ? 13 : 25;
 
   useEffect(() => {
     setCollapsedGroups((current) => {
@@ -697,13 +710,14 @@ export default memo(function RouteList({
     return (
       <div
         key={location.id}
-        className={indented ? "ml-6" : undefined}
+        className={indented ? (mobileSheet ? "ml-4" : "ml-6") : undefined}
         data-route-stop-id={location.id}
       >
         <LocationCard
           locationId={location.id}
           index={index}
           total={locationCount}
+          mobileSheet={mobileSheet}
           transportMode={incomingMode}
           selected={isSelected}
           isMultiSelected={isMultiSelected}
@@ -732,6 +746,7 @@ export default memo(function RouteList({
     markExpansionStateMixed,
     onEditLayout,
     removeLocation,
+    mobileSheet,
     selectedIds,
     segments,
     selectedLocationId,
@@ -791,11 +806,11 @@ export default memo(function RouteList({
 
   if (locationCount === 0) {
     return (
-      <div className="p-4">
+      <div className={mobileSheet ? "px-1 pb-6 pt-3" : "p-4"}>
         <div
-          className="rounded-[24px] border px-5 py-8 text-center"
+          className="rounded-[26px] border px-5 py-8 text-center"
           style={{
-            background: "rgba(255,255,255,0.62)",
+            background: "linear-gradient(160deg, rgba(255,251,245,0.9) 0%, rgba(255,255,255,0.84) 100%)",
             borderColor: brand.colors.warm[200],
             boxShadow: brand.shadows.sm,
           }}
@@ -812,6 +827,20 @@ export default memo(function RouteList({
           <p className="mt-2 text-sm leading-6" style={{ color: brand.colors.warm[500] }}>
             Search above or tap the map to drop in the first place on your itinerary.
           </p>
+          {onAddStopRequest && (
+            <button
+              type="button"
+              className="touch-target-mobile mt-4 inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2 text-sm font-medium transition-colors active:scale-[0.99]"
+              style={{
+                borderColor: brand.colors.primary[200],
+                color: brand.colors.primary[700],
+                backgroundColor: "rgba(255,247,237,0.95)",
+              }}
+              onClick={onAddStopRequest}
+            >
+              Add your first stop
+            </button>
+          )}
         </div>
       </div>
     );
@@ -829,9 +858,9 @@ export default memo(function RouteList({
 
       timelineItems.push(
         <div key={location.id} className="relative">
-          <TimelineNode isWaypoint={false} selected={isSelected} />
+          <TimelineNode isWaypoint={false} selected={isSelected} mobileSheet={mobileSheet} />
 
-          <div className="pl-11 sm:pl-12">
+          <div className={timelinePaddingClassName}>
             {renderLocationCard(location, index)}
           </div>
         </div>,
@@ -861,7 +890,7 @@ export default memo(function RouteList({
 
         timelineItems.push(
           <div key={groupKey} className="relative">
-            <div className="pl-11 sm:pl-12">
+            <div className={timelinePaddingClassName}>
               <button
                 type="button"
                 className="touch-target-mobile flex w-full items-center gap-3 rounded-[24px] border px-3.5 py-3 text-left transition-colors"
@@ -950,13 +979,14 @@ export default memo(function RouteList({
                             onToggle={() => toggleSegmentExpansion(waypointSegment.id)}
                             indented
                             showConnector
+                            mobileSheet={mobileSheet}
                           />
                         )}
 
                         <div className="relative">
-                          <TimelineNode isWaypoint selected={waypointSelected} />
+                          <TimelineNode isWaypoint selected={waypointSelected} mobileSheet={mobileSheet} />
 
-                          <div className="pl-11 sm:pl-12">
+                          <div className={timelinePaddingClassName}>
                             {renderLocationCard(waypoint, waypointIndex, true)}
                           </div>
                         </div>
@@ -971,6 +1001,7 @@ export default memo(function RouteList({
                             onToggle={() => toggleSegmentExpansion(segments[nextStopIndex - 1].id)}
                             indented
                             showConnector={showConnector}
+                            mobileSheet={mobileSheet}
                           />
                         )}
                       </div>
@@ -998,6 +1029,7 @@ export default memo(function RouteList({
             expanded={expandedSegments[nextSegment.id] ?? false}
             onToggle={() => toggleSegmentExpansion(nextSegment.id)}
             showConnector
+            mobileSheet={mobileSheet}
           />,
         );
       }
@@ -1019,7 +1051,12 @@ export default memo(function RouteList({
           tabIndex={0}
           role="listbox"
           aria-label="Route stops"
-          className="overflow-x-auto px-2 py-4 outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74]/70 focus-visible:ring-inset sm:px-4"
+          className={cn(
+            "outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74]/70 focus-visible:ring-inset",
+            mobileSheet
+              ? "overflow-x-hidden px-3 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3"
+              : "overflow-x-auto px-2 py-4 sm:px-4"
+          )}
           onKeyDown={handleRouteListKeyDown}
         >
           {selectedIds.size > 0 && (
@@ -1044,7 +1081,7 @@ export default memo(function RouteList({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+                    className="touch-target-mobile rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
                     style={{
                       color: "#991b1b",
                       backgroundColor: "rgba(254,242,242,0.96)",
@@ -1057,7 +1094,7 @@ export default memo(function RouteList({
                   <button
                     type="button"
                     disabled={toggleableSelectionCount === 0}
-                    className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    className="touch-target-mobile rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                     style={{
                       color: brand.colors.ocean[700],
                       backgroundColor: "rgba(224,242,254,0.92)",
@@ -1069,7 +1106,7 @@ export default memo(function RouteList({
                   </button>
                   <button
                     type="button"
-                    className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+                    className="touch-target-mobile rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
                     style={{
                       color: brand.colors.warm[700],
                       backgroundColor: "rgba(255,255,255,0.92)",
@@ -1085,10 +1122,10 @@ export default memo(function RouteList({
           )}
 
           {showToolbar && (
-            <div className="mb-3 flex min-w-[21.5rem] flex-wrap items-center gap-2 pl-2 pr-3 sm:min-w-0">
+            <div className={cn("mb-3 flex flex-wrap items-center gap-2", mobileSheet ? "" : "min-w-[21.5rem] pl-2 pr-3 sm:min-w-0")}>
               <button
                 type="button"
-                className="inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
+                className="touch-target-mobile inline-flex min-h-11 items-center rounded-full border px-3.5 py-2 text-xs font-medium transition-colors"
                 onClick={handleCollapseAll}
                 style={{
                   borderColor: allCollapsed ? brand.colors.primary[300] : brand.colors.warm[200],
@@ -1100,7 +1137,7 @@ export default memo(function RouteList({
               </button>
               <button
                 type="button"
-                className="inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
+                className="touch-target-mobile inline-flex min-h-11 items-center rounded-full border px-3.5 py-2 text-xs font-medium transition-colors"
                 onClick={handleExpandAll}
                 style={{
                   borderColor: allExpanded ? brand.colors.ocean[300] : brand.colors.warm[200],
@@ -1112,7 +1149,7 @@ export default memo(function RouteList({
               </button>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
+                className="touch-target-mobile inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition-colors"
                 onClick={focusFilterInput}
                 style={{
                   borderColor: showFilterInput ? brand.colors.primary[200] : brand.colors.warm[200],
@@ -1127,7 +1164,7 @@ export default memo(function RouteList({
           )}
 
           {showFilterInput && (
-            <div className="mb-3 min-w-[21.5rem] pl-2 pr-3 sm:min-w-0">
+            <div className={cn("mb-3", mobileSheet ? "" : "min-w-[21.5rem] pl-2 pr-3 sm:min-w-0")}>
               <div
                 className="rounded-[22px] border px-3 py-3"
                 style={{
@@ -1152,7 +1189,7 @@ export default memo(function RouteList({
                   {filterQuery && (
                     <button
                       type="button"
-                      className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2]"
+                      className="touch-target-mobile absolute right-1.5 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2]"
                       onClick={handleFilterClear}
                       aria-label="Clear stop filter"
                     >
@@ -1170,7 +1207,7 @@ export default memo(function RouteList({
           )}
 
           {isFiltering ? (
-            <div className="min-w-[21.5rem] pb-4 pl-2 pr-3 sm:min-w-0">
+            <div className={mobileSheet ? "pb-2" : "min-w-[21.5rem] pb-4 pl-2 pr-3 sm:min-w-0"}>
               {visibleLocations.length === 0 ? (
                 <div
                   className="rounded-[24px] border px-5 py-6 text-center"
@@ -1185,7 +1222,7 @@ export default memo(function RouteList({
                   </p>
                   <button
                     type="button"
-                    className="mt-3 inline-flex rounded-full border px-3 py-1.5 text-xs font-medium"
+                    className="touch-target-mobile mt-3 inline-flex min-h-11 rounded-full border px-3.5 py-2 text-xs font-medium"
                     onClick={handleFilterClear}
                     style={{
                       borderColor: brand.colors.warm[200],
@@ -1197,7 +1234,7 @@ export default memo(function RouteList({
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className={mobileSheet ? "space-y-4" : "space-y-3"}>
                   {visibleLocations.map((location) => {
                     const index = locations.findIndex((candidate) => candidate.id === location.id);
                     return renderLocationCard(location, index);
@@ -1206,17 +1243,17 @@ export default memo(function RouteList({
               )}
             </div>
           ) : (
-            <div className="relative min-w-[21.5rem] pb-4 pl-2 pr-3 sm:min-w-0">
+            <div className={cn("relative", mobileSheet ? "pb-2" : "min-w-[21.5rem] pb-4 pl-2 pr-3 sm:min-w-0")}>
               <div
                 aria-hidden
                 className="pointer-events-none absolute bottom-6 top-7 w-[2px] rounded-full"
                 style={{
-                  left: 25,
+                  left: railLeft,
                   background: `linear-gradient(180deg, ${brand.colors.primary[300]} 0%, ${brand.colors.ocean[400]} 100%)`,
                 }}
               />
 
-              <div className="space-y-3">{timelineItems}</div>
+              <div className={mobileSheet ? "space-y-4" : "space-y-3"}>{timelineItems}</div>
             </div>
           )}
         </div>

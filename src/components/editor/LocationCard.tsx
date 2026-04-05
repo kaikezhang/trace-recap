@@ -43,6 +43,7 @@ interface LocationCardProps {
   locationId: string;
   index: number;
   total: number;
+  mobileSheet?: boolean;
   transportMode?: TransportMode;
   selected?: boolean;
   isMultiSelected?: boolean;
@@ -401,6 +402,7 @@ function SectionDisclosure({
   onToggle,
   contentId,
   children,
+  mobileSheet = false,
 }: {
   title: string;
   icon: LucideIcon;
@@ -408,13 +410,14 @@ function SectionDisclosure({
   onToggle: () => void;
   contentId: string;
   children: ReactNode;
+  mobileSheet?: boolean;
 }) {
   return (
     <section
       className="overflow-hidden rounded-[22px] border"
       style={{
         borderColor: brand.colors.warm[200],
-        backgroundColor: "rgba(255,255,255,0.66)",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.8) 0%, rgba(255,250,245,0.72) 100%)",
       }}
     >
       <button
@@ -423,7 +426,7 @@ function SectionDisclosure({
         aria-expanded={isOpen}
         aria-controls={contentId}
         onClick={onToggle}
-        className="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74] focus-visible:ring-inset"
+        className="touch-target-mobile flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74] focus-visible:ring-inset"
       >
         <span
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
@@ -435,13 +438,16 @@ function SectionDisclosure({
           <Icon className="h-4 w-4" />
         </span>
         <span
-          className="min-w-0 flex-1 text-sm font-semibold"
-          style={{ color: brand.colors.warm[900] }}
+          className="min-w-0 flex-1 font-semibold"
+          style={{
+            color: brand.colors.warm[900],
+            fontSize: mobileSheet ? 15 : undefined,
+          }}
         >
           {title}
         </span>
         <span
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border"
           style={{
             borderColor: brand.colors.warm[200],
             backgroundColor: "rgba(255,255,255,0.88)",
@@ -487,6 +493,7 @@ export default memo(function LocationCard({
   locationId,
   index,
   total,
+  mobileSheet = false,
   transportMode,
   selected = false,
   isMultiSelected = false,
@@ -546,12 +553,13 @@ export default memo(function LocationCard({
   const mobilePhotoLabel = `${photoCount} photo${photoCount === 1 ? "" : "s"}`;
   const detailsId = `location-card-details-${locationId}`;
   const stopLabel = location.name || `stop ${index + 1}`;
+  const isCompactMobile = isMobile && mobileSheet;
 
   const transformValue = CSS.Transform.toString(transform);
   const composedTransform = [
     transformValue,
     !isDragging && isHovered ? "translateY(-1px)" : null,
-    isWaypoint ? "scale(0.92)" : null,
+    isWaypoint ? (isCompactMobile ? "scale(0.97)" : "scale(0.92)") : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -649,16 +657,14 @@ export default memo(function LocationCard({
   };
 
   const toggleExpanded = () => {
-    setIsExpanded((expanded) => {
-      const nextExpanded = !expanded;
-      if (nextExpanded) {
-        setOpenSections((current) => (
-          hasOpenSections(current) ? current : DEFAULT_OPEN_SECTIONS
-        ));
-      }
-      onExpandedChange?.(nextExpanded);
-      return nextExpanded;
-    });
+    const nextExpanded = !isExpanded;
+    if (nextExpanded) {
+      setOpenSections((current) => (
+        hasOpenSections(current) ? current : DEFAULT_OPEN_SECTIONS
+      ));
+    }
+    setIsExpanded(nextExpanded);
+    onExpandedChange?.(nextExpanded);
     onClick?.(index);
   };
 
@@ -786,7 +792,7 @@ export default memo(function LocationCard({
     </div>
   );
   const mobileActionBar = (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
       <button
         type="button"
         data-no-seek
@@ -804,7 +810,7 @@ export default memo(function LocationCard({
         aria-label="Edit layout"
         title="Edit layout"
       >
-        <LayoutTemplate className="h-4 w-4" />
+        <LayoutTemplate className="h-[18px] w-[18px]" />
       </button>
     </div>
   );
@@ -916,7 +922,7 @@ export default memo(function LocationCard({
 
         <div
           className={`relative flex flex-col gap-2 ${
-            isWaypoint ? "p-3 md:gap-3 md:p-3.5" : "p-3.5 md:gap-3 md:p-4"
+            isWaypoint ? "p-3.5 md:gap-3 md:p-3.5" : "p-4 md:gap-3 md:p-4"
           } md:flex-row md:items-center`}
         >
           <button
@@ -926,7 +932,7 @@ export default memo(function LocationCard({
             aria-controls={detailsId}
             aria-label={`${isExpanded ? "Collapse" : "Expand"} details for ${stopLabel}`}
             onClick={handleCardClick}
-            className={`absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74] focus-visible:ring-inset ${
+            className={`absolute inset-0 z-10 transition-colors active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74] focus-visible:ring-inset ${
               isWaypoint ? "rounded-[24px]" : "rounded-[30px]"
             }`}
           />
@@ -1005,8 +1011,8 @@ export default memo(function LocationCard({
                       title="Tap to edit stop name"
                     >
                       <span
-                        className={`truncate border-b border-dashed border-transparent text-sm font-semibold transition-colors hover:border-current ${
-                          isWaypoint ? "" : "md:text-[15px]"
+                      className={`truncate border-b border-dashed border-transparent text-sm font-semibold transition-colors hover:border-current ${
+                          isCompactMobile ? "text-[15px]" : isWaypoint ? "" : "md:text-[15px]"
                         }`}
                         style={{ color: brand.colors.warm[800], cursor: "text" }}
                       >
@@ -1140,27 +1146,22 @@ export default memo(function LocationCard({
             </div>
           </div>
 
-          <div
-            className="flex items-center gap-2 text-xs md:hidden"
-            style={{ color: brand.colors.warm[500] }}
-          >
-            <div className="flex min-w-0 items-center gap-2">
+          <div className="flex items-start justify-between gap-3 text-xs md:hidden">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5" style={{ color: brand.colors.warm[500] }}>
               {AccentIcon ? (
                 <>
                   <span
-                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
-                    style={{ backgroundColor: `${accentColor}18` }}
+                    className="inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 py-1"
+                    style={{ backgroundColor: `${accentColor}14`, color: accentColor }}
                     title={transportLabel}
                   >
                     <AccentIcon className="h-3 w-3" style={{ color: accentColor }} />
-                  </span>
-                  <span className="shrink-0 font-medium" style={{ color: brand.colors.warm[500] }}>
                     {transportMetaLabel}
                   </span>
                 </>
               ) : isWaypoint ? (
                 <span
-                  className="shrink-0 rounded-full px-2 py-1 text-xs font-medium"
+                  className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
                   style={{
                     color: brand.colors.warm[500],
                     backgroundColor: brand.colors.warm[100],
@@ -1169,23 +1170,37 @@ export default memo(function LocationCard({
                   Pass-through
                 </span>
               ) : null}
-              <span className="truncate">{mobileDateLabel}</span>
-              <span className="shrink-0">•</span>
-              <span className="truncate">{mobilePhotoLabel}</span>
+              <span
+                className="truncate rounded-full px-2.5 py-1"
+                style={{ backgroundColor: "rgba(255,255,255,0.84)", color: brand.colors.warm[600] }}
+              >
+                {mobileDateLabel}
+              </span>
+              <span
+                className="truncate rounded-full px-2.5 py-1"
+                style={{ backgroundColor: "rgba(255,255,255,0.84)", color: brand.colors.warm[600] }}
+              >
+                {mobilePhotoLabel}
+              </span>
             </div>
-            <div className="flex-1" />
-            {mobileActionBar}
-            <button
-              data-delete-btn
-              className="touch-target-mobile relative z-20 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-[transform,background-color] duration-150 active:scale-95 hover:bg-[#fff1f2]"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRemove();
-              }}
-              aria-label="Remove location"
-            >
-              <X className="h-4 w-4" style={{ color: brand.colors.warm[500] }} />
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {mobileActionBar}
+              <button
+                data-delete-btn
+                className="touch-target-mobile relative z-20 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-[transform,background-color] duration-150 active:scale-95 hover:bg-[#fff1f2]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemove();
+                }}
+                aria-label="Remove location"
+                style={{
+                  borderColor: brand.colors.warm[200],
+                  backgroundColor: "rgba(255,255,255,0.86)",
+                }}
+              >
+                <X className="h-[18px] w-[18px]" style={{ color: brand.colors.warm[500] }} />
+              </button>
+            </div>
           </div>
 
           <button
@@ -1215,7 +1230,7 @@ export default memo(function LocationCard({
             >
               <div
                 className={`space-y-3 border-t md:space-y-4 ${
-                  isWaypoint ? "px-3.5 pb-3.5 pt-3.5" : "px-4 pb-4 pt-4"
+                  isWaypoint ? "px-3.5 pb-4 pt-3.5" : "px-4 pb-4 pt-4"
                 }`}
                 style={{
                   borderColor: brand.colors.warm[200],
@@ -1228,9 +1243,10 @@ export default memo(function LocationCard({
                   isOpen={openSections.basics}
                   onToggle={() => toggleSection("basics")}
                   contentId={`location-card-basics-${locationId}`}
+                  mobileSheet={mobileSheet}
                 >
                   <div className="space-y-3">
-                    <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2 md:grid-cols-1 md:gap-2">
+                    <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:gap-2">
                       <div className="min-w-0">
                         <EditableName
                           value={location.name}
@@ -1278,6 +1294,7 @@ export default memo(function LocationCard({
                     isOpen={openSections.chapter}
                     onToggle={() => toggleSection("chapter")}
                     contentId={`location-card-chapter-${locationId}`}
+                    mobileSheet={mobileSheet}
                   >
                     <div className="space-y-4">
                       <div className="space-y-1.5">
@@ -1311,7 +1328,7 @@ export default memo(function LocationCard({
                       </div>
 
                       <div
-                        className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t pt-3"
+                        className="grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4"
                         style={{ borderColor: brand.colors.warm[200] }}
                       >
                         <div className="space-y-1.5">
@@ -1352,6 +1369,7 @@ export default memo(function LocationCard({
                   isOpen={openSections.photos}
                   onToggle={() => toggleSection("photos")}
                   contentId={`location-card-photos-${locationId}`}
+                  mobileSheet={mobileSheet}
                 >
                   <PhotoManager locationId={locationId} onEditLayout={onEditLayout} />
                 </SectionDisclosure>

@@ -3,6 +3,7 @@
 import { memo, useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useId, type KeyboardEvent } from "react";
 import { Search, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -21,6 +22,8 @@ interface CitySearchProps {
   onHintDismiss?: () => void;
   className?: string;
   inputClassName?: string;
+  hideLabel?: boolean;
+  onInputFocus?: () => void;
 }
 
 export interface CitySearchHandle {
@@ -37,7 +40,10 @@ function splitPlaceName(placeName: string): { city: string; region: string } {
 }
 
 const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
-  function CitySearch({ hintMessage, onHintDismiss, className, inputClassName }, ref) {
+  function CitySearch(
+    { hintMessage, onHintDismiss, className, inputClassName, hideLabel = false, onInputFocus },
+    ref
+  ) {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<GeoResult[]>([]);
     const [isOpen, setIsOpen] = useState(false);
@@ -188,21 +194,28 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
 
     return (
       <div ref={containerRef} className={cn("relative p-3", className)}>
-        <label
-          id={labelId}
-          htmlFor={inputId}
-          className="mb-2 block text-sm font-medium text-foreground"
-        >
-          Search cities
-        </label>
+        {!hideLabel && (
+          <label
+            id={labelId}
+            htmlFor={inputId}
+            className="mb-2 block text-sm font-medium"
+            style={{ color: brand.colors.warm[700] }}
+          >
+            Search cities
+          </label>
+        )}
         <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Search
+            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2"
+            style={{ color: brand.colors.warm[400] }}
+          />
           <Input
             ref={inputRef}
             id={inputId}
             data-city-search-input="true"
             role="combobox"
-            aria-labelledby={labelId}
+            aria-label={hideLabel ? "Search cities" : undefined}
+            aria-labelledby={hideLabel ? undefined : labelId}
             aria-expanded={isOpen}
             aria-controls={listboxId}
             aria-autocomplete="list"
@@ -211,10 +224,15 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
             value={query}
             onChange={(e) => search(e.target.value)}
             onKeyDown={handleKeyDown}
+            onFocus={onInputFocus}
             className={cn([
-              "city-search-input pl-9 h-11 text-base transition-all duration-200",
-              "focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10",
+              "city-search-input h-11 rounded-[20px] border pl-10 pr-4 text-[15px] shadow-[0_14px_28px_-24px_rgba(120,53,15,0.5)] transition-all duration-200",
+              "focus-visible:ring-2",
             ].join(" "), inputClassName)}
+            style={{
+              borderColor: brand.colors.warm[200],
+              backgroundColor: "rgba(255,255,255,0.92)",
+            }}
           />
         </div>
         {hintMessage && onHintDismiss && (
@@ -230,7 +248,12 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
             id={listboxId}
             role="listbox"
             aria-label="City search results"
-            className="search-dropdown absolute left-3 right-3 top-[88px] z-50 overflow-hidden rounded-xl border bg-popover shadow-lg"
+            className="search-dropdown absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-[22px] border shadow-lg"
+            style={{
+              borderColor: brand.colors.warm[200],
+              background: "linear-gradient(180deg, rgba(255,251,245,0.98) 0%, rgba(255,255,255,0.96) 100%)",
+              boxShadow: brand.shadows.lg,
+            }}
           >
             {results.length > 0 ? results.map((r, index) => {
               const { city, region } = splitPlaceName(r.place_name);
@@ -242,35 +265,45 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
                   role="option"
                   aria-selected={isActive}
                   className={cn(
-                    "w-full px-3 py-2.5 text-left flex items-center gap-2.5 first:rounded-t-xl last:rounded-b-xl cursor-pointer",
-                    isActive ? "bg-accent" : "hover:bg-accent"
+                    "flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-3 text-left first:rounded-t-[22px] last:rounded-b-[22px]",
+                    isActive ? "" : "hover:bg-white/70"
                   )}
+                  style={{
+                    backgroundColor: isActive ? "rgba(255,247,237,0.88)" : undefined,
+                  }}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => {
                     void selectResult(r);
                   }}
                 >
-                  <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
-                    <MapPin className="h-3.5 w-3.5 text-indigo-500" />
+                  <div
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                    style={{ backgroundColor: brand.colors.primary[50] }}
+                  >
+                    <MapPin className="h-3.5 w-3.5" style={{ color: brand.colors.primary[500] }} />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-sm font-medium block truncate">{city}</span>
+                    <span className="block truncate text-sm font-medium" style={{ color: brand.colors.warm[800] }}>
+                      {city}
+                    </span>
                     {region && (
-                      <span className="text-xs text-muted-foreground block truncate">{region}</span>
+                      <span className="block truncate text-xs" style={{ color: brand.colors.warm[500] }}>
+                        {region}
+                      </span>
                     )}
                   </div>
                 </div>
               );
             }) : !isLoading && query.trim().length >= 2 ? (
-              <div className="p-6 flex flex-col items-center gap-2" role="presentation">
-                <MapPin className="h-8 w-8 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No cities found</p>
+              <div className="flex flex-col items-center gap-2 p-6" role="presentation">
+                <MapPin className="h-8 w-8" style={{ color: brand.colors.warm[300] }} />
+                <p className="text-sm" style={{ color: brand.colors.warm[500] }}>No cities found</p>
               </div>
             ) : null}
           </div>
         )}
         {isLoading && (
-          <p className="mt-1 text-xs text-muted-foreground px-1">
+          <p className="mt-1 px-1 text-xs" style={{ color: brand.colors.warm[500] }}>
             Searching...
           </p>
         )}

@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { lineString } from "@turf/helpers";
 import { length } from "@turf/length";
-import { ChevronUp, MapPin } from "lucide-react";
-import { motion, type PanInfo } from "framer-motion";
+import { ChevronDown, MapPin, Route } from "lucide-react";
+import { motion, type PanInfo, useReducedMotion } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { brand } from "@/lib/brand";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import type { Segment } from "@/types";
-import CitySearch from "./CitySearch";
+import CitySearch, { type CitySearchHandle } from "./CitySearch";
 import RouteList from "./RouteList";
 
 interface BottomSheetProps {
@@ -49,10 +50,12 @@ export default function BottomSheet({
   searchHintMessage,
   onDismissSearchHint,
 }: BottomSheetProps) {
+  const shouldReduceMotion = useReducedMotion();
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
   const bottomSheetState = useUIStore((s) => s.bottomSheetState);
   const setBottomSheetState = useUIStore((s) => s.setBottomSheetState);
+  const searchRef = useRef<CitySearchHandle>(null);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [mounted, setMounted] = useState(false);
 
@@ -68,10 +71,10 @@ export default function BottomSheet({
     return () => window.removeEventListener("resize", updateViewportHeight);
   }, []);
 
-  const collapsedHeight = 60;
-  const expandedHeaderHeight = 78;
-  const maxSheetHeight = viewportHeight > 0 ? viewportHeight * 0.85 : 0;
-  const halfVisibleHeight = viewportHeight > 0 ? viewportHeight * 0.55 : 0;
+  const collapsedHeight = 94;
+  const expandedHeaderHeight = 118;
+  const maxSheetHeight = viewportHeight > 0 ? viewportHeight * 0.88 : 0;
+  const halfVisibleHeight = viewportHeight > 0 ? viewportHeight * 0.6 : 0;
   const collapsedOffset = Math.max(maxSheetHeight - collapsedHeight, 0);
   const halfOffset = Math.max(maxSheetHeight - halfVisibleHeight, 0);
   const stateOffsets = {
@@ -80,10 +83,39 @@ export default function BottomSheet({
     full: 0,
   };
   const currentOffset = stateOffsets[bottomSheetState];
-  const nonWaypointCount = locations.filter((l) => !l.isWaypoint).length;
+  const nonWaypointLocations = useMemo(
+    () => locations.filter((location) => !location.isWaypoint),
+    [locations],
+  );
+  const nonWaypointCount = nonWaypointLocations.length;
   const stopsLabel = `${nonWaypointCount} ${nonWaypointCount === 1 ? "stop" : "stops"}`;
   const totalDistanceKm = segments.reduce((sum, segment) => sum + getSegmentDistanceKm(segment), 0);
   const collapsedSummary = `${stopsLabel} · ${formatCompactDistance(totalDistanceKm)}`;
+  const collapsedRoutePreview = useMemo(() => {
+    if (nonWaypointLocations.length === 0) {
+      return "Add your first stop";
+    }
+
+    if (nonWaypointLocations.length === 1) {
+      return nonWaypointLocations[0].name || "Your first stop";
+    }
+
+    const firstStop = nonWaypointLocations[0]?.name || "First stop";
+    const secondStop = nonWaypointLocations[1]?.name || "Next stop";
+
+    if (nonWaypointLocations.length === 2) {
+      return `${firstStop} to ${secondStop}`;
+    }
+
+    return `${firstStop} via ${secondStop} +${nonWaypointLocations.length - 2}`;
+  }, [nonWaypointLocations]);
+  const collapsedStopsPreview = useMemo(
+    () =>
+      nonWaypointLocations
+        .slice(0, 3)
+        .map((location) => (location.name || "•").slice(0, 1).toUpperCase()),
+    [nonWaypointLocations],
+  );
   const headerHeight = bottomSheetState === "collapsed" ? collapsedHeight : expandedHeaderHeight;
 
   const snapToNearestState = (offset: number) => {
@@ -138,6 +170,13 @@ export default function BottomSheet({
     setBottomSheetState(bottomSheetState === "collapsed" ? "half" : "collapsed");
   };
 
+  const focusSearch = () => {
+    setBottomSheetState("full");
+    window.requestAnimationFrame(() => {
+      searchRef.current?.focus();
+    });
+  };
+
   if (!mounted) return null;
 
   return (
@@ -145,7 +184,8 @@ export default function BottomSheet({
       {/* Backdrop overlay only in full state */}
       {bottomSheetState === "full" && (
         <div
-          className="fixed inset-0 z-40 bg-black/30"
+          className="fixed inset-0 z-40"
+          style={{ backgroundColor: "rgba(28,25,23,0.24)" }}
           onClick={() => setBottomSheetState("half")}
         />
       )}
@@ -159,65 +199,154 @@ export default function BottomSheet({
         initial={false}
         animate={{ y: currentOffset }}
         onDragEnd={handleDragEnd}
-        transition={{ type: "spring", damping: 30, stiffness: 300 }}
-        className="fixed bottom-0 left-0 right-0 z-50 flex touch-pan-x flex-col overflow-hidden rounded-t-[24px] border-t bg-background shadow-[0_-8px_32px_rgba(0,0,0,0.12)]"
+        transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", damping: 32, stiffness: 320 }}
+        className="fixed bottom-0 left-0 right-0 z-50 flex touch-pan-x flex-col overflow-hidden rounded-t-[30px] border-t"
         style={{ height: maxSheetHeight || "85vh" }}
       >
-        <div className="shrink-0 px-3 pb-2 pt-2" style={{ height: headerHeight }}>
-          <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-gray-300" />
+        <div
+          className="shrink-0 px-3 pb-3 pt-2"
+          style={{
+            height: headerHeight,
+            background: "linear-gradient(180deg, rgba(255,251,245,0.98) 0%, rgba(255,247,237,0.96) 62%, rgba(255,244,231,0.93) 100%)",
+            borderTop: `1px solid ${brand.colors.warm[100]}`,
+            boxShadow: "0 -18px 40px rgba(120, 53, 15, 0.18)",
+          }}
+        >
+          <div
+            className="mx-auto mb-3 h-1.5 w-10 rounded-full"
+            style={{ backgroundColor: "rgba(168,162,158,0.52)" }}
+          />
 
           {bottomSheetState === "collapsed" ? (
-            <div
-              className="touch-target-mobile flex min-h-[44px] items-center justify-center"
+            <button
+              type="button"
+              className="touch-target-mobile flex w-full items-center gap-3 rounded-[24px] border px-4 py-3 text-left transition-transform duration-150 active:scale-[0.99]"
               onClick={toggleSheet}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  toggleSheet();
-                }
-              }}
-              role="button"
-              tabIndex={0}
               aria-expanded={false}
               aria-label="Expand route panel"
+              style={{
+                borderColor: brand.colors.warm[200],
+                background: "linear-gradient(160deg, rgba(255,251,245,0.96) 0%, rgba(255,255,255,0.9) 100%)",
+                boxShadow: brand.shadows.md,
+              }}
             >
-              <div className="inline-flex max-w-full items-center gap-2 rounded-full px-2 text-sm font-medium text-foreground/90">
-                <MapPin className="h-4 w-4 shrink-0 text-indigo-600" />
-                <span className="truncate">{collapsedSummary}</span>
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                style={{ backgroundColor: brand.colors.primary[50], color: brand.colors.primary[600] }}
+              >
+                <MapPin className="h-4.5 w-4.5" />
               </div>
-            </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-semibold" style={{ color: brand.colors.warm[800] }}>
+                  {collapsedSummary}
+                </p>
+                <p className="mt-0.5 truncate text-xs" style={{ color: brand.colors.warm[500] }}>
+                  {collapsedRoutePreview}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {collapsedStopsPreview.length > 0 ? (
+                  <div className="flex items-center -space-x-1.5">
+                    {collapsedStopsPreview.map((stopInitial, index) => (
+                      <span
+                        key={`${stopInitial}-${index}`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-semibold"
+                        style={{
+                          borderColor: "rgba(255,255,255,0.85)",
+                          backgroundColor: index === 2 ? brand.colors.ocean[50] : brand.colors.primary[50],
+                          color: index === 2 ? brand.colors.ocean[700] : brand.colors.primary[700],
+                        }}
+                      >
+                        {stopInitial}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <span
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border"
+                  style={{
+                    borderColor: brand.colors.warm[200],
+                    backgroundColor: "rgba(255,255,255,0.84)",
+                    color: brand.colors.warm[600],
+                  }}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </span>
+              </div>
+            </button>
           ) : (
-            <div className="flex min-h-[44px] items-center gap-2">
-              <div className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-indigo-50 px-3 text-xs font-semibold text-indigo-700">
-                <MapPin className="h-3.5 w-3.5 shrink-0" />
-                <span className="whitespace-nowrap">{stopsLabel}</span>
+            <div className="space-y-3">
+              <div className="flex min-h-[44px] items-center gap-2">
+                <div
+                  className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full px-3.5 text-xs font-semibold"
+                  style={{
+                    backgroundColor: brand.colors.primary[50],
+                    color: brand.colors.primary[700],
+                  }}
+                >
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">{stopsLabel}</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium" style={{ color: brand.colors.warm[700] }}>
+                    {collapsedRoutePreview}
+                  </p>
+                  <div
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium"
+                    style={{
+                      color: brand.colors.warm[600],
+                      borderColor: brand.colors.warm[200],
+                      backgroundColor: "rgba(255,255,255,0.78)",
+                    }}
+                  >
+                    <Route className="h-3 w-3" />
+                    {formatCompactDistance(totalDistanceKm)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="touch-target-mobile flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors active:scale-95"
+                  onClick={toggleSheet}
+                  aria-expanded
+                  aria-label="Collapse route panel"
+                  style={{
+                    color: brand.colors.warm[600],
+                    backgroundColor: "rgba(255,255,255,0.78)",
+                    border: `1px solid ${brand.colors.warm[200]}`,
+                  }}
+                >
+                  <ChevronDown className="h-4 w-4 rotate-180" />
+                </button>
               </div>
+
               <CitySearch
-                className="min-w-0 flex-1 p-0"
+                ref={searchRef}
+                className="p-0"
                 hintMessage={searchHintMessage}
                 onHintDismiss={onDismissSearchHint}
-                inputClassName="h-11 rounded-full border-border/70 bg-background/95 pl-9 pr-3 text-sm shadow-none"
+                hideLabel
+                onInputFocus={() => setBottomSheetState("full")}
+                inputClassName="h-12 rounded-[22px] border-[#f2dbc2] bg-white/94 text-[15px] shadow-[0_18px_30px_-24px_rgba(120,53,15,0.45)]"
               />
-              <button
-                type="button"
-                className="touch-target-mobile flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/60"
-                onClick={toggleSheet}
-                aria-expanded
-                aria-label="Collapse route panel"
-              >
-                <ChevronUp className="h-4 w-4 rotate-180" />
-              </button>
             </div>
           )}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/60">
-          <ScrollArea className="flex-1 min-h-0">
+        <div
+          className="flex min-h-0 flex-1 flex-col overflow-hidden border-t"
+          style={{
+            borderColor: brand.colors.warm[200],
+            background: "linear-gradient(180deg, rgba(255,250,245,0.98) 0%, rgba(255,248,240,0.95) 100%)",
+          }}
+        >
+          <ScrollArea className="min-h-0 flex-1">
             <RouteList
+              mobileSheet
               onLocationClick={onLocationClick}
               onEditLayout={onEditLayout}
               selectedLocationIndex={selectedLocationIndex}
               onSelectedLocationIndexChange={onSelectedLocationIndexChange}
+              onAddStopRequest={focusSearch}
             />
           </ScrollArea>
         </div>

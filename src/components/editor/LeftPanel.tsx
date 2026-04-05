@@ -317,6 +317,7 @@ export default function LeftPanel({
             onEditLayout={onEditLayout}
             selectedLocationIndex={selectedLocationIndex}
             onSelectedLocationIndexChange={onSelectedLocationIndexChange}
+            onAddStopRequest={() => searchRef?.current?.focus()}
           />
         </ScrollArea>
       </div>
