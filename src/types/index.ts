@@ -101,6 +101,8 @@ export interface ExportSettings {
 
 export type LayoutTemplate =
   | "grid"
+  | "collage"
+  | "single"
   | "hero"
   | "masonry"
   | "filmstrip"

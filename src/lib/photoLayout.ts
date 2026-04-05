@@ -601,6 +601,17 @@ export function computePhotoLayout(
   const gap = gapPx / GAP_REFERENCE_WIDTH;
 
   if (shouldUsePortraitFriendlyLayout(viewportRatio)) {
+    if (layout?.mode !== "free" && layout?.template) {
+      return computeTemplateLayout(
+        photos,
+        containerAspect,
+        layout.template,
+        gapPx,
+        widthPx,
+        layout.customProportions,
+        layout.layoutSeed
+      );
+    }
     return layoutPortraitReadableGallery(photos, containerAspect, gap, layout?.template);
   }
 
@@ -1004,6 +1015,10 @@ export function computeTemplateLayout(
   switch (template) {
     case "grid":
       return layoutGrid(photos, containerAspect, g, customProportions);
+    case "collage":
+      return layoutCollage(photos, containerAspect, g);
+    case "single":
+      return layoutSingle(photos, containerAspect, g);
     case "hero":
       return layoutHero(photos, containerAspect, g, customProportions);
     case "masonry":
@@ -1165,6 +1180,58 @@ function layoutHero(
   return fillSlots(photos, slots, containerAspect);
 }
 
+/** Single: focus on the lead photo with generous margins. */
+function layoutSingle(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  if (photos.length === 0) return [];
+
+  const slot =
+    containerAspect < 1
+      ? { x: 0.11, y: 0.1, width: 0.78, height: 0.8 }
+      : { x: 0.16, y: 0.12, width: 0.68, height: 0.76 };
+
+  return scaleRectsToInnerBounds([fitPhotoToSlot(slot, photos[0], containerAspect)], gap);
+}
+
+/** Collage: varied editorial slots with mild overlap for a scrapbook feel. */
+function layoutCollage(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
+  const n = photos.length;
+  if (n === 0) return [];
+  if (n === 1) return layoutSingle(photos, containerAspect, gap);
+  if (n === 2) {
+    return scaleRectsToInnerBounds(
+      fillSlots(
+        photos,
+        [
+          { x: 0.07, y: 0.08, width: 0.6, height: 0.58 },
+          { x: 0.5, y: 0.46, width: 0.38, height: 0.36 },
+        ],
+        containerAspect
+      ),
+      gap
+    );
+  }
+
+  const slots =
+    containerAspect < 1
+      ? [
+          { x: 0.06, y: 0.08, width: 0.62, height: 0.42 },
+          { x: 0.54, y: 0.16, width: 0.3, height: 0.24 },
+          { x: 0.12, y: 0.52, width: 0.36, height: 0.28 },
+          { x: 0.5, y: 0.48, width: 0.34, height: 0.34 },
+        ]
+      : [
+          { x: 0.06, y: 0.08, width: 0.5, height: 0.62 },
+          { x: 0.58, y: 0.1, width: 0.26, height: 0.28 },
+          { x: 0.52, y: 0.42, width: 0.32, height: 0.42 },
+          { x: 0.12, y: 0.72, width: 0.28, height: 0.18 },
+        ];
+
+  return scaleRectsToInnerBounds(
+    fillSlots(photos, slots.slice(0, n), containerAspect),
+    gap
+  );
+}
+
 /** Masonry: alternating tall and short photos in columns */
 function layoutMasonry(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
   const n = photos.length;
@@ -1207,6 +1274,32 @@ function layoutPolaroid(
 ): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
+
+  if (n <= 4) {
+    const portraitSlots: Array<LayoutSlot & { rotation: number }> = [
+      { x: 0.1, y: 0.08, width: 0.42, height: 0.34, rotation: -8 },
+      { x: 0.44, y: 0.2, width: 0.42, height: 0.34, rotation: 6 },
+      { x: 0.18, y: 0.56, width: 0.4, height: 0.3, rotation: -5 },
+      { x: 0.52, y: 0.54, width: 0.3, height: 0.24, rotation: 8 },
+    ];
+    const landscapeSlots: Array<LayoutSlot & { rotation: number }> = [
+      { x: 0.08, y: 0.12, width: 0.34, height: 0.48, rotation: -7 },
+      { x: 0.38, y: 0.08, width: 0.34, height: 0.52, rotation: 5 },
+      { x: 0.62, y: 0.3, width: 0.26, height: 0.34, rotation: -4 },
+      { x: 0.18, y: 0.62, width: 0.28, height: 0.24, rotation: 7 },
+    ];
+    const slots = (containerAspect < 1 ? portraitSlots : landscapeSlots).slice(0, n);
+    const rects = slots.map((slot, index) => ({
+      ...fitPhotoToSlot(
+        { x: slot.x, y: slot.y, width: slot.width, height: slot.height },
+        { ...photos[index], aspect: photos[index].aspect * 0.88 },
+        containerAspect
+      ),
+      rotation: slot.rotation,
+    }));
+
+    return scaleRectsToInnerBounds(rects, gap);
+  }
 
   const seed = resolveSeed(photos, layoutSeed);
   const rand = seededRandom(seed);
@@ -1341,6 +1434,37 @@ function layoutFull(photos: PhotoMeta[], containerAspect: number): PhotoRect[] {
 function layoutFilmstrip(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
+  if (containerAspect < 1) {
+    const rects: PhotoRect[] = [
+      fitPhotoToSlot(
+        { x: 0.2, y: 0.1, width: 0.6, height: 0.8 },
+        photos[0],
+        containerAspect
+      ),
+    ];
+
+    if (n > 1) {
+      rects.push(
+        fitPhotoToSlot(
+          { x: 0.03, y: 0.2, width: 0.2, height: 0.62 },
+          photos[1],
+          containerAspect
+        )
+      );
+    }
+
+    if (n > 2) {
+      rects.push(
+        fitPhotoToSlot(
+          { x: 0.77, y: 0.2, width: 0.2, height: 0.62 },
+          photos[2],
+          containerAspect
+        )
+      );
+    }
+
+    return scaleRectsToInnerBounds(rects, gap);
+  }
 
   const totalAspect = photos.reduce((sum, photo) => sum + safeAspect(photo.aspect), 0);
   const innerWidth = 1 - gap * 2;
