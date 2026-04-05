@@ -263,12 +263,48 @@ function layoutPortraitReadableGallery(
 ): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
-  if (n === 1) return layoutOne(photos, containerAspect, gap);
 
   const innerWidth = 1 - gap * 2;
   const innerHeight = 1 - gap * 2;
 
+  // Single photo: landscape photos get a generous cover-crop slot (full width, 55% height)
+  if (n === 1) {
+    if (photos[0].aspect > 1.2) {
+      const heroHeight = innerHeight * 0.55;
+      return [{ x: gap, y: gap + (innerHeight - heroHeight) / 2, width: innerWidth, height: heroHeight }];
+    }
+    return layoutOne(photos, containerAspect, gap);
+  }
+
   if (n === 2) {
+    const landscapeCount = photos.filter((p) => p.aspect > 1.2).length;
+
+    // Both landscape: stack vertically, each gets full width + cover-crop height
+    if (landscapeCount === 2) {
+      const slotHeight = (innerHeight - gap) / 2;
+      return [
+        { x: gap, y: gap, width: innerWidth, height: slotHeight },
+        { x: gap, y: gap + slotHeight + gap, width: innerWidth, height: slotHeight },
+      ];
+    }
+
+    // Mixed or both portrait: one landscape on top (hero), one below
+    if (landscapeCount === 1) {
+      const landscapeIndex = photos[0].aspect > 1.2 ? 0 : 1;
+      const portraitIndex = landscapeIndex === 0 ? 1 : 0;
+      const heroHeight = innerHeight * 0.45;
+      const bottomHeight = innerHeight - heroHeight - gap;
+      const rects: PhotoRect[] = [];
+      rects[landscapeIndex] = { x: gap, y: gap, width: innerWidth, height: heroHeight };
+      rects[portraitIndex] = fitPhotoToSlot(
+        { x: gap, y: gap + heroHeight + gap, width: innerWidth, height: bottomHeight },
+        photos[portraitIndex],
+        containerAspect,
+      );
+      return rects;
+    }
+
+    // Both portrait: side by side (original behavior)
     const columnWidth = (innerWidth - gap) / 2;
     return fillSlots(
       photos,

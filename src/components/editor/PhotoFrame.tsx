@@ -15,6 +15,8 @@ interface PhotoFrameProps {
   mediaStyle?: CSSProperties;
   footer?: ReactNode;
   disableDecorativeRotation?: boolean;
+  /** Reduce frame padding for compact viewports (e.g. 9:16 portrait) */
+  compact?: boolean;
   children: ReactNode;
 }
 
@@ -64,9 +66,10 @@ export default function PhotoFrame({
   mediaStyle,
   footer,
   disableDecorativeRotation = false,
+  compact = false,
   children,
 }: PhotoFrameProps) {
-  const config = getPhotoFrameStyleConfig(frameStyle);
+  const config = getPhotoFrameStyleConfig(frameStyle, compact);
   const rotation = disableDecorativeRotation ? 0 : getPhotoFrameRotation(frameStyle, photoId);
   const trimmedCaption = caption?.trim();
 

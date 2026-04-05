@@ -489,6 +489,7 @@ export default function PhotoOverlay({
   const captionH = captionFontSizePx * 2;
   const captionFontFamily = displayLayout?.captionFontFamily ?? "system-ui";
   const displayIsFreeMode = displayLayout?.mode === "free";
+  const compactFrames = viewportRatio === "9:16";
   const incomingCaptionFontSizePx = (incomingPhotoLayout?.captionFontSize ?? 14) * captionScale;
   const incomingCaptionH = incomingCaptionFontSizePx * 2;
   const incomingCaptionFontFamily = incomingPhotoLayout?.captionFontFamily ?? "system-ui";
@@ -747,6 +748,7 @@ export default function PhotoOverlay({
                       className="h-full w-full"
                       mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
                       disableDecorativeRotation={displayIsFreeMode}
+                      compact={compactFrames}
                       footer={
                         !displayIsFreeMode && hasCaption && !frameHandlesCaption ? (
                           <p
@@ -883,6 +885,7 @@ export default function PhotoOverlay({
                     className="h-full w-full"
                     mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
                     disableDecorativeRotation={displayIsFreeMode}
+                    compact={compactFrames}
                     footer={
                       !displayIsFreeMode && hasCaption && !frameHandlesCaption ? (
                         <p
@@ -1041,6 +1044,7 @@ export default function PhotoOverlay({
                       className="h-full w-full"
                       mediaStyle={{ borderRadius: `${incomingBorderRadiusPx}px` }}
                       disableDecorativeRotation={incomingIsFreeMode}
+                      compact={compactFrames}
                       footer={
                         !incomingIsFreeMode && hasCaption && !frameHandlesCaption ? (
                           <p
