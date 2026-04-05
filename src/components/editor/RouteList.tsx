@@ -439,7 +439,7 @@ export default memo(function RouteList({
       const totalDistance = groupSegments.reduce((sum, segment) => sum + (getSegmentDistance(segment) ?? 0), 0);
       const summaryDistance = formatDistance(totalDistance || null);
       const groupKey = `${location.id}-stopovers`;
-      const isCollapsed = collapsedGroups[groupKey] ?? false;
+      const isCollapsed = collapsedGroups[groupKey] ?? true;
 
       timelineItems.push(
         <div key={groupKey} className="relative">
