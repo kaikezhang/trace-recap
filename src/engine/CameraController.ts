@@ -158,6 +158,9 @@ export class CameraController {
     const n = this.groupCameras.length;
     const isLast = groupIndex === n - 1;
 
+    // First city gets a longer hover so viewers can register the starting point
+    if (groupIndex === 0) return 2.5;
+
     if (isLast) return 2.0;
 
     const nextDist = this.groupCameras[groupIndex + 1]?.distanceKm ?? 0;
