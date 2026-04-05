@@ -318,12 +318,12 @@ function WaypointSwitch({
     <button
       onClick={onToggle}
       type="button"
-      aria-label={isWaypoint ? "Switch to destination" : "Switch to stop by"}
+      aria-label={isWaypoint ? "Switch to destination" : "Switch to pass-through"}
       className="touch-target-mobile-hitbox relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
       style={{
         backgroundColor: isWaypoint ? brand.colors.warm[300] : brand.colors.primary[500],
       }}
-      title={isWaypoint ? "Switch to destination" : "Switch to stop by"}
+      title={isWaypoint ? "Switch to destination" : "Switch to pass-through"}
     >
       <span
         className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
@@ -383,7 +383,7 @@ export default memo(function LocationCard({
   const transportMetaLabel = !isFirst && transportMode ? TRANSPORT_META_LABELS[transportMode] : undefined;
   const desktopMetaLabel = location.chapterDate
     || location.nameLocal
-    || (isWaypoint ? "Flexible scenic stop" : "Main destination");
+    || (isWaypoint ? "Pass-through stop" : "Main destination");
   const mobileDateLabel = location.chapterDate || `Day ${index + 1}`;
   const mobilePhotoLabel = `${photoCount} photo${photoCount === 1 ? "" : "s"}`;
 
@@ -698,7 +698,7 @@ export default memo(function LocationCard({
                       backgroundColor: brand.colors.warm[100],
                     }}
                   >
-                    Stopover
+                    Pass-through
                   </span>
                 )}
               </div>
@@ -793,7 +793,7 @@ export default memo(function LocationCard({
                     backgroundColor: brand.colors.warm[100],
                   }}
                 >
-                  Stopover
+                  Pass-through
                 </span>
               ) : null}
               <span className="truncate">{mobileDateLabel}</span>
@@ -893,10 +893,10 @@ export default memo(function LocationCard({
                   >
                     <div>
                       <p className="text-xs font-medium" style={{ color: brand.colors.warm[800] }}>
-                        Stop by
+                        Pass-through
                       </p>
                       <p className="text-[11px]" style={{ color: brand.colors.warm[500] }}>
-                        Keep this point as a quick pass-through instead of a chapter stop.
+                        Mark as a brief stop the route passes through, without its own chapter.
                       </p>
                     </div>
                     <WaypointSwitch
@@ -1055,7 +1055,7 @@ export default memo(function LocationCard({
             }}
           >
             <span className="text-sm leading-none">{isWaypoint ? "●" : "○"}</span>
-            Toggle Waypoint
+            Toggle Pass-through
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
