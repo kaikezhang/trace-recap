@@ -312,26 +312,53 @@ function EmojiPicker({
 function WaypointSwitch({
   isWaypoint,
   onToggle,
+  size = "default",
+  disabled = false,
 }: {
   isWaypoint: boolean;
   onToggle: () => void;
+  size?: "default" | "actionDesktop" | "actionMobile";
+  disabled?: boolean;
 }) {
+  const isActionVariant = size !== "default";
+  const outerClassName = size === "actionMobile"
+    ? "touch-target-mobile relative inline-flex h-11 w-14 shrink-0 items-center justify-center rounded-xl border transition-[transform,background-color,border-color] duration-150 active:scale-95"
+    : size === "actionDesktop"
+      ? "relative inline-flex h-8 w-12 shrink-0 items-center justify-center rounded-lg border transition-[transform,background-color,border-color] duration-150 hover:bg-white active:scale-95"
+      : "touch-target-mobile-hitbox relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors";
+  const trackClassName = size === "actionMobile"
+    ? "inline-flex h-6 w-11 items-center rounded-full px-1.5"
+    : size === "actionDesktop"
+      ? "inline-flex h-5 w-9 items-center rounded-full px-1"
+      : "inline-flex h-full w-full items-center rounded-full px-1";
+  const thumbClassName = size === "actionMobile" ? "h-4 w-4" : "h-3.5 w-3.5";
+
   return (
     <button
       onClick={onToggle}
       type="button"
+      data-no-seek
+      disabled={disabled}
       aria-label={isWaypoint ? "Switch to destination" : "Switch to pass-through"}
-      className="touch-target-mobile-hitbox relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+      className={`${outerClassName} ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
       style={{
-        backgroundColor: isWaypoint ? brand.colors.warm[300] : brand.colors.primary[500],
+        ...(isActionVariant
+          ? {
+              borderColor: brand.colors.warm[200],
+              backgroundColor: "rgba(255,255,255,0.88)",
+            }
+          : null),
       }}
       title={isWaypoint ? "Switch to destination" : "Switch to pass-through"}
     >
       <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-          isWaypoint ? "translate-x-1" : "translate-x-[18px]"
-        }`}
-      />
+        className={`${trackClassName} ${isWaypoint ? "justify-start" : "justify-end"}`}
+        style={{
+          backgroundColor: isWaypoint ? brand.colors.warm[300] : brand.colors.primary[500],
+        }}
+      >
+        <span className={`${thumbClassName} rounded-full bg-white shadow-sm`} />
+      </span>
     </button>
   );
 }
@@ -476,6 +503,135 @@ export default memo(function LocationCard({
       variant: "info",
     });
   };
+
+  const handleDuplicate = () => {
+    onClick?.(index);
+    dismissEditHint();
+    duplicateLocation(locationId);
+  };
+
+  const handleTogglePassThrough = () => {
+    if (!canToggleWaypoint) return;
+
+    onClick?.(index);
+    dismissEditHint();
+    onToggleWaypoint(locationId);
+  };
+
+  const handleEditLayout = () => {
+    if (!onEditLayout) return;
+
+    onClick?.(index);
+    dismissEditHint();
+    onEditLayout(locationId);
+  };
+
+  const actionButtonClassName = "relative z-20 inline-flex items-center justify-center rounded-lg border transition-[transform,background-color,border-color] duration-150 hover:bg-white active:scale-95";
+  const desktopActionButtonClassName = `${actionButtonClassName} h-8 w-8`;
+  const mobileActionButtonClassName = `touch-target-mobile ${actionButtonClassName} h-11 w-11 rounded-xl`;
+  const desktopActionBar = (
+    <div
+      className={`absolute bottom-3 right-14 z-20 hidden items-center gap-1 rounded-xl border px-1.5 py-1 transition-all duration-200 md:flex ${
+        isHovered && !isDragging
+          ? "translate-y-0 opacity-100"
+          : "pointer-events-none translate-y-1 opacity-0"
+      }`}
+      style={{
+        borderColor: brand.colors.warm[200],
+        backgroundColor: "rgba(255,251,245,0.92)",
+        boxShadow: brand.shadows.sm,
+      }}
+    >
+      <button
+        type="button"
+        data-no-seek
+        className={desktopActionButtonClassName}
+        style={{
+          borderColor: brand.colors.warm[200],
+          color: brand.colors.warm[700],
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDuplicate();
+        }}
+        aria-label="Duplicate stop"
+        title="Duplicate stop"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+      <WaypointSwitch
+        isWaypoint={isWaypoint}
+        size="actionDesktop"
+        disabled={!canToggleWaypoint}
+        onToggle={handleTogglePassThrough}
+      />
+      <button
+        type="button"
+        data-no-seek
+        disabled={!onEditLayout}
+        className={`${desktopActionButtonClassName} disabled:cursor-not-allowed disabled:opacity-50`}
+        style={{
+          borderColor: brand.colors.warm[200],
+          color: brand.colors.warm[700],
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleEditLayout();
+        }}
+        aria-label="Edit layout"
+        title="Edit layout"
+      >
+        <LayoutTemplate className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+  const mobileActionBar = (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        data-no-seek
+        className={mobileActionButtonClassName}
+        style={{
+          borderColor: brand.colors.warm[200],
+          color: brand.colors.warm[700],
+          backgroundColor: "rgba(255,255,255,0.86)",
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDuplicate();
+        }}
+        aria-label="Duplicate stop"
+        title="Duplicate stop"
+      >
+        <Copy className="h-4 w-4" />
+      </button>
+      <WaypointSwitch
+        isWaypoint={isWaypoint}
+        size="actionMobile"
+        disabled={!canToggleWaypoint}
+        onToggle={handleTogglePassThrough}
+      />
+      <button
+        type="button"
+        data-no-seek
+        disabled={!onEditLayout}
+        className={`${mobileActionButtonClassName} disabled:cursor-not-allowed disabled:opacity-50`}
+        style={{
+          borderColor: brand.colors.warm[200],
+          color: brand.colors.warm[700],
+          backgroundColor: "rgba(255,255,255,0.86)",
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleEditLayout();
+        }}
+        aria-label="Edit layout"
+        title="Edit layout"
+      >
+        <LayoutTemplate className="h-4 w-4" />
+      </button>
+    </div>
+  );
 
   return (
     <>
@@ -811,25 +967,7 @@ export default memo(function LocationCard({
               <span className="truncate">{mobilePhotoLabel}</span>
             </div>
             <div className="flex-1" />
-            <button
-              type="button"
-              data-no-seek
-              onClick={(e) => {
-                e.stopPropagation();
-                startNameEditing();
-              }}
-              disabled={isNameEditing}
-              className="touch-target-mobile relative z-20 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-[transform,background-color] duration-150 active:scale-95 disabled:cursor-default disabled:opacity-60"
-              style={{
-                borderColor: brand.colors.primary[200],
-                backgroundColor: "rgba(255,255,255,0.8)",
-                color: brand.colors.primary[600],
-              }}
-              aria-label="Edit stop name"
-              title="Edit stop name"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
+            {mobileActionBar}
             <button
               data-delete-btn
               className="touch-target-mobile relative z-20 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-[transform,background-color] duration-150 active:scale-95 hover:bg-[#fff1f2]"
@@ -854,6 +992,8 @@ export default memo(function LocationCard({
           >
             <X className="h-4 w-4" style={{ color: brand.colors.warm[500] }} />
           </button>
+
+          {desktopActionBar}
         </div>
 
         <AnimatePresence initial={false}>
