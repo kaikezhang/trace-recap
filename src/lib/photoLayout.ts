@@ -267,19 +267,24 @@ function layoutPortraitReadableGallery(
   const innerWidth = 1 - gap * 2;
   const innerHeight = 1 - gap * 2;
 
-  // Single photo: landscape photos get a generous cover-crop slot (full width, 55% height)
+  // In portrait (9:16) mode, return FULL SLOT rects (cover mode).
+  // CSS object-fit:cover handles cropping. No fitPhotoToSlot shrinking.
+
+  // Single photo: full width, generous height
   if (n === 1) {
     if (photos[0].aspect > 1.2) {
-      const heroHeight = innerHeight * 0.55;
+      // Landscape photo: full width, 60% height, centered
+      const heroHeight = innerHeight * 0.60;
       return [{ x: gap, y: gap + (innerHeight - heroHeight) / 2, width: innerWidth, height: heroHeight }];
     }
-    return layoutOne(photos, containerAspect, gap);
+    // Portrait/square photo: full slot
+    return [{ x: gap, y: gap, width: innerWidth, height: innerHeight }];
   }
 
   if (n === 2) {
     const landscapeCount = photos.filter((p) => p.aspect > 1.2).length;
 
-    // Both landscape: stack vertically, each gets full width + cover-crop height
+    // Both landscape: stack vertically, each full width
     if (landscapeCount === 2) {
       const slotHeight = (innerHeight - gap) / 2;
       return [
@@ -288,93 +293,74 @@ function layoutPortraitReadableGallery(
       ];
     }
 
-    // Mixed or both portrait: one landscape on top (hero), one below
+    // Mixed: hero 65% height, support 30% height (5% gap)
     if (landscapeCount === 1) {
       const landscapeIndex = photos[0].aspect > 1.2 ? 0 : 1;
       const portraitIndex = landscapeIndex === 0 ? 1 : 0;
-      const heroHeight = innerHeight * 0.45;
-      const bottomHeight = innerHeight - heroHeight - gap;
+      const heroHeight = innerHeight * 0.65;
+      const bottomHeight = innerHeight * 0.30;
       const rects: PhotoRect[] = [];
       rects[landscapeIndex] = { x: gap, y: gap, width: innerWidth, height: heroHeight };
-      rects[portraitIndex] = fitPhotoToSlot(
-        { x: gap, y: gap + heroHeight + gap, width: innerWidth, height: bottomHeight },
-        photos[portraitIndex],
-        containerAspect,
-      );
+      rects[portraitIndex] = { x: gap, y: gap + heroHeight + gap, width: innerWidth, height: bottomHeight };
       return rects;
     }
 
-    // Both portrait: side by side (original behavior)
-    const columnWidth = (innerWidth - gap) / 2;
-    return fillSlots(
-      photos,
-      [
-        { x: gap, y: gap, width: columnWidth, height: innerHeight },
-        { x: gap + columnWidth + gap, y: gap, width: columnWidth, height: innerHeight },
-      ],
-      containerAspect
-    );
-  }
-
-  // For exactly 3 photos in portrait: hero (55%) + 2 side-by-side bottom photos (40%)
-  if (n === 3) {
-    const heroHeight = innerHeight * 0.55;
-    const bottomHeight = innerHeight - heroHeight - gap;
-    const colWidth = (innerWidth - gap) / 2;
-    const heroSlot: LayoutSlot = { x: gap, y: gap, width: innerWidth, height: heroHeight };
-
-    // For landscape hero photos, use full slot (cover mode) instead of contain
-    const heroRect = photos[0].aspect > 1.2
-      ? { x: heroSlot.x, y: heroSlot.y, width: heroSlot.width, height: heroSlot.height }
-      : fitPhotoToSlot(heroSlot, photos[0], containerAspect);
-
+    // Both portrait: 65/30 split stacked vertically (cover mode fills width)
+    const heroHeight = innerHeight * 0.65;
+    const bottomHeight = innerHeight * 0.30;
     return [
-      heroRect,
-      fitPhotoToSlot({ x: gap, y: gap + heroHeight + gap, width: colWidth, height: bottomHeight }, photos[1], containerAspect),
-      fitPhotoToSlot({ x: gap + colWidth + gap, y: gap + heroHeight + gap, width: colWidth, height: bottomHeight }, photos[2], containerAspect),
+      { x: gap, y: gap, width: innerWidth, height: heroHeight },
+      { x: gap, y: gap + heroHeight + gap, width: innerWidth, height: bottomHeight },
     ];
   }
 
+  // 3 photos: hero 50% + 2 bottom 40% (gap ~10%)
+  if (n === 3) {
+    const heroHeight = innerHeight * 0.50;
+    const bottomHeight = innerHeight * 0.40;
+    const colWidth = (innerWidth - gap) / 2;
+
+    return [
+      { x: gap, y: gap, width: innerWidth, height: heroHeight },
+      { x: gap, y: gap + heroHeight + gap, width: colWidth, height: bottomHeight },
+      { x: gap + colWidth + gap, y: gap + heroHeight + gap, width: colWidth, height: bottomHeight },
+    ];
+  }
+
+  // 4+ photos: hero + remaining in full-slot grid below
   const displayPhotos = n > 4 ? photos.slice(0, 4) : photos;
   const displayN = displayPhotos.length;
 
   const heroHeight = getPortraitHeroHeight(innerHeight, displayN);
   const stripHeight = Math.max(0, innerHeight - heroHeight - gap);
-  const heroSlot: LayoutSlot = { x: gap, y: gap, width: innerWidth, height: heroHeight };
-  const stripSlot: LayoutSlot = {
-    x: gap,
-    y: gap + heroHeight + gap,
-    width: innerWidth,
-    height: stripHeight,
-  };
 
-  // For landscape hero photos in portrait mode, use full slot (cover mode)
-  const heroRect = displayPhotos[0].aspect > 1.2
-    ? { x: heroSlot.x, y: heroSlot.y, width: heroSlot.width, height: heroSlot.height }
-    : fitPhotoToSlot(heroSlot, displayPhotos[0], containerAspect);
-
-  if (stripSlot.height <= 0) {
-    return [heroRect];
+  if (stripHeight <= 0) {
+    return [{ x: gap, y: gap, width: innerWidth, height: heroHeight }];
   }
 
   const remainingPhotos = displayPhotos.slice(1);
-  const remainingRows: number[][] = [];
-  for (let index = 0; index < remainingPhotos.length; index += 2) {
-    remainingRows.push(
-      index + 1 < remainingPhotos.length ? [index, index + 1] : [index]
-    );
+  const remainingN = remainingPhotos.length;
+
+  // Build full-slot rects for remaining photos
+  const stripRects: PhotoRect[] = [];
+  if (remainingN === 1) {
+    stripRects.push({ x: gap, y: gap + heroHeight + gap, width: innerWidth, height: stripHeight });
+  } else if (remainingN === 2) {
+    const colW = (innerWidth - gap) / 2;
+    stripRects.push({ x: gap, y: gap + heroHeight + gap, width: colW, height: stripHeight });
+    stripRects.push({ x: gap + colW + gap, y: gap + heroHeight + gap, width: colW, height: stripHeight });
+  } else {
+    // 3 remaining: 2 top row + 1 bottom row, or all in one row
+    const colW = (innerWidth - gap) / 2;
+    const topH = stripHeight * 0.5;
+    const botH = stripHeight - topH - gap;
+    stripRects.push({ x: gap, y: gap + heroHeight + gap, width: colW, height: topH });
+    stripRects.push({ x: gap + colW + gap, y: gap + heroHeight + gap, width: colW, height: topH });
+    stripRects.push({ x: gap, y: gap + heroHeight + gap + topH + gap, width: innerWidth, height: botH });
   }
 
-  const stripAspect = stripSlot.width / Math.max(stripSlot.height, MIN_CONTAINER_ASPECT);
-  const stripGap = gap * 0.75;
-  const stripRects = layoutRectsWithinSlot(
-    layoutRows(remainingPhotos, stripAspect, stripGap, remainingRows),
-    stripSlot,
-    stripGap
-  );
-
   return [
-    heroRect,
+    { x: gap, y: gap, width: innerWidth, height: heroHeight },
     ...stripRects,
   ];
 }
