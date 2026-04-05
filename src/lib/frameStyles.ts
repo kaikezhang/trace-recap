@@ -94,19 +94,19 @@ export function getPhotoFrameStyleConfig(style: PhotoFrameStyle, compact?: boole
   // Compact mode: reduce frame padding for 9:16 portrait viewports
   const compactOverrides: Partial<Record<PhotoFrameStyle, Partial<PhotoFrameStyleConfig>>> = {
     polaroid: {
-      framePadding: "2% 2% 10% 2%",
-      inlineCaptionMinHeight: "10%",
-      inlineCaptionPadding: "0.2rem 0.5rem 0.1rem",
+      framePadding: "1% 1% 8% 1%",
+      inlineCaptionMinHeight: "8%",
+      inlineCaptionPadding: "0.15rem 0.4rem 0.1rem",
     },
     "film-strip": {
-      framePadding: "6% 3%",
-      filmStripHeight: "6%",
+      framePadding: "4% 2%",
+      filmStripHeight: "4%",
     },
     "classic-border": {
-      framePadding: "2%",
+      framePadding: "1.5%",
     },
     "rounded-card": {
-      framePadding: "2%",
+      framePadding: "1.5%",
     },
   };
 
