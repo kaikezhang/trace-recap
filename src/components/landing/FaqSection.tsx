@@ -5,32 +5,32 @@ const faqs = [
   {
     question: "Is TraceRecap free to use?",
     answer:
-      "You can start building recaps in the browser without paying first. Paid limits can come later, but the product pitch is still fast creation before pricing friction.",
+      "Yes — you can start building recaps in the browser for free, no credit card required. We may introduce optional paid tiers in the future, but the core creation experience will always be accessible.",
   },
   {
     question: "Do I need an account before trying it?",
     answer:
-      "No. The landing flow points people straight into the editor. Account creation only matters if you want to save projects or manage exports later.",
+      "No. You can jump straight into the editor and start building a recap right away — no sign-up needed. An account is only required if you want to save projects or manage exports later.",
   },
   {
     question: "Which browsers does it support?",
     answer:
-      "The product is built for current desktop and mobile browsers with modern video and canvas support. Chrome, Safari, Edge, and Firefox are the intended baseline.",
+      "TraceRecap works on all modern desktop and mobile browsers. Chrome, Safari, Edge, and Firefox are fully supported.",
   },
   {
     question: "What export quality can I expect?",
     answer:
-      "The redesign positions exports as social-ready and presentation-ready: vertical reels, square posts, and large landscape renders for YouTube or trip films.",
+      "Exports are sized for the platforms you actually share on — vertical reels for Instagram and TikTok, square posts for WeChat, and widescreen renders for YouTube or trip films.",
   },
   {
     question: "What happens to my travel photos and route data?",
     answer:
-      "The privacy story stays explicit: your trip data remains tied to your project, and the page frames TraceRecap as a tool for making memories visible, not for reselling them.",
+      "Your photos and route data stay in your browser and are never uploaded to our servers. TraceRecap is a tool for making your memories visible — we don't collect, share, or sell your travel data.",
   },
   {
     question: "Can I build recaps for road trips, walking tours, and food routes too?",
     answer:
-      "Yes. The gallery and examples deliberately cover backpacking, road trips, city walking routes, and food tours so the product does not feel locked to flights only.",
+      "Absolutely. TraceRecap supports any kind of journey — backpacking trips, road trips, city walking tours, food routes, and more. Choose from trains, cars, ferries, and flights to match how you actually traveled.",
   },
 ] as const;
 
@@ -55,8 +55,7 @@ export function FaqSection() {
             className="mt-5 text-base leading-7 sm:text-lg"
             style={{ color: brand.colors.warm[600] }}
           >
-            Keep the answers plain. The landing page should feel warm, but the
-            product promises still need to sound credible.
+            Everything you need to know before building your first recap.
           </p>
         </div>
 

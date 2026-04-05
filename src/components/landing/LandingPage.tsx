@@ -113,8 +113,8 @@ const footerColumns = [
   {
     title: "Community",
     links: [
-      { label: "GitHub", href: "https://github.com" },
-      { label: "Twitter / X", href: "https://x.com" },
+      { label: "GitHub", href: "https://github.com/kaikezhang/trace-recap" },
+      { label: "Twitter / X", href: "https://x.com/tracerecap" },
       { label: "Mapbox", href: "https://www.mapbox.com" },
     ],
   },
@@ -1200,8 +1200,9 @@ function UseCaseCard({
               {meta}
             </p>
           </div>
-          <span
-            className="rounded-full px-3 py-1 text-xs"
+          <Link
+            href="/editor?demo=true"
+            className="rounded-full px-3 py-1 text-xs transition-opacity hover:opacity-80"
             style={{
               color:
                 tone === "ocean" ? brand.colors.ocean[700] : brand.colors.primary[700],
@@ -1210,7 +1211,7 @@ function UseCaseCard({
             }}
           >
             preview
-          </span>
+          </Link>
         </div>
 
         <div className="relative mt-6 flex-1 overflow-hidden rounded-[24px] border">
