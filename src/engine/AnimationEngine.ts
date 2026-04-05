@@ -414,6 +414,13 @@ export class AnimationEngine {
 
     if (elapsed >= this.totalDuration) {
       this.renderFrame(this.totalDuration);
+
+      // Linger on the final frame for 3 seconds before signalling completion
+      if (elapsed < this.totalDuration + 3) {
+        this.animFrameId = requestAnimationFrame(this.tick);
+        return;
+      }
+
       this.isPlaying = false;
       const lastGroupIdx = this.groups.length - 1;
       this.emit({

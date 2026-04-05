@@ -355,6 +355,9 @@ export default function PhotoOverlay({
       // Match the same inset as viewport mode for WYSIWYG fidelity
       return { width: "95%", height: "88%" };
     }
+    if (viewportRatio === "9:16") {
+      return { width: "98%", height: "92%" };
+    }
     if (viewportRatio === "free") {
       return {
         width: "95%",
@@ -481,7 +484,8 @@ export default function PhotoOverlay({
 
   // Caption sizing: scale proportionally based on container width (reference: 1000px)
   const captionScale = containerSize.w > 0 ? containerSize.w / 1000 : 1;
-  const captionFontSizePx = (displayLayout?.captionFontSize ?? 14) * captionScale;
+  const rawCaptionFontSizePx = (displayLayout?.captionFontSize ?? 14) * captionScale;
+  const captionFontSizePx = viewportRatio === "9:16" ? Math.max(rawCaptionFontSizePx, 14) : rawCaptionFontSizePx;
   const captionH = captionFontSizePx * 2;
   const captionFontFamily = displayLayout?.captionFontFamily ?? "system-ui";
   const displayIsFreeMode = displayLayout?.mode === "free";

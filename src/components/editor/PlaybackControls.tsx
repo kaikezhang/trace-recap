@@ -96,12 +96,15 @@ export default memo(function PlaybackControls({
   const segments = useProjectStore((s) => s.segments);
   const bottomSheetState = useUIStore((s) => s.bottomSheetState);
   const exportDialogOpen = useUIStore((s) => s.exportDialogOpen);
+  const viewportRatio = useUIStore((s) => s.viewportRatio);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
   const [hoveredTickId, setHoveredTickId] = useState<string | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
+  const shouldAutoHide = isPlaying && viewportRatio === "9:16" && !isHovered;
   const showPlaybackHint = Boolean(hintMessage && onHintDismiss);
   const thumbLeft = Math.min(Math.max(progress, 0.5), 99.5);
   const activeTimelineEntry = timeline[currentSegmentIndex];
@@ -286,7 +289,12 @@ export default memo(function PlaybackControls({
   ].join(" ");
 
   return (
-    <div ref={containerRef} className={containerClassName}>
+    <div
+      ref={containerRef}
+      className={`${containerClassName} ${shouldAutoHide ? "opacity-0" : "opacity-100"} transition-opacity`}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
+    >
       {/* Controls bar */}
       <div className={barClassName}>
         <div className={resetContainerClassName} aria-hidden={isPlaying}>

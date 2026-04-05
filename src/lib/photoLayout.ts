@@ -250,10 +250,10 @@ function layoutRectsWithinSlot(
 }
 
 function getPortraitHeroHeight(innerHeight: number, photoCount: number): number {
-  if (photoCount <= 3) return innerHeight * 0.58;
-  if (photoCount <= 5) return innerHeight * 0.48;
-  if (photoCount <= 7) return innerHeight * 0.42;
-  return innerHeight * 0.36;
+  if (photoCount <= 3) return innerHeight * 0.68;
+  if (photoCount <= 5) return innerHeight * 0.55;
+  if (photoCount <= 7) return innerHeight * 0.48;
+  return innerHeight * 0.42;
 }
 
 function layoutPortraitReadableGallery(
@@ -280,7 +280,11 @@ function layoutPortraitReadableGallery(
     );
   }
 
-  const heroHeight = getPortraitHeroHeight(innerHeight, n);
+  // In 9:16 portrait, limit to max 2 photos (hero + 1 secondary) for readability
+  const displayPhotos = n > 2 ? photos.slice(0, 2) : photos;
+  const displayN = displayPhotos.length;
+
+  const heroHeight = getPortraitHeroHeight(innerHeight, displayN);
   const stripHeight = Math.max(0, innerHeight - heroHeight - gap);
   const heroSlot: LayoutSlot = { x: gap, y: gap, width: innerWidth, height: heroHeight };
   const stripSlot: LayoutSlot = {
@@ -291,10 +295,10 @@ function layoutPortraitReadableGallery(
   };
 
   if (stripSlot.height <= 0) {
-    return [fitPhotoToSlot(heroSlot, photos[0], containerAspect)];
+    return [fitPhotoToSlot(heroSlot, displayPhotos[0], containerAspect)];
   }
 
-  const remainingPhotos = photos.slice(1);
+  const remainingPhotos = displayPhotos.slice(1);
   const remainingRows: number[][] = [];
   for (let index = 0; index < remainingPhotos.length; index += 2) {
     remainingRows.push(
@@ -311,7 +315,7 @@ function layoutPortraitReadableGallery(
   );
 
   return [
-    fitPhotoToSlot(heroSlot, photos[0], containerAspect),
+    fitPhotoToSlot(heroSlot, displayPhotos[0], containerAspect),
     ...stripRects,
   ];
 }
