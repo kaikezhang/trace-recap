@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const q = searchParams.get("q");
   const lng = searchParams.get("lng");
   const lat = searchParams.get("lat");
-  const language = searchParams.get("language"); // e.g. "zh" for Chinese
+  const language = searchParams.get("language"); // e.g. "zh-Hans", "es", "ja"
 
   if (!MAPBOX_TOKEN) {
     return NextResponse.json(

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   AlbumStyle,
   AspectRatio,
+  LocalLanguageCode,
   PhotoAnimation,
   PhotoFrameStyle,
   PhotoStyle,
@@ -14,7 +15,8 @@ const UI_SETTINGS_KEY = "trace-recap-ui-settings";
 
 interface PersistedUISettings {
   cityLabelSize: number;
-  cityLabelLang: "en" | "zh";
+  cityLabelLang: "en" | "local" | "zh";
+  localLanguage: LocalLanguageCode;
   cityLabelTopPercent: number;
   routeLabelBottomPercent: number;
   routeLabelSize: number;
@@ -89,7 +91,8 @@ interface UIState {
   saveStatus: SaveStatus;
   toasts: ToastItem[];
   cityLabelSize: number; // CSS font size in px (default 18)
-  cityLabelLang: "en" | "zh"; // City label language
+  cityLabelLang: "en" | "local"; // City label language toggle
+  localLanguage: LocalLanguageCode; // User's chosen local language
   cityLabelTopPercent: number; // City label top position as % of container (default 5)
   routeLabelBottomPercent: number; // Route label bottom position as % of container (default 15)
   routeLabelSize: number; // Route label font size in px (default 14)
@@ -119,7 +122,8 @@ interface UIState {
   setSearchQuery: (query: string) => void;
   setBottomSheetState: (state: BottomSheetState) => void;
   setCityLabelSize: (size: number) => void;
-  setCityLabelLang: (lang: "en" | "zh") => void;
+  setCityLabelLang: (lang: "en" | "local") => void;
+  setLocalLanguage: (lang: LocalLanguageCode) => void;
   setCityLabelTopPercent: (percent: number) => void;
   setRouteLabelBottomPercent: (percent: number) => void;
   setRouteLabelSize: (size: number) => void;
@@ -147,7 +151,8 @@ export const useUIStore = create<UIState>((set) => ({
   searchQuery: "",
   bottomSheetState: "collapsed",
   cityLabelSize: saved.cityLabelSize ?? 18,
-  cityLabelLang: saved.cityLabelLang ?? "en",
+  cityLabelLang: (saved.cityLabelLang === "zh" ? "local" : saved.cityLabelLang) ?? "en",
+  localLanguage: saved.localLanguage ?? "zh-Hans",
   cityLabelTopPercent: saved.cityLabelTopPercent ?? 5,
   routeLabelBottomPercent: saved.routeLabelBottomPercent ?? 15,
   routeLabelSize: saved.routeLabelSize ?? 14,
@@ -186,6 +191,7 @@ export const useUIStore = create<UIState>((set) => ({
   setBottomSheetState: (bottomSheetState) => set({ bottomSheetState }),
   setCityLabelSize: (cityLabelSize) => set({ cityLabelSize }),
   setCityLabelLang: (cityLabelLang) => set({ cityLabelLang }),
+  setLocalLanguage: (localLanguage) => set({ localLanguage }),
   setCityLabelTopPercent: (cityLabelTopPercent) => set({ cityLabelTopPercent }),
   setRouteLabelBottomPercent: (routeLabelBottomPercent) => set({ routeLabelBottomPercent }),
   setRouteLabelSize: (routeLabelSize) => set({ routeLabelSize }),
@@ -212,6 +218,7 @@ useUIStore.subscribe((state) => {
     persistSettings({
       cityLabelSize: state.cityLabelSize,
       cityLabelLang: state.cityLabelLang,
+      localLanguage: state.localLanguage,
       cityLabelTopPercent: state.cityLabelTopPercent,
       routeLabelBottomPercent: state.routeLabelBottomPercent,
       routeLabelSize: state.routeLabelSize,

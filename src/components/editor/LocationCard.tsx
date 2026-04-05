@@ -382,7 +382,7 @@ export default memo(function LocationCard({
   const transportLabel = !isFirst && transportMode ? TRANSPORT_LABELS[transportMode] : undefined;
   const transportMetaLabel = !isFirst && transportMode ? TRANSPORT_META_LABELS[transportMode] : undefined;
   const desktopMetaLabel = location.chapterDate
-    || location.nameZh
+    || location.nameLocal
     || (isWaypoint ? "Flexible scenic stop" : "Main destination");
   const mobileDateLabel = location.chapterDate || `Day ${index + 1}`;
   const mobilePhotoLabel = `${photoCount} photo${photoCount === 1 ? "" : "s"}`;
@@ -875,9 +875,9 @@ export default memo(function LocationCard({
                   </div>
                   <div className="min-w-0">
                     <EditableName
-                      value={location.nameZh ?? ""}
-                      placeholder="中文名"
-                      onSave={(value) => updateLocation(locationId, { nameZh: value || undefined })}
+                      value={location.nameLocal ?? ""}
+                      placeholder="Local name"
+                      onSave={(value) => updateLocation(locationId, { nameLocal: value || undefined })}
                       className="block truncate text-xs"
                     />
                   </div>

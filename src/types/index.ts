@@ -20,10 +20,28 @@ export interface Photo {
   focalPoint?: { x: number; y: number }; // 0-1 range, default center (0.5, 0.5)
 }
 
+/** Supported local languages for city labels (code = Mapbox geocoding language param) */
+export const SUPPORTED_LOCAL_LANGUAGES = [
+  { code: "zh-Hans", mapboxField: "name_zh-Hans", label: "中文", fallbackFields: ["name_zh-Hant"] },
+  { code: "ja", mapboxField: "name_ja", label: "日本語", fallbackFields: [] },
+  { code: "ko", mapboxField: "name_ko", label: "한국어", fallbackFields: [] },
+  { code: "es", mapboxField: "name_es", label: "Español", fallbackFields: [] },
+  { code: "fr", mapboxField: "name_fr", label: "Français", fallbackFields: [] },
+  { code: "de", mapboxField: "name_de", label: "Deutsch", fallbackFields: [] },
+  { code: "pt", mapboxField: "name_pt", label: "Português", fallbackFields: [] },
+  { code: "ru", mapboxField: "name_ru", label: "Русский", fallbackFields: [] },
+  { code: "ar", mapboxField: "name_ar", label: "العربية", fallbackFields: [] },
+  { code: "it", mapboxField: "name_it", label: "Italiano", fallbackFields: [] },
+  { code: "vi", mapboxField: "name_vi", label: "Tiếng Việt", fallbackFields: [] },
+  { code: "th", mapboxField: "name_th", label: "ไทย", fallbackFields: [] },
+] as const;
+
+export type LocalLanguageCode = (typeof SUPPORTED_LOCAL_LANGUAGES)[number]["code"];
+
 export interface Location {
   id: string;
   name: string;
-  nameZh?: string; // Chinese name from geocoding
+  nameLocal?: string; // Localized name from geocoding (user's chosen language)
   coordinates: [number, number]; // [lng, lat]
   photos: Photo[];
   isWaypoint: boolean;
@@ -89,7 +107,7 @@ export interface ExportSettings {
   resolution?: ExportResolution;
   speedMultiplier?: number;
   cityLabelSize?: number; // CSS font size in px (default 18)
-  cityLabelLang?: "en" | "zh";
+  cityLabelLang?: "en" | "local";
   cityLabelTopPercent?: number; // City label top position % (default 5)
   viewportRatio?: AspectRatio;
   routeLabelSize?: number; // Route label font size in px (default 14)

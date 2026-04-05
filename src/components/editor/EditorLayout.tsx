@@ -20,6 +20,7 @@ import {
   SEGMENT_SOURCE_PREFIX,
   setSegmentSourceData,
 } from "./routeSegmentSources";
+import { SUPPORTED_LOCAL_LANGUAGES } from "@/types";
 import { AnimationEngine } from "@/engine/AnimationEngine";
 import { demoProject } from "@/lib/demoProject";
 import {
@@ -136,8 +137,8 @@ function EditorContent() {
   const setTotalDuration = useAnimationStore((s) => s.setTotalDuration);
   const setCurrentPhase = useAnimationStore((s) => s.setCurrentPhase);
   const setCurrentCityLabel = useAnimationStore((s) => s.setCurrentCityLabel);
-  const setCurrentCityLabelZh = useAnimationStore(
-    (s) => s.setCurrentCityLabelZh,
+  const setCurrentCityLabelLocal = useAnimationStore(
+    (s) => s.setCurrentCityLabelLocal,
   );
   const setVisiblePhotos = useAnimationStore((s) => s.setVisiblePhotos);
   const setShowPhotoOverlay = useAnimationStore((s) => s.setShowPhotoOverlay);
@@ -175,6 +176,7 @@ function EditorContent() {
 
   const cityLabelSize = useUIStore((s) => s.cityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
+  const localLanguage = useUIStore((s) => s.localLanguage);
   const viewportRatio = useUIStore((s) => s.viewportRatio);
   const speedMultiplier = useUIStore((s) => s.speedMultiplier);
   const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
@@ -414,10 +416,19 @@ function EditorContent() {
       const style = map.getStyle();
       if (!style?.layers) return;
 
-      const textFieldExpr =
-        cityLabelLang === "zh"
-          ? (["coalesce", ["get", "name_zh-Hans"], ["get", "name_zh-Hant"], ["get", "name"]] as mapboxgl.ExpressionSpecification)
-          : (["coalesce", ["get", "name_en"], ["get", "name"]] as mapboxgl.ExpressionSpecification);
+      let textFieldExpr: mapboxgl.ExpressionSpecification;
+      if (cityLabelLang === "local") {
+        const langConfig = SUPPORTED_LOCAL_LANGUAGES.find((l) => l.code === localLanguage);
+        const fields: mapboxgl.ExpressionSpecification[] = [];
+        if (langConfig) {
+          fields.push(["get", langConfig.mapboxField]);
+          for (const fb of langConfig.fallbackFields) fields.push(["get", fb]);
+        }
+        fields.push(["get", "name"]);
+        textFieldExpr = ["coalesce", ...fields] as mapboxgl.ExpressionSpecification;
+      } else {
+        textFieldExpr = ["coalesce", ["get", "name_en"], ["get", "name"]] as mapboxgl.ExpressionSpecification;
+      }
 
       for (const layer of style.layers) {
         if (layer.type !== "symbol") continue;
@@ -435,13 +446,13 @@ function EditorContent() {
     return () => {
       map.off("style.load", applyMapLanguage);
     };
-  }, [map, cityLabelLang]);
+  }, [map, cityLabelLang, localLanguage]);
 
   const currentCityLabelEn = useAnimationStore((s) => s.currentCityLabel);
-  const currentCityLabelZh = useAnimationStore((s) => s.currentCityLabelZh);
+  const currentCityLabelLocal = useAnimationStore((s) => s.currentCityLabelLocal);
   const currentCityLabel =
-    cityLabelLang === "zh"
-      ? currentCityLabelZh || currentCityLabelEn
+    cityLabelLang === "local"
+      ? currentCityLabelLocal || currentCityLabelEn
       : currentCityLabelEn;
   const currentCityEmoji = currentCityLabelEn
     ? locations.find((l) => l.name === currentCityLabelEn)?.chapterEmoji ?? null
@@ -575,7 +586,7 @@ function EditorContent() {
       setCurrentGroupSegmentIndices(e.groupSegmentIndices);
       setCurrentPhase(e.phase);
       setCurrentCityLabel(e.cityLabel);
-      setCurrentCityLabelZh(e.cityLabelZh);
+      setCurrentCityLabelLocal(e.cityLabelLocal);
 
       if (e.showPhotos && e.phase === "ARRIVE") {
         setShowPhotoOverlay(true);

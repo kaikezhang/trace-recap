@@ -187,10 +187,10 @@ export default function MapStage({
     ? locations.find((l) => l.id === currentSegment.toId)
     : null;
   const fromCity = fromLoc
-    ? (cityLabelLang === "zh" ? fromLoc.nameZh || fromLoc.name : fromLoc.name)
+    ? (cityLabelLang === "local" ? fromLoc.nameLocal || fromLoc.name : fromLoc.name)
     : null;
   const toCity = toLoc
-    ? (cityLabelLang === "zh" ? toLoc.nameZh || toLoc.name : toLoc.name)
+    ? (cityLabelLang === "local" ? toLoc.nameLocal || toLoc.name : toLoc.name)
     : null;
 
   return (

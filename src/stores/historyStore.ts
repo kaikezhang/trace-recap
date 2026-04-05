@@ -22,7 +22,7 @@ interface LightPhoto {
 interface LightLocation {
   id: string;
   name: string;
-  nameZh?: string;
+  nameLocal?: string;
   coordinates: [number, number];
   photos: LightPhoto[];
   isWaypoint: boolean;
@@ -130,7 +130,7 @@ function stripLocation(loc: Location): LightLocation {
   return {
     id: loc.id,
     name: loc.name,
-    ...(loc.nameZh != null ? { nameZh: loc.nameZh } : {}),
+    ...(loc.nameLocal != null ? { nameLocal: loc.nameLocal } : {}),
     coordinates: [...loc.coordinates] as [number, number],
     photos: loc.photos.map(stripPhoto),
     isWaypoint: loc.isWaypoint,

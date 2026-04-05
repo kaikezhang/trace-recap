@@ -48,7 +48,8 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore, type ImportRouteData } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import type { AlbumStyle, AspectRatio, MapStyle, MapStyleCategory } from "@/types";
+import { SUPPORTED_LOCAL_LANGUAGES } from "@/types";
+import type { AlbumStyle, AspectRatio, LocalLanguageCode, MapStyle, MapStyleCategory } from "@/types";
 import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
 import { ALBUM_STYLE_CONFIGS } from "@/lib/albumStyles";
 
@@ -68,7 +69,7 @@ export default function TopToolbar() {
   const saveStatus = useUIStore((s) => s.saveStatus);
   const exportRoute = useProjectStore((s) => s.exportRoute);
   const loadRouteData = useProjectStore((s) => s.loadRouteData);
-  const enrichChineseNames = useProjectStore((s) => s.enrichChineseNames);
+  const enrichLocalNames = useProjectStore((s) => s.enrichLocalNames);
   const clearRoute = useProjectStore((s) => s.clearRoute);
   const mapStyle = useProjectStore((s) => s.mapStyle);
   const setMapStyle = useProjectStore((s) => s.setMapStyle);
@@ -78,6 +79,8 @@ export default function TopToolbar() {
   const setCityLabelSize = useUIStore((s) => s.setCityLabelSize);
   const cityLabelLang = useUIStore((s) => s.cityLabelLang);
   const setCityLabelLang = useUIStore((s) => s.setCityLabelLang);
+  const localLanguage = useUIStore((s) => s.localLanguage);
+  const setLocalLanguage = useUIStore((s) => s.setLocalLanguage);
   const cityLabelTopPercent = useUIStore((s) => s.cityLabelTopPercent);
   const setCityLabelTopPercent = useUIStore((s) => s.setCityLabelTopPercent);
   const routeLabelBottomPercent = useUIStore((s) => s.routeLabelBottomPercent);
@@ -179,12 +182,12 @@ export default function TopToolbar() {
         }
 
         await loadRouteData(data);
-        void enrichChineseNames();
+        void enrichLocalNames();
       } else {
         const text = await file.text();
         const data: ImportRouteData = JSON.parse(text);
         await loadRouteData(data);
-        void enrichChineseNames();
+        void enrichLocalNames();
       }
     } catch (error) {
       console.error("Failed to import route file.", error);
@@ -508,6 +511,8 @@ export default function TopToolbar() {
                     setMapStyle={setMapStyle}
                     cityLabelLang={cityLabelLang}
                     setCityLabelLang={setCityLabelLang}
+                    localLanguage={localLanguage}
+                    setLocalLanguage={setLocalLanguage}
                     cityLabelSize={cityLabelSize}
                     setCityLabelSize={setCityLabelSize}
                     cityLabelTopPercent={cityLabelTopPercent}
@@ -704,6 +709,8 @@ export default function TopToolbar() {
                 setMapStyle={setMapStyle}
                 cityLabelLang={cityLabelLang}
                 setCityLabelLang={setCityLabelLang}
+                localLanguage={localLanguage}
+                setLocalLanguage={setLocalLanguage}
                 cityLabelSize={cityLabelSize}
                 setCityLabelSize={setCityLabelSize}
                 cityLabelTopPercent={cityLabelTopPercent}
@@ -806,8 +813,10 @@ function MobileActionButton({
 interface SettingsContentProps {
   mapStyle: MapStyle;
   setMapStyle: (v: MapStyle) => void;
-  cityLabelLang: "en" | "zh";
-  setCityLabelLang: (v: "en" | "zh") => void;
+  cityLabelLang: "en" | "local";
+  setCityLabelLang: (v: "en" | "local") => void;
+  localLanguage: LocalLanguageCode;
+  setLocalLanguage: (v: LocalLanguageCode) => void;
   cityLabelSize: number;
   setCityLabelSize: (v: number) => void;
   cityLabelTopPercent: number;
@@ -844,6 +853,8 @@ function SettingsContent({
   setMapStyle,
   cityLabelLang,
   setCityLabelLang,
+  localLanguage,
+  setLocalLanguage,
   cityLabelSize,
   setCityLabelSize,
   cityLabelTopPercent,
@@ -943,9 +954,9 @@ function SettingsContent({
           <label className="text-xs font-medium" style={{ color: "#57534e" }}>Language</label>
           <div className="flex gap-2">
             {([
-              { value: "en", label: "English" },
-              { value: "zh", label: "中文" },
-            ] as const).map((opt) => (
+              { value: "en" as const, label: "English" },
+              { value: "local" as const, label: SUPPORTED_LOCAL_LANGUAGES.find((l) => l.code === localLanguage)?.label ?? "Local" },
+            ]).map((opt) => (
               <button
                 key={opt.value}
                 className="px-3.5 py-1 rounded-full text-xs font-medium transition-colors"
@@ -960,6 +971,20 @@ function SettingsContent({
               </button>
             ))}
           </div>
+        </div>
+        {/* Local language selector */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium" style={{ color: "#57534e" }}>Local Language</label>
+          <select
+            className="w-full rounded-lg border px-3 py-1.5 text-xs"
+            style={{ borderColor: "#d6d3d1", color: "#57534e", backgroundColor: "#fafaf9" }}
+            value={localLanguage}
+            onChange={(e) => setLocalLanguage(e.target.value as LocalLanguageCode)}
+          >
+            {SUPPORTED_LOCAL_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>{lang.label}</option>
+            ))}
+          </select>
         </div>
         {/* Label size */}
         <div className="space-y-1.5">

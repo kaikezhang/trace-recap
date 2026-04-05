@@ -26,7 +26,7 @@ export interface AnimationEvent {
   segmentIndex: number;
   phase: AnimationPhase;
   cityLabel: string | null;
-  cityLabelZh: string | null;
+  cityLabelLocal: string | null;
   showPhotos: boolean;
   /** Opacity for photo overlay (0-1), used for fade-out transition */
   photoOpacity: number;
@@ -430,7 +430,7 @@ export class AnimationEngine {
         segmentIndex: this.segments.length - 1,
         phase: "ARRIVE",
         cityLabel: null,
-        cityLabelZh: null,
+        cityLabelLocal: null,
         showPhotos: false,
         photoOpacity: 0,
         groupIndex: lastGroupIdx,
@@ -478,13 +478,13 @@ export class AnimationEngine {
 
     // City label — only for non-waypoint locations
     let cityLabel: string | null = null;
-    let cityLabelZh: string | null = null;
+    let cityLabelLocal: string | null = null;
     if (phase === "HOVER" && !group.fromLoc.isWaypoint) {
       cityLabel = group.fromLoc.name;
-      cityLabelZh = group.fromLoc.nameZh ?? null;
+      cityLabelLocal = group.fromLoc.nameLocal ?? null;
     } else if (phase === "ARRIVE" && !group.toLoc.isWaypoint) {
       cityLabel = group.toLoc.name;
-      cityLabelZh = group.toLoc.nameZh ?? null;
+      cityLabelLocal = group.toLoc.nameLocal ?? null;
     }
 
     // Photos: show during ARRIVE at full opacity.
@@ -521,7 +521,7 @@ export class AnimationEngine {
       segmentIndex,
       phase,
       cityLabel,
-      cityLabelZh,
+      cityLabelLocal,
       showPhotos,
       photoOpacity,
       groupIndex,
@@ -543,7 +543,7 @@ export class AnimationEngine {
         segmentIndex,
         phase,
         cityLabel: null,
-        cityLabelZh: null,
+        cityLabelLocal: null,
         showPhotos: false,
         photoOpacity: 0,
         routeDrawFraction: 0,
@@ -561,7 +561,7 @@ export class AnimationEngine {
         segmentIndex,
         phase,
         cityLabel: null,
-        cityLabelZh: null,
+        cityLabelLocal: null,
         showPhotos: false,
         photoOpacity: 0,
         routeDrawFraction: easing(phaseProgress),
@@ -576,7 +576,7 @@ export class AnimationEngine {
         segmentIndex,
         phase,
         cityLabel: null,
-        cityLabelZh: null,
+        cityLabelLocal: null,
         showPhotos: false,
         photoOpacity: 0,
         routeDrawFraction: 1,
