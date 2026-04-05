@@ -28,10 +28,10 @@ export const demoProject: ImportRouteData = {
       photoLayout: {
         mode: "auto",
         template: "hero",
-        gap: 8,
-        borderRadius: 8,
+        gap: 4,
+        borderRadius: 6,
         photoStyle: "kenburns",
-        enterAnimation: "fade",
+        enterAnimation: "scale",
         sceneTransition: "dissolve",
         captionFontSize: 16,
       },

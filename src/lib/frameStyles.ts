@@ -87,8 +87,32 @@ export const PHOTO_FRAME_STYLE_CONFIGS: Record<PhotoFrameStyle, PhotoFrameStyleC
   },
 };
 
-export function getPhotoFrameStyleConfig(style: PhotoFrameStyle): PhotoFrameStyleConfig {
-  return PHOTO_FRAME_STYLE_CONFIGS[style];
+export function getPhotoFrameStyleConfig(style: PhotoFrameStyle, compact?: boolean): PhotoFrameStyleConfig {
+  const config = PHOTO_FRAME_STYLE_CONFIGS[style];
+  if (!compact) return config;
+
+  // Compact mode: reduce frame padding for 9:16 portrait viewports
+  const compactOverrides: Partial<Record<PhotoFrameStyle, Partial<PhotoFrameStyleConfig>>> = {
+    polaroid: {
+      framePadding: "2% 2% 10% 2%",
+      inlineCaptionMinHeight: "10%",
+      inlineCaptionPadding: "0.2rem 0.5rem 0.1rem",
+    },
+    "film-strip": {
+      framePadding: "6% 3%",
+      filmStripHeight: "6%",
+    },
+    "classic-border": {
+      framePadding: "2%",
+    },
+    "rounded-card": {
+      framePadding: "2%",
+    },
+  };
+
+  const overrides = compactOverrides[style];
+  if (!overrides) return config;
+  return { ...config, ...overrides };
 }
 
 export function frameStyleUsesInlineCaption(style: PhotoFrameStyle): boolean {
