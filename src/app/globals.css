@@ -225,4 +225,20 @@
       min-height: 44px;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .location-card-expanded,
+    .location-card-expanded *,
+    .segment-card-content,
+    .segment-card-content *,
+    .segment-card-chevron,
+    .search-dropdown,
+    .search-dropdown *,
+    .city-search-input,
+    .transport-selector-panel,
+    .transport-selector-panel * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
 }

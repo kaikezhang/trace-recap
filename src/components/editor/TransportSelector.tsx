@@ -3,7 +3,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { lineString } from "@turf/helpers";
 import { length } from "@turf/length";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSegmentEndpoints } from "@/stores/selectors";
 import { useAnimationStore } from "@/stores/animationStore";
@@ -118,6 +118,7 @@ function StylePreview({
 }
 
 export default memo(function TransportSelector({ segment }: TransportSelectorProps) {
+  const shouldReduceMotion = useReducedMotion();
   const setTransportMode = useProjectStore((s) => s.setTransportMode);
   const setSegmentIconStyle = useProjectStore((s) => s.setSegmentIconStyle);
   const setSegmentIconVariant = useProjectStore((s) => s.setSegmentIconVariant);
@@ -353,11 +354,11 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
           <AnimatePresence>
             {showTiming && (
               <motion.div
-                initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: -4, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-20 bg-white rounded-xl shadow-xl border border-gray-100 p-4 w-56"
+                exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.95 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
+                className="transport-selector-panel absolute left-1/2 top-full z-20 mt-2 w-56 -translate-x-1/2 rounded-xl border border-gray-100 bg-white p-4 shadow-xl"
               >
                 {/* Header */}
                 <div className="flex items-center justify-between mb-3">

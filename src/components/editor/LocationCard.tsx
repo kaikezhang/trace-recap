@@ -17,7 +17,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Input } from "@/components/ui/input";
@@ -203,6 +203,7 @@ function EmojiPicker({
   value: string;
   onSelect: (emoji: string) => void;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const customInputRef = useRef<HTMLInputElement>(null);
@@ -234,10 +235,10 @@ function EmojiPicker({
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95, y: -4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -4 }}
-            transition={{ duration: 0.15 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
             className="absolute bottom-full right-0 z-50 mb-1 w-[240px] rounded-2xl border p-2 shadow-lg"
             style={{
               backgroundColor: "rgba(255,251,245,0.98)",
@@ -349,6 +350,7 @@ export default memo(function LocationCard({
   showEditHint = false,
   onDismissEditHint,
 }: LocationCardProps) {
+  const shouldReduceMotion = useReducedMotion();
   const location = useLocation(locationId);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -859,12 +861,12 @@ export default memo(function LocationCard({
         <AnimatePresence initial={false}>
           {isExpanded && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
+              initial={shouldReduceMotion ? false : { height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: "easeInOut" }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeInOut" }}
               id={detailsId}
-              className="overflow-hidden"
+              className="location-card-expanded overflow-hidden"
             >
               <div
                 className={`space-y-3 border-t md:space-y-4 ${
