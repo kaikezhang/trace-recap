@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { brand } from "@/lib/brand";
+import { useHistoryStore } from "@/stores/historyStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useLocation } from "@/stores/selectors";
@@ -361,9 +362,9 @@ function WaypointSwitch({
       title={isWaypoint ? "Switch to destination" : "Switch to pass-through"}
     >
       <span
-        className={`${trackClassName} ${isWaypoint ? "justify-start" : "justify-end"}`}
+        className={`${trackClassName} ${isWaypoint ? "justify-end" : "justify-start"}`}
         style={{
-          backgroundColor: isWaypoint ? brand.colors.warm[300] : brand.colors.primary[500],
+          backgroundColor: isWaypoint ? brand.colors.primary[500] : brand.colors.warm[300],
         }}
       >
         <span className={`${thumbClassName} rounded-full bg-white shadow-sm`} />
@@ -700,13 +701,20 @@ export default memo(function LocationCard({
         ? `${location.name} was removed from the route.`
         : "The location was removed from the route.",
       variant: "info",
+      action: (
+        <button
+          type="button"
+          onClick={() => {
+            const { canUndo, undo } = useHistoryStore.getState();
+            if (canUndo) undo();
+          }}
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/20"
+          style={{ borderColor: "rgba(255,255,255,0.3)", color: "inherit" }}
+        >
+          Undo
+        </button>
+      ),
     });
-  };
-
-  const handleDuplicate = () => {
-    onClick?.(index);
-    dismissEditHint();
-    duplicateLocation(locationId);
   };
 
   const handleTogglePassThrough = () => {
@@ -715,6 +723,10 @@ export default memo(function LocationCard({
     onClick?.(index);
     dismissEditHint();
     onToggleWaypoint(locationId);
+    addToast({
+      title: isWaypoint ? "Set as destination" : "Set as pass-through",
+      variant: "info",
+    });
   };
 
   const handleEditLayout = () => {
@@ -753,23 +765,6 @@ export default memo(function LocationCard({
         boxShadow: brand.shadows.sm,
       }}
     >
-      <button
-        type="button"
-        data-no-seek
-        className={desktopActionButtonClassName}
-        style={{
-          borderColor: brand.colors.warm[200],
-          color: brand.colors.warm[700],
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDuplicate();
-        }}
-        aria-label="Duplicate stop"
-        title="Duplicate stop"
-      >
-        <Copy className="h-3.5 w-3.5" />
-      </button>
       <WaypointSwitch
         isWaypoint={isWaypoint}
         size="actionDesktop"
@@ -798,24 +793,6 @@ export default memo(function LocationCard({
   );
   const mobileActionBar = (
     <div className="flex items-center gap-1">
-      <button
-        type="button"
-        data-no-seek
-        className={mobileActionButtonClassName}
-        style={{
-          borderColor: brand.colors.warm[200],
-          color: brand.colors.warm[700],
-          backgroundColor: "rgba(255,255,255,0.86)",
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDuplicate();
-        }}
-        aria-label="Duplicate stop"
-        title="Duplicate stop"
-      >
-        <Copy className="h-4 w-4" />
-      </button>
       <WaypointSwitch
         isWaypoint={isWaypoint}
         size="actionMobile"
@@ -1299,7 +1276,7 @@ export default memo(function LocationCard({
                         </div>
                         <WaypointSwitch
                           isWaypoint={!!isWaypoint}
-                          onToggle={() => onToggleWaypoint(locationId)}
+                          onToggle={handleTogglePassThrough}
                         />
                       </div>
                     )}

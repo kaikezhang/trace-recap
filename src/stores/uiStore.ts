@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { create } from "zustand";
 import type {
   AlbumStyle,
@@ -77,6 +78,7 @@ interface ToastItem {
   title: string;
   description?: string;
   variant?: "success" | "info" | "warning" | "error";
+  action?: ReactNode;
 }
 
 interface UIState {

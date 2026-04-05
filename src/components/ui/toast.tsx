@@ -14,6 +14,7 @@ interface ToastData {
   title: string
   description?: string
   variant?: ToastVariant
+  action?: ReactNode
 }
 
 interface ToastProps {
@@ -190,6 +191,7 @@ function ToastViewport({
             title={toast.title}
             description={toast.description}
             variant={toast.variant}
+            action={toast.action}
             dismissAfterMs={dismissAfterMs}
             onDismiss={() => onDismiss(toast.id)}
           />
