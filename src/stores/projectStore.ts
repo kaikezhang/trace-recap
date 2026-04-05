@@ -213,12 +213,14 @@ interface ProjectState {
   ) => Promise<void>;
   duplicateLocation: (locationId: string) => void;
   removeLocation: (id: string) => void;
+  batchRemoveLocations: (ids: string[]) => void;
   reorderLocations: (fromIndex: number, toIndex: number) => void;
   updateLocation: (
     id: string,
     updates: Partial<Pick<Location, "name" | "nameLocal" | "coordinates" | "chapterTitle" | "chapterNote" | "chapterDate" | "chapterEmoji">>,
   ) => void;
   toggleWaypoint: (locationId: string) => void;
+  batchToggleWaypoint: (ids: string[]) => void;
 
   // Segment operations
   setTransportMode: (segmentId: string, mode: TransportMode) => void;
@@ -1180,6 +1182,18 @@ function getRouteHistoryState(
   };
 }
 
+function buildRouteHistoryState(
+  locations: Location[],
+  segments: Segment[],
+  segmentTimingOverrides: Record<string, number>,
+): RouteHistoryState {
+  return {
+    locations,
+    segments,
+    segmentTimingOverrides,
+  };
+}
+
 function pushRouteHistoryChange(params: {
   before: RouteHistoryState;
   after: RouteHistoryState;
@@ -1199,6 +1213,26 @@ function formatStopLabel(name: string | undefined): string {
   return trimmed && trimmed.length > 0 ? trimmed : "Untitled stop";
 }
 
+function buildToggleWaypointLabel(location: Location): string {
+  return `${location.isWaypoint ? "Mark" : "Convert"} ${formatStopLabel(location.name)} ${location.isWaypoint ? "as destination" : "to waypoint"}`;
+}
+
+function buildBatchRemoveLabel(removedLocations: Location[]): string {
+  if (removedLocations.length === 1) {
+    return `Remove ${formatStopLabel(removedLocations[0]?.name)}`;
+  }
+
+  return `Remove ${removedLocations.length} stops`;
+}
+
+function buildBatchToggleWaypointLabel(toggledLocations: Location[]): string {
+  if (toggledLocations.length === 1) {
+    return buildToggleWaypointLabel(toggledLocations[0]);
+  }
+
+  return `Toggle pass-through for ${toggledLocations.length} stops`;
+}
+
 function buildLocationUpdateLabel(
   previousLocation: Location,
   nextLocation: Location,
@@ -1209,6 +1243,61 @@ function buildLocationUpdateLabel(
   }
 
   return `Edit ${formatStopLabel(nextLocation.name)}`;
+}
+
+function removeLocationFromRouteState(
+  state: RouteHistoryState,
+  id: string,
+): {
+  nextState: RouteHistoryState;
+  removedLocation: Location | null;
+} {
+  const removedLocation = state.locations.find((entry) => entry.id === id) ?? null;
+  if (!removedLocation) {
+    return { nextState: state, removedLocation: null };
+  }
+
+  const locations = normalizeEdgeWaypoints(
+    state.locations.filter((entry) => entry.id !== id),
+  );
+
+  return {
+    removedLocation,
+    nextState: buildRouteHistoryState(
+      locations,
+      rebuildSegments(locations, state.segments),
+      state.segmentTimingOverrides,
+    ),
+  };
+}
+
+function toggleWaypointInRouteState(
+  state: RouteHistoryState,
+  locationId: string,
+): {
+  nextState: RouteHistoryState;
+  toggledLocation: Location | null;
+} {
+  const index = state.locations.findIndex((location) => location.id === locationId);
+  if (index <= 0 || index >= state.locations.length - 1) {
+    return { nextState: state, toggledLocation: null };
+  }
+
+  const toggledLocation = state.locations[index];
+  const locations = state.locations.map((location) =>
+    location.id === locationId
+      ? { ...location, isWaypoint: !location.isWaypoint }
+      : location,
+  );
+
+  return {
+    toggledLocation,
+    nextState: buildRouteHistoryState(
+      locations,
+      state.segments,
+      state.segmentTimingOverrides,
+    ),
+  };
 }
 
 async function queueProjectSave(
@@ -1473,24 +1562,50 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   removeLocation: (id) => {
     const state = get();
-    const location = state.locations.find((entry) => entry.id === id);
-    if (!location) {
+    const { nextState, removedLocation } = removeLocationFromRouteState(
+      getRouteHistoryState(state),
+      id,
+    );
+    if (!removedLocation) {
       return;
     }
-
-    const locations = normalizeEdgeWaypoints(
-      state.locations.filter((entry) => entry.id !== id),
-    );
-    const nextState = {
-      locations,
-      segments: rebuildSegments(locations, state.segments),
-      segmentTimingOverrides: state.segmentTimingOverrides,
-    };
 
     pushRouteHistoryChange({
       before: state,
       after: nextState,
-      label: `Remove ${formatStopLabel(location.name)}`,
+      label: buildBatchRemoveLabel([removedLocation]),
+    });
+    set(nextState);
+  },
+
+  batchRemoveLocations: (ids) => {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) {
+      return;
+    }
+
+    const state = get();
+    let nextState = getRouteHistoryState(state);
+    const removedLocations: Location[] = [];
+
+    for (const id of uniqueIds) {
+      const result = removeLocationFromRouteState(nextState, id);
+      if (!result.removedLocation) {
+        continue;
+      }
+
+      removedLocations.push(result.removedLocation);
+      nextState = result.nextState;
+    }
+
+    if (removedLocations.length === 0) {
+      return;
+    }
+
+    pushRouteHistoryChange({
+      before: state,
+      after: nextState,
+      label: buildBatchRemoveLabel(removedLocations),
     });
     set(nextState);
   },
@@ -1565,29 +1680,52 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   toggleWaypoint: (locationId) => {
     const state = get();
-    const idx = state.locations.findIndex((location) => location.id === locationId);
-    // First and last locations can never be waypoints
-    if (idx <= 0 || idx >= state.locations.length - 1) {
+    const { nextState, toggledLocation } = toggleWaypointInRouteState(
+      getRouteHistoryState(state),
+      locationId,
+    );
+    if (!toggledLocation) {
       return;
     }
 
-    const targetLocation = state.locations[idx];
-    const locations = state.locations.map((location) =>
-      location.id === locationId
-        ? { ...location, isWaypoint: !location.isWaypoint }
-        : location,
-    );
+    pushRouteHistoryChange({
+      before: state,
+      after: nextState,
+      label: buildBatchToggleWaypointLabel([toggledLocation]),
+    });
+    set(nextState);
+  },
+
+  batchToggleWaypoint: (ids) => {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) {
+      return;
+    }
+
+    const state = get();
+    let nextState = getRouteHistoryState(state);
+    const toggledLocations: Location[] = [];
+
+    for (const id of uniqueIds) {
+      const result = toggleWaypointInRouteState(nextState, id);
+      if (!result.toggledLocation) {
+        continue;
+      }
+
+      toggledLocations.push(result.toggledLocation);
+      nextState = result.nextState;
+    }
+
+    if (toggledLocations.length === 0) {
+      return;
+    }
 
     pushRouteHistoryChange({
       before: state,
-      after: {
-        locations,
-        segments: state.segments,
-        segmentTimingOverrides: state.segmentTimingOverrides,
-      },
-      label: `${targetLocation.isWaypoint ? "Mark" : "Convert"} ${formatStopLabel(targetLocation.name)} ${targetLocation.isWaypoint ? "as destination" : "to waypoint"}`,
+      after: nextState,
+      label: buildBatchToggleWaypointLabel(toggledLocations),
     });
-    set({ locations });
+    set(nextState);
   },
 
   setTransportMode: (segmentId, mode) => {
