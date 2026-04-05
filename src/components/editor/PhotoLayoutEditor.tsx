@@ -802,22 +802,23 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   // Compute numeric aspect ratio from viewport ratio setting
   // For "free", use the actual map canvas aspect ratio so the preview matches
   const previewAspect = useMemo(() => {
-    if (capturedMapSize && capturedMapSize.width > 0 && capturedMapSize.height > 0) {
-      return capturedMapSize.width / capturedMapSize.height;
-    }
     if (viewportRatio === "free") {
-      // Fallback to panel size if map not available
+      // Free mode: use actual map canvas size
+      if (capturedMapSize && capturedMapSize.width > 0 && capturedMapSize.height > 0) {
+        return capturedMapSize.width / capturedMapSize.height;
+      }
       if (panelSize && panelSize.width > 0 && panelSize.height > 0) {
         return panelSize.width / panelSize.height;
       }
-      return 16 / 9; // last resort fallback
+      return 16 / 9;
     }
+    // Explicit ratios: compute directly from the ratio string
     const [w, h] = viewportRatio.split(":").map(Number);
     return w / h;
   }, [capturedMapSize, panelSize, viewportRatio]);
 
   const previewSourceSize = useMemo(() => {
-    if (capturedMapSize && capturedMapSize.width > 0 && capturedMapSize.height > 0) {
+    if (viewportRatio === "free" && capturedMapSize && capturedMapSize.width > 0 && capturedMapSize.height > 0) {
       return capturedMapSize;
     }
     if (!panelSize) {
@@ -832,7 +833,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       return { width: pw, height: pw / targetRatio };
     }
     return { width: ph * targetRatio, height: ph };
-  }, [capturedMapSize, panelSize, previewAspect]);
+  }, [capturedMapSize, panelSize, previewAspect, viewportRatio]);
 
   const previewScale = useMemo(() => {
     if (!panelSize || previewSourceSize.width <= 0 || previewSourceSize.height <= 0) {
@@ -888,8 +889,10 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   );
   // Use the same 95%×88% inset dimensions that PhotoOverlay measures internally,
   // so drag targets align with the actual photo positions.
-  const insetW = previewSourceSize.width * 0.95;
-  const insetH = previewSourceSize.height * 0.88;
+  const insetFracW = viewportRatio === "9:16" ? 0.98 : 0.95;
+  const insetFracH = viewportRatio === "9:16" ? 0.92 : 0.88;
+  const insetW = previewSourceSize.width * insetFracW;
+  const insetH = previewSourceSize.height * insetFracH;
   const computedRects = useMemo(() => {
     if (!insetW || !insetH || layoutMetas.length === 0) {
       return [];
