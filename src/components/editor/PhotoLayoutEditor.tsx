@@ -244,7 +244,7 @@ function PhotoThumbnail({
   return (
     <div
       className={`group relative overflow-hidden rounded-lg bg-white ${
-        orientation === "vertical" ? "w-full aspect-square" : "h-[60px] w-[60px] shrink-0"
+        orientation === "vertical" ? "w-full" : "h-[60px] w-[60px] shrink-0"
       } ${
         selected
           ? "ring-2 ring-indigo-500 ring-offset-2"
@@ -254,7 +254,11 @@ function PhotoThumbnail({
       <img
         src={photo.url}
         alt={`Photo ${index + 1} thumbnail`}
-        className="h-full w-full object-cover"
+        className={
+          orientation === "vertical"
+            ? "min-h-[60px] max-h-[200px] h-auto w-full object-cover"
+            : "h-full w-full object-cover"
+        }
         style={{ objectPosition: `${(photo.focalPoint?.x ?? 0.5) * 100}% ${(photo.focalPoint?.y ?? 0.5) * 100}%` }}
       />
       <div className="pointer-events-none absolute inset-x-1 top-1 flex items-center justify-between rounded-md bg-black/45 px-1.5 py-1 text-white backdrop-blur-sm">
