@@ -136,7 +136,6 @@ function EditorContent() {
   );
   const engineRef = useRef<AnimationEngine | null>(null);
   const demoLoadedRef = useRef(false);
-  const [demoAutoPlay, setDemoAutoPlay] = useState(false);
   const prevShowPhotosRef = useRef(false);
   const prevPhotoLocationIdRef = useRef<string | null>(null);
   const prevPhaseRef = useRef<string | null>(null);
@@ -553,9 +552,6 @@ function EditorContent() {
         return;
       }
 
-      // Auto-play after demo loads
-      setDemoAutoPlay(true);
-
       const nextUrl = new URL(window.location.href);
       nextUrl.searchParams.delete("demo");
       window.history.replaceState(
@@ -915,16 +911,6 @@ function EditorContent() {
       completeAlbumSequenceRef.current(pendingAlbumCloseLocationId);
     }
   }, [map, setPlaybackState]);
-
-  // Auto-play demo after loading
-  useEffect(() => {
-    if (!demoAutoPlay || !engineRef.current || locations.length === 0) return;
-    const timer = setTimeout(() => {
-      handlePlay();
-      setDemoAutoPlay(false);
-    }, 1500); // 1.5s delay for map to settle
-    return () => clearTimeout(timer);
-  }, [demoAutoPlay, handlePlay, locations.length]);
 
   const handlePause = useCallback(() => {
     if (
