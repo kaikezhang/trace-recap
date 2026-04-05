@@ -604,7 +604,7 @@ export function computePhotoLayout(
     return layoutPortraitReadableGallery(photos, containerAspect, gap, layout?.template);
   }
 
-  if (layout?.mode === "manual" && layout.template) {
+  if (layout?.mode !== "free" && layout?.template) {
     return computeTemplateLayout(
       photos,
       containerAspect,

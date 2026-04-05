@@ -741,6 +741,14 @@ export default function PhotoOverlay({
                       frameStyle={photoFrameStyle}
                       photoId={photo.id}
                       caption={!displayIsFreeMode ? captionDisplay.text : undefined}
+                      captionStyle={
+                        !displayIsFreeMode && frameHandlesCaption
+                          ? {
+                              fontFamily: captionFontFamily,
+                              fontSize: `${captionFontSizePx}px`,
+                            }
+                          : undefined
+                      }
                       className="h-full w-full"
                       mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
                       disableDecorativeRotation={displayIsFreeMode}
@@ -878,6 +886,14 @@ export default function PhotoOverlay({
                     frameStyle={photoFrameStyle}
                     photoId={photo.id}
                     caption={!displayIsFreeMode ? captionDisplay.text : undefined}
+                    captionStyle={
+                      !displayIsFreeMode && frameHandlesCaption
+                        ? {
+                            fontFamily: captionFontFamily,
+                            fontSize: `${captionFontSizePx}px`,
+                          }
+                        : undefined
+                    }
                     className="h-full w-full"
                     mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
                     disableDecorativeRotation={displayIsFreeMode}
@@ -1037,6 +1053,14 @@ export default function PhotoOverlay({
                       frameStyle={photoFrameStyle}
                       photoId={photo.id}
                       caption={!incomingIsFreeMode ? captionDisplay.text : undefined}
+                      captionStyle={
+                        !incomingIsFreeMode && frameHandlesCaption
+                          ? {
+                              fontFamily: incomingCaptionFontFamily,
+                              fontSize: `${incomingCaptionFontSizePx}px`,
+                            }
+                          : undefined
+                      }
                       className="h-full w-full"
                       mediaStyle={{ borderRadius: `${incomingBorderRadiusPx}px` }}
                       disableDecorativeRotation={incomingIsFreeMode}

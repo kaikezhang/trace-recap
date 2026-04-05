@@ -53,9 +53,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import { PHOTO_ANIMATION_LABELS, PHOTO_EXIT_ANIMATION_LABELS, resolvePhotoStyle } from "@/lib/photoAnimation";
+import {
+  BLOOM_ENTER_DURATION_SEC,
+  PHOTO_ANIMATION_LABELS,
+  PHOTO_EXIT_ANIMATION_LABELS,
+  resolvePhotoStyle,
+} from "@/lib/photoAnimation";
 import { SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
-import { computeAutoLayout, computeTemplateLayout, computedRectsToFreeTransforms, type PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
+import { computePhotoLayout, computedRectsToFreeTransforms, type PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import { CAPTION_FONT_OPTIONS, DEFAULT_CAPTION_FONT_FAMILY } from "@/lib/constants";
 import { getPhotoFrameRotation } from "@/lib/frameStyles";
 import { useMap } from "./MapContext";
@@ -338,28 +343,34 @@ function SortablePhotoThumbnail({
 function PreviewWithMapBackground({
   mapSnapshot,
   previewContainerStyle,
+  previewContentStyle,
   children,
 }: {
   mapSnapshot: string | null;
   previewContainerStyle: React.CSSProperties;
+  previewContentStyle: React.CSSProperties;
   children: React.ReactNode;
 }) {
   return (
     <div
-      className="relative"
+      className="relative overflow-hidden rounded-xl"
       style={previewContainerStyle}
     >
-      {/* Background layer with rounded corners and clipping */}
       <div
-        className="absolute inset-0 rounded-xl overflow-hidden"
-        style={{
-          backgroundImage: mapSnapshot ? `url(${mapSnapshot})` : undefined,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundColor: mapSnapshot ? undefined : "rgba(0,0,0,0.3)",
-        }}
-      />
-      {children}
+        className="absolute left-0 top-0"
+        style={previewContentStyle}
+      >
+        <div
+          className="absolute inset-0 rounded-xl overflow-hidden"
+          style={{
+            backgroundImage: mapSnapshot ? `url(${mapSnapshot})` : undefined,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundColor: mapSnapshot ? undefined : "rgba(0,0,0,0.3)",
+          }}
+        />
+        {children}
+      </div>
     </div>
   );
 }
@@ -722,11 +733,12 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   );
 
   const activeTemplate: LayoutTemplateType | "auto" =
-    layout.mode === "manual" && layout.template ? layout.template : "auto";
+    layout.mode !== "free" && layout.template ? layout.template : "auto";
   const photoOrder = layout.order ?? location.photos.map((p) => p.id);
 
   // Capture map snapshot once when editor opens (wait for full render)
   const [mapSnapshot, setMapSnapshot] = useState<string | null>(null);
+  const [capturedMapSize, setCapturedMapSize] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
     if (!map) return;
@@ -737,7 +749,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       requestAnimationFrame(() => {
         if (cancelled) return;
         try {
-          setMapSnapshot(map.getCanvas().toDataURL("image/jpeg", 0.8));
+          const canvas = map.getCanvas();
+          setMapSnapshot(canvas.toDataURL("image/jpeg", 0.8));
+          setCapturedMapSize({ width: canvas.clientWidth, height: canvas.clientHeight });
         } catch {
           // Canvas tainted or not ready — fall back to dark background
         }
@@ -745,17 +759,16 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     };
 
     if (map.isStyleLoaded() && map.loaded()) {
-      // Map is already fully rendered — capture immediately
       capture();
-    } else {
-      // Map is still loading or rendering — capture once it settles
-      map.once("idle", capture);
     }
+
+    map.once("idle", capture);
 
     return () => {
       cancelled = true;
+      map.off("idle", capture);
     };
-  }, [map]);
+  }, [location.coordinates, map]);
 
   // Measure whichever preview panel is visible (mobile or desktop)
   const mobilePreviewRef = useRef<HTMLDivElement>(null);
@@ -789,13 +802,10 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   // Compute numeric aspect ratio from viewport ratio setting
   // For "free", use the actual map canvas aspect ratio so the preview matches
   const previewAspect = useMemo(() => {
+    if (capturedMapSize && capturedMapSize.width > 0 && capturedMapSize.height > 0) {
+      return capturedMapSize.width / capturedMapSize.height;
+    }
     if (viewportRatio === "free") {
-      if (map) {
-        const canvas = map.getCanvas();
-        if (canvas.width > 0 && canvas.height > 0) {
-          return canvas.width / canvas.height;
-        }
-      }
       // Fallback to panel size if map not available
       if (panelSize && panelSize.width > 0 && panelSize.height > 0) {
         return panelSize.width / panelSize.height;
@@ -804,28 +814,43 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     }
     const [w, h] = viewportRatio.split(":").map(Number);
     return w / h;
-  }, [viewportRatio, panelSize, map]);
+  }, [capturedMapSize, panelSize, viewportRatio]);
 
-  const previewPixelSize = useMemo(() => {
+  const previewSourceSize = useMemo(() => {
+    if (capturedMapSize && capturedMapSize.width > 0 && capturedMapSize.height > 0) {
+      return capturedMapSize;
+    }
     if (!panelSize) {
       return { width: 0, height: 0 };
     }
 
-    // Always fit to viewport aspect ratio (including free mode) for WYSIWYG fidelity
     const { width: pw, height: ph } = panelSize;
     const targetRatio = previewAspect;
     const panelRatio = pw / ph;
 
-    let w: number, h: number;
     if (targetRatio > panelRatio) {
-      w = pw;
-      h = pw / targetRatio;
-    } else {
-      h = ph;
-      w = ph * targetRatio;
+      return { width: pw, height: pw / targetRatio };
     }
-    return { width: w, height: h };
-  }, [panelSize, previewAspect]);
+    return { width: ph * targetRatio, height: ph };
+  }, [capturedMapSize, panelSize, previewAspect]);
+
+  const previewScale = useMemo(() => {
+    if (!panelSize || previewSourceSize.width <= 0 || previewSourceSize.height <= 0) {
+      return 1;
+    }
+    return Math.min(
+      panelSize.width / previewSourceSize.width,
+      panelSize.height / previewSourceSize.height,
+    );
+  }, [panelSize, previewSourceSize.height, previewSourceSize.width]);
+
+  const previewPixelSize = useMemo(
+    () => ({
+      width: previewSourceSize.width * previewScale,
+      height: previewSourceSize.height * previewScale,
+    }),
+    [previewScale, previewSourceSize.height, previewSourceSize.width],
+  );
 
   // Compute fitted preview container style — always preserve aspect ratio for WYSIWYG
   const previewContainerStyle = useMemo<React.CSSProperties>(() => {
@@ -837,6 +862,20 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
     return { width: `${pw}px`, height: `${ph}px` };
   }, [previewPixelSize.height, previewPixelSize.width]);
+  const previewContentStyle = useMemo<React.CSSProperties>(() => {
+    const pw = previewSourceSize.width;
+    const ph = previewSourceSize.height;
+    if (!pw || !ph) {
+      return { width: "100%", height: "100%" };
+    }
+
+    return {
+      width: `${pw}px`,
+      height: `${ph}px`,
+      transform: previewScale === 1 ? undefined : `scale(${previewScale})`,
+      transformOrigin: "top left",
+    };
+  }, [previewScale, previewSourceSize.height, previewSourceSize.width]);
 
   const orderedPhotos = useMemo(
     () => getOrderedPhotos(location.photos, photoOrder),
@@ -849,39 +888,15 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   );
   // Use the same 95%×88% inset dimensions that PhotoOverlay measures internally,
   // so drag targets align with the actual photo positions.
-  const insetW = previewPixelSize.width * 0.95;
-  const insetH = previewPixelSize.height * 0.88;
+  const insetW = previewSourceSize.width * 0.95;
+  const insetH = previewSourceSize.height * 0.88;
   const computedRects = useMemo(() => {
     if (!insetW || !insetH || layoutMetas.length === 0) {
       return [];
     }
 
-    const containerAspect = insetW / insetH;
-    const gapPx = layout.gap ?? 8;
-
-    if (layout.mode === "manual" && layout.template) {
-      return computeTemplateLayout(
-        layoutMetas,
-        containerAspect,
-        layout.template,
-        gapPx,
-        insetW,
-        layout.customProportions,
-        layout.layoutSeed,
-      );
-    }
-
-    return computeAutoLayout(layoutMetas, containerAspect, gapPx, insetW);
-  }, [
-    layout.customProportions,
-    layout.gap,
-    layout.layoutSeed,
-    layout.mode,
-    layout.template,
-    layoutMetas,
-    insetH,
-    insetW,
-  ]);
+    return computePhotoLayout(layoutMetas, insetW, insetH, layout, viewportRatio);
+  }, [insetH, insetW, layout, layoutMetas, viewportRatio]);
   const fallbackFreeTransforms = useMemo(
     () => computedRectsToFreeTransforms(orderedPhotos, computedRects, {
       containerWidthPx: insetW,
@@ -951,6 +966,20 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     const segmentIndex = segments.findIndex((segment) => segment.toId === location.id);
     return segmentIndex >= 0 ? segmentColors[segmentIndex] ?? "#ffffff" : "#ffffff";
   }, [location.id, moodColorsEnabled, segmentColors, segments]);
+  const previewBloomOrigin = useMemo(() => {
+    if (activePhotoStyle !== "bloom") {
+      return null;
+    }
+
+    if (previewSourceSize.width <= 0 || previewSourceSize.height <= 0) {
+      return null;
+    }
+
+    return {
+      x: previewSourceSize.width * 0.5,
+      y: previewSourceSize.height * 0.78,
+    };
+  }, [activePhotoStyle, previewSourceSize.height, previewSourceSize.width]);
 
   const sceneTransitionOptions = useMemo(
     () => [
@@ -1201,8 +1230,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const borderRadius = layout.borderRadius ?? 8;
 
   // FreeCanvas needs the same 95%×88% inset that PhotoOverlay uses
-  const freeCanvasInsetW = Math.round(previewPixelSize.width * 0.95);
-  const freeCanvasInsetH = Math.round(previewPixelSize.height * 0.88);
+  const freeCanvasInsetW = Math.round(previewSourceSize.width * 0.95);
+  const freeCanvasInsetH = Math.round(previewSourceSize.height * 0.88);
 
   const layoutPreviewNode = (
     layout.mode === "free" ? (
@@ -1233,6 +1262,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           originCoordinates={location.coordinates}
           portalAccentColor={portalAccentColor}
           portalProgressOverride={1}
+          bloomOrigin={previewBloomOrigin}
+          bloomElapsedTime={activePhotoStyle === "bloom" ? BLOOM_ENTER_DURATION_SEC : 0}
         />
         <div className="absolute inset-0 z-30">
           {effectiveFreeTransforms.map((transform) => {
@@ -1342,7 +1373,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
           {/* Preview area — takes up remaining space above controls */}
           <div ref={mobilePreviewRef} className="flex-1 min-h-0 flex items-center justify-center p-4 bg-gray-950/5">
-            <PreviewWithMapBackground mapSnapshot={mapSnapshot} previewContainerStyle={previewContainerStyle}>
+            <PreviewWithMapBackground
+              mapSnapshot={mapSnapshot}
+              previewContainerStyle={previewContainerStyle}
+              previewContentStyle={previewContentStyle}
+            >
               {layoutPreviewNode}
             </PreviewWithMapBackground>
           </div>
@@ -1602,7 +1637,11 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   </button>
                 </div>
               ) : null}
-              <PreviewWithMapBackground mapSnapshot={mapSnapshot} previewContainerStyle={previewContainerStyle}>
+              <PreviewWithMapBackground
+                mapSnapshot={mapSnapshot}
+                previewContainerStyle={previewContainerStyle}
+                previewContentStyle={previewContentStyle}
+              >
                 {layoutPreviewNode}
               </PreviewWithMapBackground>
             </div>

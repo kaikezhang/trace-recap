@@ -42,6 +42,25 @@ const MODE_LINE_STYLES: Record<
   bicycle: { color: "#14b8a6", dasharray: [3, 3] },
 };
 
+const FALLBACK_MAP_STYLE: mapboxgl.StyleSpecification = {
+  version: 8,
+  sources: {
+    osm: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors",
+    },
+  },
+  layers: [
+    {
+      id: "osm",
+      type: "raster",
+      source: "osm",
+    },
+  ],
+};
+
 /** Resolve the line color for a segment, considering mood colors */
 function getSegmentColor(
   segIndex: number,
@@ -88,7 +107,7 @@ export default memo(function MapCanvas() {
     const opts = getDefaultMapOptions();
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: opts.style,
+      style: MAPBOX_TOKEN ? opts.style : FALLBACK_MAP_STYLE,
       center: opts.center,
       zoom: opts.zoom,
       preserveDrawingBuffer: true, // Required for canvas.toBlob() in video export
@@ -468,6 +487,10 @@ export default memo(function MapCanvas() {
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
+
+    if (!MAPBOX_TOKEN) {
+      return;
+    }
 
     const styleUrl = MAP_STYLES[mapStyle];
     map.setStyle(styleUrl);
