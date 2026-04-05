@@ -1,5 +1,13 @@
 import type { AspectRatio, FreePhotoTransform, LayoutTemplate, PhotoLayout as LayoutConfig } from "@/types";
 
+/**
+ * Reference width for gap normalization.
+ * Gap is always computed as gapPx / GAP_REFERENCE_WIDTH so layout proportions
+ * are identical regardless of the actual container pixel size (critical for
+ * WYSIWYG fidelity between the small editor preview and full-size playback).
+ */
+const GAP_REFERENCE_WIDTH = 1000;
+
 export interface PhotoRect {
   /** All values as fractions of container (0-1) */
   x: number;
@@ -528,8 +536,8 @@ export function computeAutoLayout(
   const n = photos.length;
   if (n === 0) return [];
 
-  // Gap as fraction of container width
-  const gap = gapPx / containerWidthPx;
+  // Gap as fraction of reference width (resolution-independent for WYSIWYG)
+  const gap = gapPx / GAP_REFERENCE_WIDTH;
   let rects: PhotoRect[];
 
   switch (n) {
@@ -590,7 +598,7 @@ export function computePhotoLayout(
     containerWidthPx > 0 && containerHeightPx > 0
       ? containerWidthPx / containerHeightPx
       : 16 / 9;
-  const gap = gapPx / widthPx;
+  const gap = gapPx / GAP_REFERENCE_WIDTH;
 
   if (shouldUsePortraitFriendlyLayout(viewportRatio)) {
     return layoutPortraitReadableGallery(photos, containerAspect, gap, layout?.template);
@@ -991,8 +999,7 @@ export function computeTemplateLayout(
   layoutSeed?: number
 ): PhotoRect[] {
   const gapPx = gap ?? 8;
-  const widthPx = containerWidthPx ?? 1000;
-  const g = gapPx / widthPx; // gap as fraction
+  const g = gapPx / GAP_REFERENCE_WIDTH; // gap as fraction (resolution-independent)
 
   switch (template) {
     case "grid":
@@ -1018,7 +1025,7 @@ export function computeTemplateLayout(
     case "magazine":
       return layoutMagazine(photos, containerAspect, g);
     default:
-      return computeAutoLayout(photos, containerAspect, gapPx, widthPx);
+      return computeAutoLayout(photos, containerAspect, gapPx);
   }
 }
 
