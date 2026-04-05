@@ -70,6 +70,16 @@ const TRANSPORT_LABELS: Record<TransportMode, string> = {
   bicycle: "Bike leg",
 };
 
+const TRANSPORT_META_LABELS: Record<TransportMode, string> = {
+  flight: "Flight",
+  car: "Drive",
+  train: "Train",
+  bus: "Bus",
+  ferry: "Ferry",
+  walk: "Walk",
+  bicycle: "Bike",
+};
+
 const TRANSPORT_ACCENTS: Record<TransportMode, string> = {
   flight: "#f97316",
   car: "#a16207",
@@ -370,6 +380,12 @@ export default memo(function LocationCard({
   const coverPhoto = location.photos[0];
   const AccentIcon = !isFirst && transportMode ? TRANSPORT_ICONS[transportMode] : null;
   const transportLabel = !isFirst && transportMode ? TRANSPORT_LABELS[transportMode] : undefined;
+  const transportMetaLabel = !isFirst && transportMode ? TRANSPORT_META_LABELS[transportMode] : undefined;
+  const desktopMetaLabel = location.chapterDate
+    || location.nameZh
+    || (isWaypoint ? "Flexible scenic stop" : "Main destination");
+  const mobileDateLabel = location.chapterDate || `Day ${index + 1}`;
+  const mobilePhotoLabel = `${photoCount} photo${photoCount === 1 ? "" : "s"}`;
 
   const transformValue = CSS.Transform.toString(transform);
   const composedTransform = [
@@ -531,9 +547,9 @@ export default memo(function LocationCard({
         />
 
         <div
-          className={`flex cursor-pointer items-center gap-3 ${
-            isWaypoint ? "p-3 md:p-3.5" : "p-3.5 md:p-4"
-          } max-[420px]:gap-2.5 max-[420px]:p-3`}
+          className={`flex cursor-pointer flex-col gap-2 ${
+            isWaypoint ? "p-3 md:gap-3 md:p-3.5" : "p-3.5 md:gap-3 md:p-4"
+          } md:flex-row md:items-center`}
           onClick={(e) => {
             const target = e.target as HTMLElement;
             if (
@@ -548,130 +564,228 @@ export default memo(function LocationCard({
             onClick?.(index);
           }}
         >
-          <div
-            data-drag-handle
-            className={`touch-target-mobile flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
-              isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
-            } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-xl`}
-            style={{
-              borderColor: brand.colors.warm[200],
-              backgroundColor: isHovered ? "rgba(255,255,255,0.98)" : "rgba(255,251,245,0.92)",
-            }}
-            {...attributes}
-            {...listeners}
-          >
-            <DragGrip />
-          </div>
+          <div className="flex min-w-0 items-center gap-2 md:flex-1 md:gap-3">
+            <div
+              data-drag-handle
+              className={`touch-target-mobile flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
+                isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
+              }`}
+              style={{
+                borderColor: brand.colors.warm[200],
+                backgroundColor: isHovered ? "rgba(255,255,255,0.98)" : "rgba(255,251,245,0.92)",
+              }}
+              {...attributes}
+              {...listeners}
+            >
+              <DragGrip />
+            </div>
 
-          <div
-            className={`flex shrink-0 items-center justify-center font-semibold text-white ${
-              isWaypoint ? "h-8 w-8 rounded-[14px] text-xs" : "h-10 w-10 rounded-[16px] text-sm"
-            } max-[420px]:h-8 max-[420px]:w-8 max-[420px]:rounded-[14px] max-[420px]:text-xs`}
-            style={{
-              background: isWaypoint
-                ? `linear-gradient(160deg, ${brand.colors.warm[500]} 0%, ${brand.colors.warm[400]} 100%)`
-                : `linear-gradient(160deg, ${brand.colors.primary[500]} 0%, ${brand.colors.primary[400]} 100%)`,
-              boxShadow: brand.shadows.sm,
-            }}
-          >
-            {location.chapterEmoji || index + 1}
-          </div>
+            <div
+              className={`flex shrink-0 items-center justify-center font-semibold text-white ${
+                isWaypoint
+                  ? "h-8 w-8 rounded-[14px] text-xs"
+                  : "h-8 w-8 rounded-[14px] text-xs md:h-10 md:w-10 md:rounded-[16px] md:text-sm"
+              }`}
+              style={{
+                background: isWaypoint
+                  ? `linear-gradient(160deg, ${brand.colors.warm[500]} 0%, ${brand.colors.warm[400]} 100%)`
+                  : `linear-gradient(160deg, ${brand.colors.primary[500]} 0%, ${brand.colors.primary[400]} 100%)`,
+                boxShadow: brand.shadows.sm,
+              }}
+            >
+              {location.chapterEmoji || index + 1}
+            </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start gap-2">
-              <div className="relative min-w-0 flex-1">
-                {isNameEditing ? (
-                  <Input
-                    ref={nameInputRef}
-                    value={nameDraft}
-                    onChange={(e) => setNameDraft(e.target.value)}
-                    onBlur={saveNameEdit}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        saveNameEdit();
-                      } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        stopNameEditing();
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    placeholder="English name"
-                    data-no-seek
-                    className={`h-8 border-[#fdba74] bg-white/92 px-2.5 py-0 text-sm font-semibold ${
-                      isWaypoint ? "text-sm" : "text-[15px]"
-                    }`}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    data-no-seek
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startNameEditing();
-                    }}
-                    className="inline-flex max-w-full items-center rounded-md text-left hover:underline"
-                    title="Tap to edit stop name"
-                  >
-                    <span
-                      className={`truncate border-b border-dashed border-transparent font-semibold transition-colors hover:border-current ${
-                        isWaypoint ? "text-sm" : "text-[15px]"
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start gap-2">
+                <div className="relative min-w-0 flex-1">
+                  {isNameEditing ? (
+                    <Input
+                      ref={nameInputRef}
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onBlur={saveNameEdit}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          saveNameEdit();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          stopNameEditing();
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="English name"
+                      data-no-seek
+                      className={`h-8 border-[#fdba74] bg-white/92 px-2.5 py-0 text-sm font-semibold ${
+                        isWaypoint ? "text-sm" : "md:text-[15px]"
                       }`}
-                      style={{ color: brand.colors.warm[900], cursor: "text" }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      data-no-seek
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startNameEditing();
+                      }}
+                      className="inline-flex max-w-full items-center rounded-md text-left hover:underline"
+                      title="Tap to edit stop name"
                     >
-                      {location.name || (
-                        <span className="italic" style={{ color: brand.colors.warm[400] }}>
-                          English name
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                )}
+                      <span
+                        className={`truncate border-b border-dashed border-transparent text-sm font-semibold transition-colors hover:border-current ${
+                          isWaypoint ? "" : "md:text-[15px]"
+                        }`}
+                        style={{ color: brand.colors.warm[900], cursor: "text" }}
+                      >
+                        {location.name || (
+                          <span className="italic" style={{ color: brand.colors.warm[400] }}>
+                            English name
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  )}
 
-                {showEditHint && (
-                  <OnboardingHint
-                    message="Tap a stop name to edit it"
-                    onDismiss={dismissEditHint}
-                    interactive={false}
-                    className="pointer-events-none left-0 top-[calc(100%+0.5rem)] w-56"
-                    arrowClassName="left-5 -top-[7px] border-b-0 border-r-0"
-                    dismissLabel="This hides automatically"
-                  />
+                  {showEditHint && (
+                    <OnboardingHint
+                      message="Tap a stop name to edit it"
+                      onDismiss={dismissEditHint}
+                      interactive={false}
+                      className="pointer-events-none left-0 top-[calc(100%+0.5rem)] w-56"
+                      arrowClassName="left-5 -top-[7px] border-b-0 border-r-0"
+                      dismissLabel="This hides automatically"
+                    />
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  data-no-seek
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startNameEditing();
+                  }}
+                  disabled={isNameEditing}
+                  className="touch-target-mobile hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60 md:inline-flex"
+                  style={{
+                    borderColor: brand.colors.primary[200],
+                    backgroundColor: "rgba(255,255,255,0.8)",
+                    color: brand.colors.primary[600],
+                  }}
+                  aria-label="Edit stop name"
+                  title="Edit stop name"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+
+                {AccentIcon && (
+                  <div
+                    className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-full md:inline-flex"
+                    style={{ backgroundColor: `${accentColor}18` }}
+                    title={transportLabel}
+                  >
+                    <AccentIcon
+                      className="h-3.5 w-3.5"
+                      style={{ color: accentColor }}
+                    />
+                  </div>
+                )}
+                {isWaypoint && (
+                  <span
+                    className="hidden shrink-0 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] md:inline-flex"
+                    style={{
+                      color: brand.colors.warm[600],
+                      backgroundColor: brand.colors.warm[100],
+                    }}
+                  >
+                    Stopover
+                  </span>
                 )}
               </div>
 
-              <button
-                type="button"
-                data-no-seek
-                onClick={(e) => {
-                  e.stopPropagation();
-                  startNameEditing();
-                }}
-                disabled={isNameEditing}
-                className="touch-target-mobile inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60"
-                style={{
-                  borderColor: brand.colors.primary[200],
-                  backgroundColor: "rgba(255,255,255,0.8)",
-                  color: brand.colors.primary[600],
-                }}
-                aria-label="Edit stop name"
-                title="Edit stop name"
+              <div
+                className="mt-1 hidden items-center gap-2 overflow-hidden text-xs md:flex"
+                style={{ color: brand.colors.warm[500] }}
               >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
+                <span className="truncate">{desktopMetaLabel}</span>
+                <span className="shrink-0">•</span>
+                <span className="truncate">
+                  {photoCount > 0 ? mobilePhotoLabel : "No photos yet"}
+                </span>
+              </div>
 
-              {AccentIcon && (
-                <div
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                  style={{ backgroundColor: `${accentColor}18` }}
-                  title={transportLabel}
+              {location.chapterNote && (
+                <p
+                  className="mt-1 hidden truncate text-xs md:block"
+                  style={{ color: brand.colors.warm[600] }}
                 >
-                  <AccentIcon
-                    className="h-3.5 w-3.5"
-                    style={{ color: accentColor }}
+                  {location.chapterNote}
+                </p>
+              )}
+            </div>
+
+            <div
+              className={`relative shrink-0 overflow-hidden ${
+                isWaypoint
+                  ? "h-11 w-11 rounded-[14px] md:h-12 md:w-12 md:rounded-[16px]"
+                  : "h-11 w-11 rounded-[14px] md:h-14 md:w-14 md:rounded-[18px]"
+              }`}
+              style={{
+                boxShadow: brand.shadows.sm,
+                ...(coverPhoto
+                  ? {}
+                  : {
+                      border: `1px solid ${brand.colors.warm[200]}`,
+                      background: `linear-gradient(160deg, ${brand.colors.sand[100]} 0%, ${brand.colors.primary[50]} 100%)`,
+                    }),
+              }}
+            >
+              {coverPhoto ? (
+                <>
+                  <img
+                    src={coverPhoto.url}
+                    alt={location.name ? `${location.name} photo` : "Location photo"}
+                    className="h-full w-full object-cover"
+                  />
+                  {photoCount > 1 && (
+                    <div
+                      className="absolute bottom-1 right-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-white"
+                      style={{ backgroundColor: "rgba(28,25,23,0.72)" }}
+                    >
+                      +{photoCount - 1}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <ImageIcon
+                    className="h-4 w-4"
+                    style={{ color: brand.colors.warm[400] }}
                   />
                 </div>
               )}
-              {isWaypoint && (
+            </div>
+          </div>
+
+          <div
+            className="flex items-center gap-2 text-xs md:hidden"
+            style={{ color: brand.colors.warm[500] }}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              {AccentIcon ? (
+                <>
+                  <span
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+                    style={{ backgroundColor: `${accentColor}18` }}
+                    title={transportLabel}
+                  >
+                    <AccentIcon className="h-3 w-3" style={{ color: accentColor }} />
+                  </span>
+                  <span className="shrink-0 font-medium" style={{ color: brand.colors.warm[700] }}>
+                    {transportMetaLabel}
+                  </span>
+                </>
+              ) : isWaypoint ? (
                 <span
                   className="shrink-0 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
                   style={{
@@ -681,75 +795,47 @@ export default memo(function LocationCard({
                 >
                   Stopover
                 </span>
-              )}
-            </div>
-
-            <div
-              className="mt-1 flex items-center gap-2 overflow-hidden text-xs"
-              style={{ color: brand.colors.warm[500] }}
-            >
-              <span className="truncate">
-                {location.chapterDate || location.nameZh || (isWaypoint ? "Flexible scenic stop" : "Main destination")}
-              </span>
+              ) : null}
+              <span className="truncate">{mobileDateLabel}</span>
               <span className="shrink-0">•</span>
-              <span className="truncate">
-                {photoCount > 0 ? `${photoCount} photo${photoCount === 1 ? "" : "s"}` : "No photos yet"}
-              </span>
+              <span className="truncate">{mobilePhotoLabel}</span>
             </div>
-
-            {location.chapterNote && (
-              <p
-                className="mt-1 truncate text-xs"
-                style={{ color: brand.colors.warm[600] }}
-              >
-                {location.chapterNote}
-              </p>
-            )}
-          </div>
-
-          <div
-            className={`relative shrink-0 overflow-hidden ${
-              isWaypoint ? "h-12 w-12 rounded-[16px]" : "h-14 w-14 rounded-[18px]"
-            } max-[420px]:h-11 max-[420px]:w-11 max-[420px]:rounded-[14px]`}
-            style={{
-              boxShadow: brand.shadows.sm,
-              ...(coverPhoto
-                ? {}
-                : {
-                    border: `1px solid ${brand.colors.warm[200]}`,
-                    background: `linear-gradient(160deg, ${brand.colors.sand[100]} 0%, ${brand.colors.primary[50]} 100%)`,
-                  }),
-            }}
-          >
-            {coverPhoto ? (
-              <>
-                <img
-                  src={coverPhoto.url}
-                  alt={location.name ? `${location.name} photo` : "Location photo"}
-                  className="h-full w-full object-cover"
-                />
-                {photoCount > 1 && (
-                  <div
-                    className="absolute bottom-1 right-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-white"
-                    style={{ backgroundColor: "rgba(28,25,23,0.72)" }}
-                  >
-                    +{photoCount - 1}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <ImageIcon
-                  className="h-4 w-4"
-                  style={{ color: brand.colors.warm[400] }}
-                />
-              </div>
-            )}
+            <div className="flex-1" />
+            <button
+              type="button"
+              data-no-seek
+              onClick={(e) => {
+                e.stopPropagation();
+                startNameEditing();
+              }}
+              disabled={isNameEditing}
+              className="touch-target-mobile inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-[transform,background-color] duration-150 active:scale-95 disabled:cursor-default disabled:opacity-60"
+              style={{
+                borderColor: brand.colors.primary[200],
+                backgroundColor: "rgba(255,255,255,0.8)",
+                color: brand.colors.primary[600],
+              }}
+              aria-label="Edit stop name"
+              title="Edit stop name"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              data-delete-btn
+              className="touch-target-mobile inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-[transform,background-color] duration-150 active:scale-95 hover:bg-[#fff1f2]"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRemove();
+              }}
+              aria-label="Remove location"
+            >
+              <X className="h-4 w-4" style={{ color: brand.colors.warm[500] }} />
+            </button>
           </div>
 
           <button
             data-delete-btn
-            className="touch-target-mobile flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2]"
+            className="touch-target-mobile hidden h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2] md:flex"
             onClick={(e) => {
               e.stopPropagation();
               handleRemove();
@@ -770,7 +856,7 @@ export default memo(function LocationCard({
               className="overflow-hidden"
             >
               <div
-                className={`space-y-4 border-t ${
+                className={`space-y-3 border-t md:space-y-4 ${
                   isWaypoint ? "px-3.5 pb-3.5 pt-3.5" : "px-4 pb-4 pt-4"
                 }`}
                 style={{
@@ -778,19 +864,23 @@ export default memo(function LocationCard({
                   background: `linear-gradient(180deg, rgba(255,251,245,0.94) 0%, rgba(255,247,237,0.55) 100%)`,
                 }}
               >
-                <div className="flex flex-col gap-1.5">
-                  <EditableName
-                    value={location.name}
-                    placeholder="English name"
-                    onSave={(value) => updateLocation(locationId, { name: value })}
-                    className="block text-sm font-semibold"
-                  />
-                  <EditableName
-                    value={location.nameZh ?? ""}
-                    placeholder="中文名"
-                    onSave={(value) => updateLocation(locationId, { nameZh: value || undefined })}
-                    className="block text-xs"
-                  />
+                <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2 md:flex md:flex-col md:gap-1.5">
+                  <div className="min-w-0">
+                    <EditableName
+                      value={location.name}
+                      placeholder="English name"
+                      onSave={(value) => updateLocation(locationId, { name: value })}
+                      className="block truncate text-sm font-semibold"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <EditableName
+                      value={location.nameZh ?? ""}
+                      placeholder="中文名"
+                      onSave={(value) => updateLocation(locationId, { nameZh: value || undefined })}
+                      className="block truncate text-xs"
+                    />
+                  </div>
                 </div>
 
                 {!isFirst && (
@@ -817,7 +907,7 @@ export default memo(function LocationCard({
                 )}
 
                 {!isWaypoint && (
-                  <div className="grid gap-3">
+                  <div className="grid gap-2 md:gap-3">
                     <div
                       className="rounded-2xl border px-3 py-3"
                       style={{
@@ -860,7 +950,7 @@ export default memo(function LocationCard({
                       />
                     </div>
 
-                    <div className="grid grid-cols-[1fr_auto] gap-3">
+                    <div className="grid grid-cols-[1fr_auto] gap-2 md:gap-3">
                       <div
                         className="rounded-2xl border px-3 py-3"
                         style={{

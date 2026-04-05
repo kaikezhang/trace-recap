@@ -67,7 +67,7 @@ export default function BottomSheet({
   const collapsedHeight = 60;
   const expandedHeaderHeight = 78;
   const maxSheetHeight = viewportHeight > 0 ? viewportHeight * 0.85 : 0;
-  const halfVisibleHeight = viewportHeight > 0 ? viewportHeight * 0.5 : 0;
+  const halfVisibleHeight = viewportHeight > 0 ? viewportHeight * 0.55 : 0;
   const collapsedOffset = Math.max(maxSheetHeight - collapsedHeight, 0);
   const halfOffset = Math.max(maxSheetHeight - halfVisibleHeight, 0);
   const stateOffsets = {
