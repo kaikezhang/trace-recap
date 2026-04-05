@@ -471,7 +471,7 @@ export default memo(function RouteList({
                     className="text-[11px] font-semibold uppercase tracking-[0.2em]"
                     style={{ color: brand.colors.warm[500] }}
                   >
-                    Stopovers
+                    Pass-throughs
                   </span>
                   <span
                     className="rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]"
@@ -501,7 +501,7 @@ export default memo(function RouteList({
                   className="mt-1 text-sm"
                   style={{ color: brand.colors.warm[700] }}
                 >
-                  {waypointIndexes.length === 1 ? "A scenic stop" : `${waypointIndexes.length} scenic pauses`} before {nextStop.name || "the next destination"}
+                  {waypointIndexes.length === 1 ? "A pass-through" : `${waypointIndexes.length} pass-throughs`} before {nextStop.name || "the next destination"}
                 </p>
               </div>
 
@@ -525,7 +525,7 @@ export default memo(function RouteList({
                         <TimelineSegmentCard
                           segment={waypointSegment}
                           fromLabel={locations[waypointIndex - 1]?.name || "Previous stop"}
-                          toLabel={waypoint.name || "Stopover"}
+                          toLabel={waypoint.name || "Pass-through"}
                           distanceKm={getSegmentDistance(waypointSegment)}
                           expanded={expandedSegments[waypointSegment.id] ?? false}
                           onToggle={() => toggleSegmentExpansion(waypointSegment.id)}
@@ -561,7 +561,7 @@ export default memo(function RouteList({
                       {waypointListIndex === waypointIndexes.length - 1 && nextStopIndex > waypointIndex && segments[nextStopIndex - 1] && (
                         <TimelineSegmentCard
                           segment={segments[nextStopIndex - 1]}
-                          fromLabel={waypoint.name || "Stopover"}
+                          fromLabel={waypoint.name || "Pass-through"}
                           toLabel={nextStop.name || "Destination"}
                           distanceKm={getSegmentDistance(segments[nextStopIndex - 1])}
                           expanded={expandedSegments[segments[nextStopIndex - 1].id] ?? false}
