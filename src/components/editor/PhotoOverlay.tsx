@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, type Transition, type TargetAndTransition } from "framer-motion";
-import { computeAutoLayout, computeTemplateLayout } from "@/lib/photoLayout";
+import { computePhotoLayout } from "@/lib/photoLayout";
 import {
   resolvePhotoAnimations,
   resolvePhotoStyle,
@@ -440,6 +440,7 @@ export default function PhotoOverlay({
   const rects = (() => {
     if (!hasDisplayPhotos) return [];
     const width = containerSize.w || 1000;
+    const height = containerSize.h || 0;
     if (displayLayout?.mode === "free" && displayLayout.freeTransforms?.length) {
       return orderedMetas.reduce<PhotoRect[]>((acc, meta) => {
           const transform = displayFreeTransformMap.get(meta.id);
@@ -455,23 +456,14 @@ export default function PhotoOverlay({
           return acc;
         }, []);
     }
-    if (displayLayout?.mode === "manual" && displayLayout.template) {
-      return computeTemplateLayout(
-        layoutMetas,
-        containerAspect,
-        displayLayout.template,
-        gapPx,
-        width,
-        displayLayout.customProportions,
-        displayLayout.layoutSeed,
-      );
-    }
-    return computeAutoLayout(layoutMetas, containerAspect, gapPx, width);
+    return computePhotoLayout(layoutMetas, width, height, displayLayout, viewportRatio);
   })();
 
   // Fix #3: Override with radial fan layout for bloom style
   const bloomFanRects = (() => {
-    if (!isBloom || !bloomOrigin || !hasDisplayPhotos || containerSize.w <= 0) return null;
+    if (!isBloom || viewportRatio === "9:16" || !bloomOrigin || !hasDisplayPhotos || containerSize.w <= 0) {
+      return null;
+    }
     const overlayOffX = containerRef.current?.offsetLeft ?? 0;
     const overlayOffY = containerRef.current?.offsetTop ?? 0;
     const originFracX = (bloomOrigin.x - overlayOffX) / containerSize.w;
@@ -571,6 +563,7 @@ export default function PhotoOverlay({
   const incomingRects = useMemo(() => {
     if (!hasIncomingPhotos) return [];
     const width = containerSize.w || 1000;
+    const height = containerSize.h || 0;
     if (incomingPhotoLayout?.mode === "free" && incomingPhotoLayout.freeTransforms?.length) {
       return incomingOrderedMetas.reduce<PhotoRect[]>((acc, meta) => {
           const transform = incomingFreeTransformMap.get(meta.id);
@@ -586,19 +579,8 @@ export default function PhotoOverlay({
           return acc;
         }, []);
     }
-    if (incomingPhotoLayout?.mode === "manual" && incomingPhotoLayout.template) {
-      return computeTemplateLayout(
-        incomingLayoutMetas,
-        containerAspect,
-        incomingPhotoLayout.template,
-        incomingGapPx,
-        width,
-        incomingPhotoLayout.customProportions,
-        incomingPhotoLayout.layoutSeed,
-      );
-    }
-    return computeAutoLayout(incomingLayoutMetas, containerAspect, incomingGapPx, width);
-  }, [hasIncomingPhotos, incomingLayoutMetas, containerAspect, incomingGapPx, containerSize.w, incomingOrderedMetas, incomingPhotoLayout, incomingFreeTransformMap]);
+    return computePhotoLayout(incomingLayoutMetas, width, height, incomingPhotoLayout, viewportRatio);
+  }, [hasIncomingPhotos, incomingLayoutMetas, containerSize.w, containerSize.h, incomingOrderedMetas, incomingPhotoLayout, incomingFreeTransformMap, viewportRatio]);
 
   const transitionIncomingStyle = useMemo<React.CSSProperties>(() => {
     if (!isActiveTransition || sceneTransitionProgress === undefined) return {};

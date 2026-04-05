@@ -1,4 +1,4 @@
-import type { FreePhotoTransform, LayoutTemplate } from "@/types";
+import type { AspectRatio, FreePhotoTransform, LayoutTemplate, PhotoLayout as LayoutConfig } from "@/types";
 
 export interface PhotoRect {
   /** All values as fractions of container (0-1) */
@@ -202,6 +202,10 @@ function constrainAutoLayoutForCompactViewport(
   return scaleRectsToInnerBounds(rects, gap + extraGap);
 }
 
+function shouldUsePortraitFriendlyLayout(viewportRatio?: AspectRatio): boolean {
+  return viewportRatio === "9:16";
+}
+
 function seedFromPhotos(photos: PhotoMeta[]): number {
   let hash = 2166136261;
   for (const photo of photos) {
@@ -243,6 +247,73 @@ function layoutRectsWithinSlot(
     width: (rect.width / innerWidth) * slot.width,
     height: (rect.height / innerHeight) * slot.height,
   }));
+}
+
+function getPortraitHeroHeight(innerHeight: number, photoCount: number): number {
+  if (photoCount <= 3) return innerHeight * 0.58;
+  if (photoCount <= 5) return innerHeight * 0.48;
+  if (photoCount <= 7) return innerHeight * 0.42;
+  return innerHeight * 0.36;
+}
+
+function layoutPortraitReadableGallery(
+  photos: PhotoMeta[],
+  containerAspect: number,
+  gap: number
+): PhotoRect[] {
+  const n = photos.length;
+  if (n === 0) return [];
+  if (n === 1) return layoutOne(photos, containerAspect, gap);
+
+  const innerWidth = 1 - gap * 2;
+  const innerHeight = 1 - gap * 2;
+
+  if (n === 2) {
+    const columnWidth = (innerWidth - gap) / 2;
+    return fillSlots(
+      photos,
+      [
+        { x: gap, y: gap, width: columnWidth, height: innerHeight },
+        { x: gap + columnWidth + gap, y: gap, width: columnWidth, height: innerHeight },
+      ],
+      containerAspect
+    );
+  }
+
+  const heroHeight = getPortraitHeroHeight(innerHeight, n);
+  const stripHeight = Math.max(0, innerHeight - heroHeight - gap);
+  const heroSlot: LayoutSlot = { x: gap, y: gap, width: innerWidth, height: heroHeight };
+  const stripSlot: LayoutSlot = {
+    x: gap,
+    y: gap + heroHeight + gap,
+    width: innerWidth,
+    height: stripHeight,
+  };
+
+  if (stripSlot.height <= 0) {
+    return [fitPhotoToSlot(heroSlot, photos[0], containerAspect)];
+  }
+
+  const remainingPhotos = photos.slice(1);
+  const remainingRows: number[][] = [];
+  for (let index = 0; index < remainingPhotos.length; index += 2) {
+    remainingRows.push(
+      index + 1 < remainingPhotos.length ? [index, index + 1] : [index]
+    );
+  }
+
+  const stripAspect = stripSlot.width / Math.max(stripSlot.height, MIN_CONTAINER_ASPECT);
+  const stripGap = gap * 0.75;
+  const stripRects = layoutRectsWithinSlot(
+    layoutRows(remainingPhotos, stripAspect, stripGap, remainingRows),
+    stripSlot,
+    stripGap
+  );
+
+  return [
+    fitPhotoToSlot(heroSlot, photos[0], containerAspect),
+    ...stripRects,
+  ];
 }
 
 function computeJustifiedRows(
@@ -431,6 +502,42 @@ export function computeAutoLayout(
     Math.min(n, 9),
     containerWidthPx
   );
+}
+
+export function computePhotoLayout(
+  photos: PhotoMeta[],
+  containerWidthPx: number,
+  containerHeightPx: number,
+  layout?: Pick<LayoutConfig, "mode" | "template" | "gap" | "customProportions" | "layoutSeed">,
+  viewportRatio?: AspectRatio
+): PhotoRect[] {
+  if (photos.length === 0) return [];
+
+  const gapPx = layout?.gap ?? 8;
+  const widthPx = containerWidthPx > 0 ? containerWidthPx : 1000;
+  const containerAspect =
+    containerWidthPx > 0 && containerHeightPx > 0
+      ? containerWidthPx / containerHeightPx
+      : 16 / 9;
+  const gap = gapPx / widthPx;
+
+  if (shouldUsePortraitFriendlyLayout(viewportRatio)) {
+    return layoutPortraitReadableGallery(photos, containerAspect, gap);
+  }
+
+  if (layout?.mode === "manual" && layout.template) {
+    return computeTemplateLayout(
+      photos,
+      containerAspect,
+      layout.template,
+      gapPx,
+      widthPx,
+      layout.customProportions,
+      layout.layoutSeed
+    );
+  }
+
+  return computeAutoLayout(photos, containerAspect, gapPx, widthPx);
 }
 
 /** 1 photo: fit within the container while preserving the photo aspect. */
