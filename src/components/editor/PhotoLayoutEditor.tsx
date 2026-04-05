@@ -758,11 +758,18 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       });
     };
 
-    if (map.isStyleLoaded() && map.loaded()) {
+    // Navigate to the city's coordinates before capturing, so the
+    // background matches what you'd see during playback ARRIVE.
+    const coords = location.coordinates;
+    if (coords) {
+      map.jumpTo({ center: [coords[0], coords[1]], zoom: 12 });
+      // Wait for tiles to load after jump, then capture
+      map.once("idle", capture);
+    } else if (map.isStyleLoaded() && map.loaded()) {
       capture();
+    } else {
+      map.once("idle", capture);
     }
-
-    map.once("idle", capture);
 
     return () => {
       cancelled = true;
@@ -1036,6 +1043,12 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
 
   useEffect(() => clearExitPreview, [clearExitPreview]);
 
+  const replayEnterPreview = useCallback(() => {
+    clearExitPreview();
+    setPreviewOpacity(1);
+    setPreviewKey((key) => key + 1);
+  }, [clearExitPreview]);
+
   const updateLayout = useCallback(
     (updates: Partial<PhotoLayout>) => {
       const current: PhotoLayout = location.photoLayout ?? { mode: "auto" };
@@ -1086,8 +1099,9 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             : layout.layoutSeed,
         });
       }
+      replayEnterPreview();
     },
-    [effectiveFreeTransforms, layout.layoutSeed, photoFrameStyle, updateLayout]
+    [effectiveFreeTransforms, layout.layoutSeed, photoFrameStyle, replayEnterPreview, updateLayout]
   );
 
   const refreshRandomLayout = useCallback(() => {
@@ -1095,12 +1109,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     useHistoryStore.getState().pushState();
     updateLayout({ layoutSeed: Math.random() });
   }, [isRandomLayoutActive, updateLayout]);
-
-  const replayEnterPreview = useCallback(() => {
-    clearExitPreview();
-    setPreviewOpacity(1);
-    setPreviewKey((key) => key + 1);
-  }, [clearExitPreview]);
 
   const replayExitPreview = useCallback(() => {
     clearExitPreview();
