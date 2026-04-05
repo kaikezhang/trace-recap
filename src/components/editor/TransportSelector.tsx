@@ -226,22 +226,23 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
         {expanded ? (
           <>
             <div className="w-px h-4 bg-border" />
-            <div className="rounded-2xl border bg-card px-2 py-1.5 shadow-sm">
-              <div className="flex items-center gap-1">
+            <div className="rounded-2xl border bg-card px-2 py-2 shadow-sm md:px-2 md:py-1.5">
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 {TRANSPORT_MODES.map((mode) => {
                   const isActive = segment.transportMode === mode.id;
                   const Icon = MODE_ICONS[mode.id];
                   return (
                     <Tooltip key={mode.id}>
                       <TooltipTrigger
-                        className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+                        className={`flex min-h-11 items-center gap-2 rounded-full px-4 py-3 text-sm font-medium transition-colors md:min-h-9 md:px-3 md:py-2 md:text-xs ${
                           isActive
                             ? MODE_COLORS[mode.id]
                             : "text-muted-foreground hover:bg-accent"
                         }`}
                         onClick={() => handleModeChange(mode.id)}
                       >
-                        <Icon className="h-3.5 w-3.5" />
+                        <Icon className="h-5 w-5 md:h-4 md:w-4" />
+                        <span>{mode.label}</span>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
                         <p>{mode.label}</p>
@@ -312,10 +313,12 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
           <>
             <div className="flex-1 h-px bg-border" />
             <button
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors hover:shadow-sm ${activeColor}`}
+              type="button"
+              className={`flex min-h-11 items-center gap-2 rounded-full border px-4 py-3 text-sm font-medium transition-colors hover:shadow-sm md:min-h-9 md:px-3 md:py-2 md:text-xs ${activeColor}`}
               onClick={() => setExpanded(true)}
             >
-              <ActiveIcon className="h-3.5 w-3.5" />
+              <ActiveIcon className="h-5 w-5 md:h-4 md:w-4" />
+              <span>{TRANSPORT_MODES.find((mode) => mode.id === segment.transportMode)?.label}</span>
               {distance !== null && (
                 <span className="tabular-nums">{formatDistance(distance)}</span>
               )}
