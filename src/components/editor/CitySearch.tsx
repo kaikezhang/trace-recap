@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useId, type KeyboardEvent } from "react";
+import { motion } from "framer-motion";
 import { Search, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { brand } from "@/lib/brand";
@@ -265,7 +266,7 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
                   role="option"
                   aria-selected={isActive}
                   className={cn(
-                    "flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-3 text-left first:rounded-t-[22px] last:rounded-b-[22px]",
+                    "touch-target-mobile flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-3 text-left first:rounded-t-[22px] last:rounded-b-[22px]",
                     isActive ? "" : "hover:bg-white/70"
                   )}
                   style={{
@@ -303,9 +304,14 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
           </div>
         )}
         {isLoading && (
-          <p className="mt-1 px-1 text-xs" style={{ color: brand.colors.warm[500] }}>
+          <motion.p
+            className="mt-1 px-1 text-xs"
+            style={{ color: brand.colors.warm[500] }}
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          >
             Searching...
-          </p>
+          </motion.p>
         )}
       </div>
     );
