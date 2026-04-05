@@ -76,7 +76,8 @@ export default function BottomSheet({
     full: 0,
   };
   const currentOffset = stateOffsets[bottomSheetState];
-  const stopsLabel = `${locations.length} ${locations.length === 1 ? "stop" : "stops"}`;
+  const nonWaypointCount = locations.filter((l) => !l.isWaypoint).length;
+  const stopsLabel = `${nonWaypointCount} ${nonWaypointCount === 1 ? "stop" : "stops"}`;
   const totalDistanceKm = segments.reduce((sum, segment) => sum + getSegmentDistanceKm(segment), 0);
   const collapsedSummary = `${stopsLabel} · ${formatCompactDistance(totalDistanceKm)}`;
   const headerHeight = bottomSheetState === "collapsed" ? collapsedHeight : expandedHeaderHeight;
