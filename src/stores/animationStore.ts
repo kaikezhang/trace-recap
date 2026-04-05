@@ -35,10 +35,6 @@ interface AnimationState {
   incomingPhotoLocationId: string | null;
   /** Bearing for wipe direction */
   transitionBearing: number | undefined;
-  /** Screen-space bloom origin for geo-anchored photo bloom */
-  bloomOrigin: { x: number; y: number } | null;
-  /** Elapsed time (seconds) since bloom enter started, driven by engine timeline */
-  bloomElapsedTime: number;
   /** IDs of locations that have been visited (ARRIVE completed) during playback */
   visitedLocationIds: string[];
   /** ID of the location currently arriving at (active chapter pin) */
@@ -66,8 +62,6 @@ interface AnimationState {
   setIncomingPhotos: (photos: Photo[]) => void;
   setIncomingPhotoLocationId: (id: string | null) => void;
   setTransitionBearing: (bearing: number | undefined) => void;
-  setBloomOrigin: (origin: { x: number; y: number } | null) => void;
-  setBloomElapsedTime: (time: number) => void;
   setVisitedLocationIds: (ids: string[]) => void;
   addVisitedLocationId: (id: string) => void;
   setCurrentArrivalLocationId: (id: string | null) => void;
@@ -96,8 +90,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   incomingPhotos: [],
   incomingPhotoLocationId: null,
   transitionBearing: undefined,
-  bloomOrigin: null,
-  bloomElapsedTime: 0,
   visitedLocationIds: [],
   currentArrivalLocationId: null,
   albumCollectingLocationId: null,
@@ -120,8 +112,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setIncomingPhotos: (incomingPhotos) => set({ incomingPhotos }),
   setIncomingPhotoLocationId: (incomingPhotoLocationId) => set({ incomingPhotoLocationId }),
   setTransitionBearing: (transitionBearing) => set({ transitionBearing }),
-  setBloomOrigin: (bloomOrigin) => set({ bloomOrigin }),
-  setBloomElapsedTime: (bloomElapsedTime) => set({ bloomElapsedTime }),
   setVisitedLocationIds: (visitedLocationIds) => set({ visitedLocationIds }),
   addVisitedLocationId: (id) =>
     set((state) => ({
@@ -157,8 +147,6 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       incomingPhotos: [],
       incomingPhotoLocationId: null,
       transitionBearing: undefined,
-      bloomOrigin: null,
-      bloomElapsedTime: 0,
       visitedLocationIds: [],
       currentArrivalLocationId: null,
       albumCollectingLocationId: null,

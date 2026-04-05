@@ -23,8 +23,6 @@ interface MapStageProps {
   currentCityEmoji?: string | null;
   editingLocation: Location | null;
   hasSegments: boolean;
-  bloomOrigin: { x: number; y: number } | null;
-  bloomElapsedTime: number;
   photos: Photo[];
   photoLayout?: PhotoLayout;
   photoLocationId?: string | null;
@@ -115,8 +113,6 @@ function CityLabelOverlay({
 }
 
 export default function MapStage({
-  bloomOrigin,
-  bloomElapsedTime,
   cityLabelSize,
   currentCityLabel,
   currentCityEmoji,
@@ -240,8 +236,6 @@ export default function MapStage({
         visible={showPhotoOverlay}
         photoLayout={photoLayout}
         opacity={photoOverlayOpacity}
-        bloomOrigin={bloomOrigin}
-        bloomElapsedTime={bloomElapsedTime}
         flyToPosition={photoLocationId ? chapterPinPositions[photoLocationId] ?? null : null}
         photoLocationId={photoLocationId}
         onFlyToAlbumComplete={onFlyToAlbumComplete}

@@ -39,7 +39,6 @@ import {
   RefreshCw,
   Camera,
   ScanEye,
-  Flower2,
   Film,
   Aperture,
   Type,
@@ -54,7 +53,6 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import {
-  BLOOM_ENTER_DURATION_SEC,
   PHOTO_ANIMATION_LABELS,
   PHOTO_EXIT_ANIMATION_LABELS,
   resolvePhotoStyle,
@@ -120,7 +118,6 @@ const PHOTO_ANIMATION_OPTIONS: PhotoAnimation[] = [
 const PHOTO_STYLE_OPTIONS: { value: PhotoStyle; label: string; icon: typeof Camera }[] = [
   { value: "classic", label: "Classic", icon: Camera },
   { value: "kenburns", label: "Ken Burns", icon: ScanEye },
-  { value: "bloom", label: "Bloom", icon: Flower2 },
   { value: "portal", label: "Portal", icon: Aperture },
 ];
 
@@ -977,20 +974,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     const segmentIndex = segments.findIndex((segment) => segment.toId === location.id);
     return segmentIndex >= 0 ? segmentColors[segmentIndex] ?? "#ffffff" : "#ffffff";
   }, [location.id, moodColorsEnabled, segmentColors, segments]);
-  const previewBloomOrigin = useMemo(() => {
-    if (activePhotoStyle !== "bloom") {
-      return null;
-    }
-
-    if (previewSourceSize.width <= 0 || previewSourceSize.height <= 0) {
-      return null;
-    }
-
-    return {
-      x: previewSourceSize.width * 0.5,
-      y: previewSourceSize.height * 0.78,
-    };
-  }, [activePhotoStyle, previewSourceSize.height, previewSourceSize.width]);
 
   const sceneTransitionOptions = useMemo(
     () => [
@@ -1273,8 +1256,6 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           originCoordinates={location.coordinates}
           portalAccentColor={portalAccentColor}
           portalProgressOverride={1}
-          bloomOrigin={previewBloomOrigin}
-          bloomElapsedTime={activePhotoStyle === "bloom" ? BLOOM_ENTER_DURATION_SEC : 0}
         />
         <div className="absolute inset-0 z-30">
           {effectiveFreeTransforms.map((transform) => {
