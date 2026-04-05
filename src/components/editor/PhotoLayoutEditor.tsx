@@ -92,8 +92,8 @@ type SceneTransitionOption = SceneTransition | "default";
 
 const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; template: LayoutTemplateType | "auto" }[] = [
   { id: "grid", label: "Grid", icon: LayoutGrid, template: "grid" },
-  { id: "collage", label: "Collage", icon: LayoutTemplate, template: "hero" },
-  { id: "single", label: "Single", icon: ImageIcon, template: "auto" },
+  { id: "collage", label: "Collage", icon: LayoutTemplate, template: "collage" },
+  { id: "single", label: "Single", icon: ImageIcon, template: "single" },
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
   { id: "scatter", label: "Scatter", icon: Shuffle, template: "scatter" },
   { id: "polaroid", label: "Polaroid", icon: Square, template: "polaroid" },
@@ -948,7 +948,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const activeStyle: LayoutStyle = (() => {
     if (layout.mode === "free") return "free";
     if (activeTemplate === "grid") return "grid";
-    if (activeTemplate === "hero") return "collage";
+    if (activeTemplate === "collage" || activeTemplate === "hero") return "collage";
+    if (activeTemplate === "single") return "single";
     if (activeTemplate === "filmstrip") return "carousel";
     if (activeTemplate === "scatter") return "scatter";
     if (activeTemplate === "polaroid") return "polaroid";
