@@ -481,7 +481,7 @@ export default function PhotoOverlay({
   // Caption sizing: scale proportionally based on container width (reference: 1000px)
   const captionScale = containerSize.w > 0 ? containerSize.w / 1000 : 1;
   const rawCaptionFontSizePx = (displayLayout?.captionFontSize ?? 14) * captionScale;
-  const captionFontSizePx = viewportRatio === "9:16" ? Math.max(rawCaptionFontSizePx, 14) : rawCaptionFontSizePx;
+  const captionFontSizePx = viewportRatio === "9:16" ? Math.max(rawCaptionFontSizePx, 14) : Math.max(rawCaptionFontSizePx, 7);
   const captionH = captionFontSizePx * 2;
   const captionFontFamily = displayLayout?.captionFontFamily ?? "system-ui";
   const displayIsFreeMode = displayLayout?.mode === "free";

@@ -847,13 +847,16 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     () => orderedPhotoMetas.map((photo) => ({ id: photo.id, aspect: photo.aspect })),
     [orderedPhotoMetas],
   );
+  // Use the same 95%×88% inset dimensions that PhotoOverlay measures internally,
+  // so drag targets align with the actual photo positions.
+  const insetW = previewPixelSize.width * 0.95;
+  const insetH = previewPixelSize.height * 0.88;
   const computedRects = useMemo(() => {
-    if (!previewPixelSize.width || !previewPixelSize.height || layoutMetas.length === 0) {
+    if (!insetW || !insetH || layoutMetas.length === 0) {
       return [];
     }
 
-    const containerAspect = previewPixelSize.width / previewPixelSize.height;
-    const width = previewPixelSize.width;
+    const containerAspect = insetW / insetH;
     const gapPx = layout.gap ?? 8;
 
     if (layout.mode === "manual" && layout.template) {
@@ -862,13 +865,13 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
         containerAspect,
         layout.template,
         gapPx,
-        width,
+        insetW,
         layout.customProportions,
         layout.layoutSeed,
       );
     }
 
-    return computeAutoLayout(layoutMetas, containerAspect, gapPx, width);
+    return computeAutoLayout(layoutMetas, containerAspect, gapPx, insetW);
   }, [
     layout.customProportions,
     layout.gap,
@@ -876,16 +879,16 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     layout.mode,
     layout.template,
     layoutMetas,
-    previewPixelSize.height,
-    previewPixelSize.width,
+    insetH,
+    insetW,
   ]);
   const fallbackFreeTransforms = useMemo(
     () => computedRectsToFreeTransforms(orderedPhotos, computedRects, {
-      containerWidthPx: previewPixelSize.width,
-      containerHeightPx: previewPixelSize.height,
+      containerWidthPx: insetW,
+      containerHeightPx: insetH,
       captionFontSizePx: layout.captionFontSize ?? 14,
     }),
-    [computedRects, layout.captionFontSize, orderedPhotos, previewPixelSize.height, previewPixelSize.width],
+    [computedRects, layout.captionFontSize, orderedPhotos, insetH, insetW],
   );
   const effectiveFreeTransforms = useMemo(
     () => reconcileFreeTransforms(orderedPhotos, fallbackFreeTransforms, layout.freeTransforms),
