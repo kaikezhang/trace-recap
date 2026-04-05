@@ -62,9 +62,9 @@ export const demoProject: ImportRouteData = {
       chapterTitle: "Tokyo",
       chapterDate: "Day 6–8",
       photos: [
-        { url: "/demo-photos/tokyo-1.jpg", caption: "Tokyo Tower at dusk 🌆" },
+        { url: "/demo-photos/tokyo-1.jpg", caption: "Neon streets of Shinjuku 🌆" },
         { url: "/demo-photos/tokyo-2.jpg", caption: "Shibuya crossing madness 🚶" },
-        { url: "/demo-photos/tokyo-3.jpg", caption: "Senso-ji Temple 🏮" },
+        { url: "/demo-photos/tokyo-3.jpg", caption: "Tokyo Tower at dusk 🗼" },
       ],
       photoLayout: {
         mode: "auto",

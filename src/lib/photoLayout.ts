@@ -280,8 +280,26 @@ function layoutPortraitReadableGallery(
     );
   }
 
-  // In 9:16 portrait, limit to max 2 photos (hero + 1 secondary) for readability
-  const displayPhotos = n > 2 ? photos.slice(0, 2) : photos;
+  // For exactly 3 photos in portrait: hero (55%) + 2 side-by-side bottom photos (40%)
+  if (n === 3) {
+    const heroHeight = innerHeight * 0.55;
+    const bottomHeight = innerHeight - heroHeight - gap;
+    const colWidth = (innerWidth - gap) / 2;
+    const heroSlot: LayoutSlot = { x: gap, y: gap, width: innerWidth, height: heroHeight };
+
+    // For landscape hero photos, use full slot (cover mode) instead of contain
+    const heroRect = photos[0].aspect > 1.2
+      ? { x: heroSlot.x, y: heroSlot.y, width: heroSlot.width, height: heroSlot.height }
+      : fitPhotoToSlot(heroSlot, photos[0], containerAspect);
+
+    return [
+      heroRect,
+      fitPhotoToSlot({ x: gap, y: gap + heroHeight + gap, width: colWidth, height: bottomHeight }, photos[1], containerAspect),
+      fitPhotoToSlot({ x: gap + colWidth + gap, y: gap + heroHeight + gap, width: colWidth, height: bottomHeight }, photos[2], containerAspect),
+    ];
+  }
+
+  const displayPhotos = n > 4 ? photos.slice(0, 4) : photos;
   const displayN = displayPhotos.length;
 
   const heroHeight = getPortraitHeroHeight(innerHeight, displayN);
@@ -294,8 +312,13 @@ function layoutPortraitReadableGallery(
     height: stripHeight,
   };
 
+  // For landscape hero photos in portrait mode, use full slot (cover mode)
+  const heroRect = displayPhotos[0].aspect > 1.2
+    ? { x: heroSlot.x, y: heroSlot.y, width: heroSlot.width, height: heroSlot.height }
+    : fitPhotoToSlot(heroSlot, displayPhotos[0], containerAspect);
+
   if (stripSlot.height <= 0) {
-    return [fitPhotoToSlot(heroSlot, displayPhotos[0], containerAspect)];
+    return [heroRect];
   }
 
   const remainingPhotos = displayPhotos.slice(1);
@@ -315,7 +338,7 @@ function layoutPortraitReadableGallery(
   );
 
   return [
-    fitPhotoToSlot(heroSlot, displayPhotos[0], containerAspect),
+    heroRect,
     ...stripRects,
   ];
 }
