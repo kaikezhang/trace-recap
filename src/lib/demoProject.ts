@@ -16,7 +16,7 @@ export const demoProject: ImportRouteData = {
   locations: [
     {
       name: "Seattle",
-      nameZh: "西雅图",
+      nameLocal: "西雅图",
       coordinates: [-122.3321, 47.6062],
       chapterEmoji: "☕",
       chapterTitle: "Seattle",
@@ -38,7 +38,7 @@ export const demoProject: ImportRouteData = {
     },
     {
       name: "Honolulu",
-      nameZh: "檀香山",
+      nameLocal: "檀香山",
       coordinates: [-157.8583, 21.3069],
       chapterEmoji: "🌺",
       chapterTitle: "Honolulu",
@@ -60,7 +60,7 @@ export const demoProject: ImportRouteData = {
     },
     {
       name: "Tokyo",
-      nameZh: "东京",
+      nameLocal: "东京",
       coordinates: [139.6917, 35.6895],
       chapterEmoji: "🗼",
       chapterTitle: "Tokyo",
@@ -83,13 +83,13 @@ export const demoProject: ImportRouteData = {
     },
     {
       name: "Taoyuan",
-      nameZh: "桃园",
+      nameLocal: "桃园",
       coordinates: [121.2168, 24.9936],
       isWaypoint: true,
     },
     {
       name: "Taipei",
-      nameZh: "台北",
+      nameLocal: "台北",
       coordinates: [121.5654, 25.033],
       chapterEmoji: "🏯",
       chapterTitle: "Taipei",
@@ -111,7 +111,7 @@ export const demoProject: ImportRouteData = {
     },
     {
       name: "Tainan",
-      nameZh: "台南",
+      nameLocal: "台南",
       coordinates: [120.227, 22.9998],
       chapterEmoji: "🛕",
       chapterTitle: "Tainan",
@@ -134,13 +134,13 @@ export const demoProject: ImportRouteData = {
     },
     {
       name: "Chiayi",
-      nameZh: "嘉义",
+      nameLocal: "嘉义",
       coordinates: [120.4491, 23.48],
       isWaypoint: true,
     },
     {
       name: "Alishan",
-      nameZh: "阿里山",
+      nameLocal: "阿里山",
       coordinates: [120.7, 23.51],
       chapterEmoji: "🌄",
       chapterTitle: "Alishan",
@@ -162,25 +162,25 @@ export const demoProject: ImportRouteData = {
     },
     {
       name: "Chiayi",
-      nameZh: "嘉义",
+      nameLocal: "嘉义",
       coordinates: [120.4491, 23.48],
       isWaypoint: true,
     },
     {
       name: "Taoyuan",
-      nameZh: "桃园",
+      nameLocal: "桃园",
       coordinates: [121.2168, 24.9936],
       isWaypoint: true,
     },
     {
       name: "Seoul",
-      nameZh: "首尔",
+      nameLocal: "首尔",
       coordinates: [126.978, 37.5665],
       isWaypoint: true,
     },
     {
       name: "Seattle",
-      nameZh: "西雅图",
+      nameLocal: "西雅图",
       coordinates: [-122.3321, 47.6062],
       chapterEmoji: "🏠",
       chapterTitle: "Home",

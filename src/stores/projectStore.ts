@@ -43,7 +43,7 @@ import { ALLOWED_CAPTION_FONTS } from "@/lib/constants";
 export interface RouteUISettings {
   viewportRatio?: AspectRatio;
   speedMultiplier?: number;
-  cityLabelLang?: "en" | "zh";
+  cityLabelLang?: "en" | "local" | "zh";
   cityLabelSize?: number;
   cityLabelTopPercent?: number;
   routeLabelSize?: number;
@@ -61,7 +61,7 @@ export interface ImportRouteData extends RouteUISettings {
   name: string;
   locations: {
     name: string;
-    nameZh?: string;
+    nameLocal?: string;
     coordinates: [number, number];
     isWaypoint?: boolean;
     photos?: {
@@ -216,7 +216,7 @@ interface ProjectState {
   reorderLocations: (fromIndex: number, toIndex: number) => void;
   updateLocation: (
     id: string,
-    updates: Partial<Pick<Location, "name" | "nameZh" | "coordinates" | "chapterTitle" | "chapterNote" | "chapterDate" | "chapterEmoji">>,
+    updates: Partial<Pick<Location, "name" | "nameLocal" | "coordinates" | "chapterTitle" | "chapterNote" | "chapterDate" | "chapterEmoji">>,
   ) => void;
   toggleWaypoint: (locationId: string) => void;
 
@@ -261,7 +261,7 @@ interface ProjectState {
   loadRouteData: (data: ImportRouteData) => Promise<void>;
   regenerateSegmentGeometries: () => Promise<void>;
   restorePersistedProject: () => Promise<void>;
-  enrichChineseNames: () => Promise<void>;
+  enrichLocalNames: (force?: boolean) => Promise<void>;
   exportRoute: () => Promise<ImportRouteData>;
 
   // Multi-project operations
@@ -534,8 +534,8 @@ function parseImportedUISettings(data: ImportRouteData): RouteUISettings {
       ? { viewportRatio: data.viewportRatio }
       : {}),
     ...(speedMultiplier !== undefined ? { speedMultiplier } : {}),
-    ...(data.cityLabelLang === "en" || data.cityLabelLang === "zh"
-      ? { cityLabelLang: data.cityLabelLang }
+    ...(data.cityLabelLang === "en" || data.cityLabelLang === "local" || data.cityLabelLang === "zh"
+      ? { cityLabelLang: data.cityLabelLang === "zh" ? "local" : data.cityLabelLang }
       : {}),
     ...(typeof data.cityLabelSize === "number" && Number.isFinite(data.cityLabelSize)
       ? { cityLabelSize: data.cityLabelSize }
@@ -578,7 +578,7 @@ function applyImportedUISettings(uiSettings: RouteUISettings): void {
 
   if (uiSettings.viewportRatio !== undefined) nextState.viewportRatio = uiSettings.viewportRatio;
   if (uiSettings.speedMultiplier !== undefined) nextState.speedMultiplier = uiSettings.speedMultiplier;
-  if (uiSettings.cityLabelLang !== undefined) nextState.cityLabelLang = uiSettings.cityLabelLang;
+  if (uiSettings.cityLabelLang !== undefined) nextState.cityLabelLang = uiSettings.cityLabelLang === "zh" ? "local" : uiSettings.cityLabelLang;
   if (uiSettings.cityLabelSize !== undefined) nextState.cityLabelSize = uiSettings.cityLabelSize;
   if (uiSettings.cityLabelTopPercent !== undefined) nextState.cityLabelTopPercent = uiSettings.cityLabelTopPercent;
   if (uiSettings.routeLabelSize !== undefined) nextState.routeLabelSize = uiSettings.routeLabelSize;
@@ -652,7 +652,7 @@ async function blobUrlToDataUrl(url: string): Promise<string | null> {
 async function serializeLocation(loc: Location): Promise<SerializedLocation> {
   return {
     name: loc.name,
-    nameZh: loc.nameZh,
+    nameLocal: loc.nameLocal,
     coordinates: loc.coordinates as [number, number],
     isWaypoint: loc.isWaypoint ?? false,
     ...(loc.photos.length > 0
@@ -720,7 +720,7 @@ async function serializeProjectState(
       const updated: SerializedLocation = {
         ...cached,
         name: loc.name,
-        nameZh: loc.nameZh,
+        nameLocal: loc.nameLocal,
         coordinates: loc.coordinates as [number, number],
         isWaypoint: loc.isWaypoint ?? false,
         chapterTitle: loc.chapterTitle,
@@ -915,7 +915,7 @@ function duplicateLocationEntry(location: Location): Location {
 async function resolveLocationFromCoordinates(
   lng: number,
   lat: number,
-): Promise<Pick<Location, "name" | "nameZh" | "coordinates">> {
+): Promise<Pick<Location, "name" | "nameLocal" | "coordinates">> {
   try {
     const reverseResponse = await fetch(`/api/geocode?lng=${lng}&lat=${lat}`);
     const reverseData = await reverseResponse.json();
@@ -924,23 +924,24 @@ async function resolveLocationFromCoordinates(
       reverseData.features?.[0]?.place_name ||
       `${lat.toFixed(2)}, ${lng.toFixed(2)}`;
 
-    let nameZh: string | undefined;
+    let nameLocal: string | undefined;
     try {
-      const zhResponse = await fetch(
-        `/api/geocode?q=${encodeURIComponent(name)}&language=zh-Hans`,
+      const { localLanguage } = useUIStore.getState();
+      const localRes = await fetch(
+        `/api/geocode?q=${encodeURIComponent(name)}&language=${localLanguage}`,
       );
-      const zhData = await zhResponse.json();
-      nameZh =
-        zhData.features?.[0]?.text ||
-        zhData.features?.[0]?.place_name ||
+      const localData = await localRes.json();
+      nameLocal =
+        localData.features?.[0]?.text ||
+        localData.features?.[0]?.place_name ||
         undefined;
     } catch {
-      // Chinese reverse lookup is a nice-to-have fallback.
+      // Local language reverse lookup is a nice-to-have fallback.
     }
 
     return {
       name,
-      nameZh,
+      nameLocal,
       coordinates: [lng, lat],
     };
   } catch {
@@ -1050,7 +1051,9 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
     return {
       id: locationId,
       name: loc.name,
-      nameZh: typeof loc.nameZh === "string" ? loc.nameZh : undefined,
+      nameLocal: typeof loc.nameLocal === "string" ? loc.nameLocal
+        : typeof (loc as Record<string, unknown>).nameZh === "string" ? (loc as Record<string, unknown>).nameZh as string
+        : undefined,
       coordinates: loc.coordinates,
       photos,
       isWaypoint:
@@ -1158,7 +1161,7 @@ type LocationUpdateFields = Partial<
   Pick<
     Location,
     | "name"
-    | "nameZh"
+    | "nameLocal"
     | "coordinates"
     | "chapterTitle"
     | "chapterNote"
@@ -1381,7 +1384,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const newLocation: Location = {
       id: generateId(),
       name: loc.name,
-      nameZh: loc.nameZh,
+      nameLocal: loc.nameLocal,
       coordinates: loc.coordinates,
       isWaypoint: false,
       photos: [],
@@ -1887,28 +1890,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  enrichChineseNames: async () => {
+  enrichLocalNames: async (force?: boolean) => {
     const { locations } = get();
-    const needsZh = locations.filter((l) => !l.nameZh && !l.isWaypoint);
-    if (needsZh.length === 0) return;
+    const { localLanguage } = useUIStore.getState();
+    const needsLocal = locations.filter((l) => (force || !l.nameLocal) && !l.isWaypoint);
+    if (needsLocal.length === 0) return;
 
     const updates = await Promise.all(
-      needsZh.map(async (loc) => {
+      needsLocal.map(async (loc) => {
         try {
-          // Forward geocode English name → Chinese: more reliable than reverse geocode
-          // which returns the nearest place at a finer granularity (e.g. district instead of city)
           const res = await fetch(
-            `/api/geocode?q=${encodeURIComponent(loc.name)}&language=zh-Hans`,
+            `/api/geocode?q=${encodeURIComponent(loc.name)}&language=${localLanguage}`,
           );
           const data = await res.json();
-          const nameZh =
+          const nameLocal =
             data.features?.[0]?.text ||
             data.features?.[0]?.place_name ||
             undefined;
-          return { id: loc.id, nameZh };
+          return { id: loc.id, nameLocal };
         } catch (error) {
-          console.error(`Failed to enrich Chinese name for ${loc.name}.`, error);
-          return { id: loc.id, nameZh: undefined };
+          console.error(`Failed to enrich local name for ${loc.name}.`, error);
+          return { id: loc.id, nameLocal: undefined };
         }
       }),
     );
@@ -1916,7 +1918,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((state) => ({
       locations: state.locations.map((loc) => {
         const update = updates.find((u) => u.id === loc.id);
-        return update?.nameZh ? { ...loc, nameZh: update.nameZh } : loc;
+        return update?.nameLocal ? { ...loc, nameLocal: update.nameLocal } : loc;
       }),
     }));
   },

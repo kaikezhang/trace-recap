@@ -1446,8 +1446,8 @@ export class VideoExporter {
     if (!group) return;
 
     const lang = this.settings.cityLabelLang ?? "en";
-    const fromName = lang === "zh" ? (group.fromLoc.nameZh || group.fromLoc.name) : group.fromLoc.name;
-    const toName = lang === "zh" ? (group.toLoc.nameZh || group.toLoc.name) : group.toLoc.name;
+    const fromName = lang === "local" ? (group.fromLoc.nameLocal || group.fromLoc.name) : group.fromLoc.name;
+    const toName = lang === "local" ? (group.toLoc.nameLocal || group.toLoc.name) : group.toLoc.name;
     if (!fromName || !toName) return;
 
     const label = `${fromName} → ${toName}`;
@@ -1622,11 +1622,11 @@ export class VideoExporter {
     scaleX: number,
     captured: { progress: AnimationEvent | null },
     baseFontSize: number = 18,
-    lang: "en" | "zh" = "en"
+    lang: "en" | "local" = "en"
   ): void {
     const labelEn = captured.progress?.cityLabel;
-    const labelZh = captured.progress?.cityLabelZh;
-    const label = lang === "zh" ? (labelZh || labelEn) : labelEn;
+    const labelLocal = captured.progress?.cityLabelLocal;
+    const label = lang === "local" ? (labelLocal || labelEn) : labelEn;
     if (label) {
       // Use mood color for the accent dot if available
       const progress = captured.progress;

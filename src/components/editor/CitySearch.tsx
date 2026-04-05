@@ -5,6 +5,7 @@ import { Search, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useMap } from "./MapContext";
 import OnboardingHint from "./OnboardingHint";
 
@@ -114,23 +115,24 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
     );
 
     const selectResult = async (result: GeoResult) => {
-      let nameZh: string | undefined;
+      let nameLocal: string | undefined;
       try {
         const name = result.text || result.place_name;
+        const { localLanguage } = useUIStore.getState();
         const res = await fetch(
-          `/api/geocode?q=${encodeURIComponent(name)}&language=zh-Hans`
+          `/api/geocode?q=${encodeURIComponent(name)}&language=${localLanguage}`
         );
         const data = await res.json();
-        nameZh =
+        nameLocal =
           data.features?.[0]?.text ||
           data.features?.[0]?.place_name ||
           undefined;
       } catch {
-        // Non-critical, proceed without Chinese name
+        // Non-critical, proceed without local name
       }
       addLocation({
         name: result.text || result.place_name,
-        nameZh,
+        nameLocal,
         coordinates: result.center,
       });
       if (map) {

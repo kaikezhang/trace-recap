@@ -22,7 +22,7 @@ interface AnimationState {
   currentGroupSegmentIndices: number[];
   currentPhase: string | null;
   currentCityLabel: string | null;
-  currentCityLabelZh: string | null;
+  currentCityLabelLocal: string | null;
   visiblePhotos: Photo[];
   showPhotoOverlay: boolean;
   photoOverlayOpacity: number;
@@ -53,7 +53,7 @@ interface AnimationState {
   setCurrentGroupSegmentIndices: (indices: number[]) => void;
   setCurrentPhase: (phase: string | null) => void;
   setCurrentCityLabel: (label: string | null) => void;
-  setCurrentCityLabelZh: (label: string | null) => void;
+  setCurrentCityLabelLocal: (label: string | null) => void;
   setVisiblePhotos: (photos: Photo[]) => void;
   setShowPhotoOverlay: (show: boolean) => void;
   setPhotoOverlayOpacity: (opacity: number) => void;
@@ -81,7 +81,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   currentGroupSegmentIndices: [],
   currentPhase: null,
   currentCityLabel: null,
-  currentCityLabelZh: null,
+  currentCityLabelLocal: null,
   visiblePhotos: [],
   showPhotoOverlay: false,
   photoOverlayOpacity: 1,
@@ -103,7 +103,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
   setCurrentGroupSegmentIndices: (currentGroupSegmentIndices) => set({ currentGroupSegmentIndices }),
   setCurrentPhase: (currentPhase) => set({ currentPhase }),
   setCurrentCityLabel: (currentCityLabel) => set({ currentCityLabel }),
-  setCurrentCityLabelZh: (currentCityLabelZh) => set({ currentCityLabelZh }),
+  setCurrentCityLabelLocal: (currentCityLabelLocal) => set({ currentCityLabelLocal }),
   setVisiblePhotos: (visiblePhotos) => set({ visiblePhotos }),
   setShowPhotoOverlay: (showPhotoOverlay) => set({ showPhotoOverlay }),
   setPhotoOverlayOpacity: (photoOverlayOpacity) => set({ photoOverlayOpacity }),
@@ -139,7 +139,7 @@ export const useAnimationStore = create<AnimationState>((set) => ({
       currentGroupSegmentIndices: [],
       currentPhase: null,
       currentCityLabel: null,
-      currentCityLabelZh: null,
+      currentCityLabelLocal: null,
       visiblePhotos: [],
       showPhotoOverlay: false,
       photoOverlayOpacity: 0,
