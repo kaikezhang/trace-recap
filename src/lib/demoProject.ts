@@ -75,7 +75,7 @@ export const demoProject: ImportRouteData = {
         template: "magazine",
         gap: 6,
         borderRadius: 10,
-        photoStyle: "bloom",
+        photoStyle: "classic",
         enterAnimation: "scale",
         sceneTransition: "cut",
         captionFontSize: 15,

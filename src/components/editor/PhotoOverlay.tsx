@@ -8,10 +8,6 @@ import {
   resolvePhotoStyle,
   getKenBurnsTransform,
   KEN_BURNS_DURATION_SEC,
-  getBloomTransform,
-  getBloomExitTransform,
-  BLOOM_ENTER_DURATION_SEC,
-  computeBloomFanLayout,
 } from "@/lib/photoAnimation";
 import { DEFAULT_CAPTION_BG_COLOR } from "@/lib/constants";
 import { frameStyleUsesInlineCaption } from "@/lib/frameStyles";
@@ -222,10 +218,6 @@ interface PhotoOverlayProps {
   portalAccentColor?: string;
   incomingPortalAccentColor?: string;
   portalProgressOverride?: number;
-  /** Bloom origin in raw pixels from map.project() (relative to map container top-left) */
-  bloomOrigin?: { x: number; y: number } | null;
-  /** Timeline-driven elapsed time (seconds) since bloom enter started */
-  bloomElapsedTime?: number;
   /** Current album collection target in screen space */
   flyToPosition?: { x: number; y: number } | null;
   /** Location whose photos are being displayed or collected */
@@ -303,8 +295,6 @@ export default function PhotoOverlay({
   originCoordinates,
   portalAccentColor = "#ffffff",
   portalProgressOverride,
-  bloomOrigin,
-  bloomElapsedTime = 0,
   flyToPosition,
   photoLocationId,
   onFlyToAlbumComplete,
@@ -396,10 +386,6 @@ export default function PhotoOverlay({
     [onFlyToAlbumComplete],
   );
 
-  // ── Bloom animation progress (timeline-driven, not wall-clock) ──
-  const isBloom = photoStyle === "bloom";
-  const bloomProgress = isBloom ? Math.min(1, bloomElapsedTime / BLOOM_ENTER_DURATION_SEC) : 0;
-
   // Use actual container dimensions for layout calculation
   const containerAspect = containerSize.h > 0 ? containerSize.w / containerSize.h : 16 / 9;
   const gapPx = displayLayout?.gap ?? 8;
@@ -458,25 +444,7 @@ export default function PhotoOverlay({
     return computePhotoLayout(layoutMetas, width, height, displayLayout, viewportRatio);
   })();
 
-  // Fix #3: Override with radial fan layout for bloom style
-  const bloomFanRects = (() => {
-    if (!isBloom || viewportRatio === "9:16" || !bloomOrigin || !hasDisplayPhotos || containerSize.w <= 0) {
-      return null;
-    }
-    const overlayOffX = containerRef.current?.offsetLeft ?? 0;
-    const overlayOffY = containerRef.current?.offsetTop ?? 0;
-    const originFracX = (bloomOrigin.x - overlayOffX) / containerSize.w;
-    const originFracY = (bloomOrigin.y - overlayOffY) / containerSize.h;
-    return computeBloomFanLayout(
-      originFracX,
-      originFracY,
-      orderedMetas.map((m) => ({ aspect: m.aspect })),
-      containerSize.w,
-      containerSize.h,
-    );
-  })();
-  // Use fan layout for bloom, standard layout for everything else
-  const effectiveRects = bloomFanRects ?? rects;
+  const effectiveRects = rects;
 
   // Caption sizing: scale proportionally based on container width (reference: 1000px)
   const captionScale = containerSize.w > 0 ? containerSize.w / 1000 : 1;
@@ -648,40 +616,6 @@ export default function PhotoOverlay({
             accentColor={portalAccentColor}
           />
         ) : (<>
-        {/* Bloom tether lines */}
-        {isBloom && bloomOrigin && hasDisplayPhotos && containerSize.w > 0 && (
-          <svg
-            className="absolute inset-0 w-full h-full pointer-events-none"
-            style={{
-              opacity: bloomProgress >= 1 && opacity >= 1 ? 0.3 : 0,
-              transition: "opacity 0.4s ease",
-            }}
-          >
-            {effectiveRects.map((rect, i) => {
-              const photo = orderedMetas[i];
-              if (!photo) return null;
-              const overlayOffX = containerRef.current?.offsetLeft ?? 0;
-              const overlayOffY = containerRef.current?.offsetTop ?? 0;
-              const originPx = { x: bloomOrigin.x - overlayOffX, y: bloomOrigin.y - overlayOffY };
-              const targetCX = (rect.x + rect.width / 2) * containerSize.w;
-              const targetCY = (rect.y + rect.height / 2) * containerSize.h;
-              // Quadratic bezier control point: midpoint shifted toward origin
-              const cpX = (originPx.x + targetCX) / 2;
-              const cpY = (originPx.y + targetCY) / 2 - 20;
-              return (
-                <path
-                  key={`tether-${photo.id}`}
-                  d={`M ${originPx.x} ${originPx.y} Q ${cpX} ${cpY} ${targetCX} ${targetCY}`}
-                  fill="none"
-                  stroke="white"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              );
-            })}
-          </svg>
-        )}
-
         {hasDisplayPhotos && effectiveRects.map((rect, index) => {
             const photo = orderedMetas[index];
             if (!photo) return null;
@@ -702,111 +636,6 @@ export default function PhotoOverlay({
             const staggerOffset = total > 1 ? (total - 1 - index) / (total - 1) * 0.4 : 0;
             const photoExitT = Math.max(0, Math.min(1, (exitProgress - staggerOffset) / (1 - staggerOffset + 0.01)));
 
-            // ── Bloom style: geo-anchored animation ──
-            if (isBloom && bloomOrigin && containerSize.w > 0 && !shouldFlyToAlbum) {
-              // Convert raw map.project() pixels to overlay-local pixels
-              const overlayOffsetX = containerRef.current?.offsetLeft ?? 0;
-              const overlayOffsetY = containerRef.current?.offsetTop ?? 0;
-              const originPx = { x: bloomOrigin.x - overlayOffsetX, y: bloomOrigin.y - overlayOffsetY };
-              const targetPx = {
-                x: rect.x * containerSize.w,
-                y: rect.y * containerSize.h,
-                w: rect.width * containerSize.w,
-                h: rect.height * containerSize.h,
-              };
-
-              let bt: { scale: number; translateX: number; translateY: number; opacity: number };
-              if (exitProgress > 0) {
-                bt = getBloomExitTransform(exitProgress, index, total, originPx.x, originPx.y, targetPx);
-              } else {
-                bt = getBloomTransform(bloomProgress, index, total, originPx.x, originPx.y, targetPx);
-              }
-
-              return (
-                <Fragment key={photo.id}>
-                  <div
-                    className="absolute"
-                    style={{
-                      left: `${rect.x * 100}%`,
-                      top: `${rect.y * 100}%`,
-                      width: `${rect.width * 100}%`,
-                      height: `${rect.height * 100}%`,
-                      opacity: bt.opacity,
-                      transform: `translate(${bt.translateX}px, ${bt.translateY}px) scale(${bt.scale}) rotate(${rotation}deg)`,
-                      transition: exitProgress > 0 ? "transform 0.05s linear, opacity 0.05s linear" : undefined,
-                      willChange: "transform, opacity",
-                    }}
-                  >
-                    <PhotoFrame
-                      frameStyle={photoFrameStyle}
-                      photoId={photo.id}
-                      caption={!displayIsFreeMode ? captionDisplay.text : undefined}
-                      captionStyle={
-                        !displayIsFreeMode && frameHandlesCaption
-                          ? {
-                              fontFamily: captionFontFamily,
-                              fontSize: `${captionFontSizePx}px`,
-                            }
-                          : undefined
-                      }
-                      className="h-full w-full"
-                      mediaStyle={{ borderRadius: `${borderRadiusPx}px` }}
-                      disableDecorativeRotation={displayIsFreeMode}
-                      compact={compactFrames}
-                      footer={
-                        !displayIsFreeMode && hasCaption && !frameHandlesCaption ? (
-                          <p
-                            className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
-                            style={{
-                              minHeight: `${captionH}px`,
-                              fontSize: `${captionFontSizePx}px`,
-                              fontFamily: captionFontFamily,
-                              flexShrink: 0,
-                              backgroundColor: DEFAULT_CAPTION_BG_COLOR,
-                              color: "#ffffff",
-                              textShadow: "0 1px 3px rgba(0,0,0,0.35)",
-                            }}
-                          >
-                            {captionDisplay.text}
-                          </p>
-                        ) : undefined
-                      }
-                    >
-                      <img
-                        src={photo.url}
-                        alt={photo.caption || ""}
-                        className="h-full w-full object-cover"
-                        style={{ objectPosition: `${fp.x * 100}% ${fp.y * 100}%` }}
-                      />
-                    </PhotoFrame>
-                  </div>
-                  {displayIsFreeMode && hasCaption && (
-                    <div
-                      key={`${photo.id}-caption`}
-                      className="absolute whitespace-nowrap rounded-md px-2 py-1 text-center shadow-sm"
-                      style={{
-                        left: `${(rect.x + rect.width / 2 + captionDisplay.offsetX) * 100}%`,
-                        top: `${(rect.y + rect.height / 2 + captionDisplay.offsetY) * 100}%`,
-                        transform: `translate(-50%, -50%) translate(${bt.translateX}px, ${bt.translateY}px) scale(${bt.scale}) rotate(${captionDisplay.rotation}deg)`,
-                        backgroundColor: captionDisplay.bgColor,
-                        color: captionDisplay.color,
-                        fontFamily: captionDisplay.fontFamily,
-                        fontSize: `${captionDisplay.fontSizePx}px`,
-                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
-                        opacity: bt.opacity,
-                        zIndex: freeTransform?.zIndex ?? index,
-                        transition: exitProgress > 0 ? "transform 0.05s linear, opacity 0.05s linear" : undefined,
-                        willChange: "transform, opacity",
-                      }}
-                    >
-                      {captionDisplay.text}
-                    </div>
-                  )}
-                </Fragment>
-              );
-            }
-
-            // ── Normal (non-bloom) rendering ──
             // Ken Burns: compute start/end transforms for this photo
             const isKenBurns = photoStyle === "kenburns";
             const kbStart = isKenBurns ? getKenBurnsTransform(0, index, fp) : null;

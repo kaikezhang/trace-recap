@@ -427,7 +427,7 @@ const VALID_TRANSPORT_MODES: TransportMode[] = [
 ];
 const VALID_VIEWPORT_RATIOS: AspectRatio[] = ["free", "16:9", "9:16", "4:3", "3:4", "1:1"];
 const VALID_PHOTO_ANIMATIONS: PhotoAnimation[] = ["scale", "fade", "slide", "flip", "scatter", "typewriter", "none"];
-const VALID_PHOTO_STYLES: PhotoStyle[] = ["classic", "kenburns", "portal", "bloom"];
+const VALID_PHOTO_STYLES: PhotoStyle[] = ["classic", "kenburns", "portal"];
 const VALID_SCENE_TRANSITIONS: SceneTransition[] = ["cut", "dissolve", "blur-dissolve", "wipe"];
 const MIN_SPEED_MULTIPLIER = 0.5;
 const MAX_SPEED_MULTIPLIER = 2;
