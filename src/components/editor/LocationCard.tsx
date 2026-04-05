@@ -1,10 +1,11 @@
 "use client";
 
-import { memo, type ReactNode, useEffect, useRef, useState } from "react";
+import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Bike,
   Bus,
   Car,
+  Check,
   ChevronDown,
   Copy,
   Footprints,
@@ -43,6 +44,9 @@ interface LocationCardProps {
   total: number;
   transportMode?: TransportMode;
   selected?: boolean;
+  isMultiSelected?: boolean;
+  onMultiSelect?: (id: string, shiftKey: boolean) => void;
+  dragDisabled?: boolean;
   onRemove: (id: string) => void;
   onToggleWaypoint: (id: string) => void;
   onClick?: (index: number) => void;
@@ -481,6 +485,9 @@ export default memo(function LocationCard({
   total,
   transportMode,
   selected = false,
+  isMultiSelected = false,
+  onMultiSelect,
+  dragDisabled = false,
   onRemove,
   onToggleWaypoint,
   onClick,
@@ -511,7 +518,7 @@ export default memo(function LocationCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: locationId });
+  } = useSortable({ id: locationId, disabled: dragDisabled });
 
   const { isDragOver, dropProps } = usePhotoDropZone(locationId);
 
@@ -697,6 +704,18 @@ export default memo(function LocationCard({
     onEditLayout(locationId);
   };
 
+  const handleCardClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if ((event.metaKey || event.ctrlKey || event.shiftKey) && onMultiSelect) {
+      event.preventDefault();
+      event.stopPropagation();
+      dismissEditHint();
+      onMultiSelect(locationId, event.shiftKey);
+      return;
+    }
+
+    toggleExpanded();
+  };
+
   const actionButtonClassName = "relative z-20 inline-flex items-center justify-center rounded-lg border transition-[transform,background-color,border-color] duration-150 hover:bg-white active:scale-95";
   const desktopActionButtonClassName = `${actionButtonClassName} h-8 w-8`;
   const mobileActionButtonClassName = `touch-target-mobile ${actionButtonClassName} h-11 w-11 rounded-xl`;
@@ -814,13 +833,19 @@ export default memo(function LocationCard({
         } ${isWaypoint ? "rounded-[24px]" : "rounded-[30px]"}`}
         style={{
           ...style,
-          borderColor: selected || isExpanded ? brand.colors.primary[300] : brand.colors.warm[200],
+          borderColor: isMultiSelected
+            ? brand.colors.ocean[200]
+            : selected || isExpanded
+              ? brand.colors.primary[300]
+              : brand.colors.warm[200],
           background: isWaypoint
             ? `linear-gradient(160deg, rgba(250,250,249,0.98) 0%, rgba(255,255,255,0.92) 100%)`
             : `linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(255,247,237,0.9) 100%)`,
           boxShadow: isDragging
             ? brand.shadows.lg
-            : selected || isExpanded || isHovered
+            : isMultiSelected
+              ? brand.shadows.lg
+              : selected || isExpanded || isHovered
               ? brand.shadows.lg
               : brand.shadows.md,
         }}
@@ -875,12 +900,33 @@ export default memo(function LocationCard({
           touchOriginRef.current = null;
         }}
       >
+        {isMultiSelected && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ backgroundColor: "rgba(14, 116, 144, 0.06)" }}
+          />
+        )}
+
         <div
           className="absolute inset-y-0 left-0 w-[3px]"
           style={{
-            backgroundColor: accentColor,
+            backgroundColor: isMultiSelected ? brand.colors.ocean[500] : accentColor,
           }}
         />
+
+        {isMultiSelected && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-3 z-30 flex h-5 w-5 items-center justify-center rounded-md"
+            style={{
+              backgroundColor: brand.colors.ocean[500],
+              boxShadow: brand.shadows.sm,
+            }}
+          >
+            <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
+          </div>
+        )}
 
         <div
           className={`relative flex flex-col gap-2 ${
@@ -893,7 +939,7 @@ export default memo(function LocationCard({
             aria-expanded={isExpanded}
             aria-controls={detailsId}
             aria-label={`${isExpanded ? "Collapse" : "Expand"} details for ${stopLabel}`}
-            onClick={toggleExpanded}
+            onClick={handleCardClick}
             className={`absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74] focus-visible:ring-inset ${
               isWaypoint ? "rounded-[24px]" : "rounded-[30px]"
             }`}
@@ -904,12 +950,14 @@ export default memo(function LocationCard({
               data-drag-handle
               aria-label="Reorder stop"
               title="Reorder stop"
+              disabled={dragDisabled}
               className={`touch-target-mobile relative z-20 flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
                 isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
               }`}
               style={{
                 borderColor: brand.colors.warm[200],
                 backgroundColor: isHovered ? "rgba(255,255,255,0.98)" : "rgba(255,251,245,0.92)",
+                cursor: dragDisabled ? "default" : undefined,
               }}
               {...attributes}
               {...listeners}

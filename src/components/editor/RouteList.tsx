@@ -32,6 +32,7 @@ import {
 } from "@dnd-kit/sortable";
 import { brand } from "@/lib/brand";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useLocationCount, useLocationIds } from "@/stores/selectors";
 import type { Segment, TransportMode } from "@/types";
 import LocationCard from "./LocationCard";
@@ -246,12 +247,17 @@ export default memo(function RouteList({
 }: RouteListProps) {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
+  const batchRemoveLocations = useProjectStore((s) => s.batchRemoveLocations);
+  const batchToggleWaypoint = useProjectStore((s) => s.batchToggleWaypoint);
   const removeLocation = useProjectStore((s) => s.removeLocation);
   const reorderLocations = useProjectStore((s) => s.reorderLocations);
   const toggleWaypoint = useProjectStore((s) => s.toggleWaypoint);
+  const addToast = useUIStore((s) => s.addToast);
   const locationIds = useLocationIds();
   const locationCount = useLocationCount();
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set<string>());
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
   const [showEditHint, setShowEditHint] = useState(false);
@@ -259,6 +265,8 @@ export default memo(function RouteList({
   useEffect(() => {
     if (locationIds.length === 0) {
       setSelectedLocationId(null);
+      setSelectedIds((current) => (current.size === 0 ? current : new Set<string>()));
+      setSelectionAnchorId(null);
       return;
     }
 
@@ -266,6 +274,30 @@ export default memo(function RouteList({
       setSelectedLocationId(locationIds[0]);
     }
   }, [locationIds, selectedLocationId]);
+
+  useEffect(() => {
+    const validIds = new Set(locationIds);
+
+    setSelectedIds((current) => {
+      let didChange = false;
+      const next = new Set<string>();
+
+      current.forEach((id) => {
+        if (validIds.has(id)) {
+          next.add(id);
+          return;
+        }
+
+        didChange = true;
+      });
+
+      return didChange ? next : current;
+    });
+
+    setSelectionAnchorId((current) => (
+      current && validIds.has(current) ? current : null
+    ));
+  }, [locationIds]);
 
   const dismissEditHint = useCallback(() => {
     setShowEditHint(false);
@@ -311,7 +343,70 @@ export default memo(function RouteList({
     }),
   );
 
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set<string>());
+    setSelectionAnchorId(null);
+  }, []);
+
+  useEffect(() => {
+    if (selectedIds.size === 0) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        clearSelection();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [clearSelection, selectedIds.size]);
+
+  const handleMultiSelect = useCallback((id: string, shiftKey: boolean) => {
+    if (!locationIds.includes(id)) {
+      return;
+    }
+
+    setSelectedLocationId(id);
+
+    if (shiftKey) {
+      const anchorId = selectionAnchorId && locationIds.includes(selectionAnchorId)
+        ? selectionAnchorId
+        : selectedIds.size === 1
+          ? Array.from(selectedIds)[0] ?? id
+          : id;
+      const anchorIndex = locationIds.indexOf(anchorId);
+      const selectedIndex = locationIds.indexOf(id);
+      const [start, end] = anchorIndex <= selectedIndex
+        ? [anchorIndex, selectedIndex]
+        : [selectedIndex, anchorIndex];
+
+      setSelectionAnchorId(anchorId);
+      setSelectedIds(new Set(locationIds.slice(start, end + 1)));
+      return;
+    }
+
+    const isClearingFinalSelection = selectedIds.size === 1 && selectedIds.has(id);
+    setSelectionAnchorId(isClearingFinalSelection ? null : id);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
+      return next;
+    });
+  }, [locationIds, selectedIds, selectionAnchorId]);
+
   const handleDragEnd = (event: DragEndEvent) => {
+    if (selectedIds.size > 0) {
+      return;
+    }
+
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -328,6 +423,56 @@ export default memo(function RouteList({
       [segmentId]: !current[segmentId],
     }));
   }, []);
+
+  const selectedIdList = locationIds.filter((id) => selectedIds.has(id));
+  let toggleableSelectionCount = 0;
+  for (let index = 0; index < locations.length; index += 1) {
+    const locationId = locations[index]?.id;
+    if (!locationId || !selectedIds.has(locationId)) {
+      continue;
+    }
+
+    if (index > 0 && index < locations.length - 1) {
+      toggleableSelectionCount += 1;
+    }
+  }
+
+  const handleBatchDelete = useCallback(() => {
+    if (selectedIdList.length === 0) {
+      return;
+    }
+
+    const message = selectedIdList.length === 1
+      ? "Delete the selected stop?"
+      : `Delete ${selectedIdList.length} selected stops?`;
+
+    if (typeof window !== "undefined" && !window.confirm(message)) {
+      return;
+    }
+
+    batchRemoveLocations(selectedIdList);
+    clearSelection();
+    addToast({
+      title: selectedIdList.length === 1 ? "Removed 1 stop" : `Removed ${selectedIdList.length} stops`,
+      variant: "info",
+    });
+  }, [addToast, batchRemoveLocations, clearSelection, selectedIdList]);
+
+  const handleBatchTogglePassThrough = useCallback(() => {
+    if (toggleableSelectionCount === 0) {
+      return;
+    }
+
+    batchToggleWaypoint(selectedIdList);
+    clearSelection();
+    addToast({
+      title: toggleableSelectionCount === 1
+        ? "Updated 1 stop"
+        : `Updated ${toggleableSelectionCount} stops`,
+      description: "Pass-through state was toggled for the selected stops.",
+      variant: "info",
+    });
+  }, [addToast, batchToggleWaypoint, clearSelection, selectedIdList, toggleableSelectionCount]);
 
   if (locationCount === 0) {
     return (
@@ -358,6 +503,7 @@ export default memo(function RouteList({
   }
 
   const timelineItems: ReactNode[] = [];
+  const isSelectionMode = selectedIds.size > 0;
 
   for (let index = 0; index < locations.length; index += 1) {
     const location = locations[index];
@@ -367,7 +513,8 @@ export default memo(function RouteList({
     }
 
     const incomingMode = segments[index - 1]?.transportMode ?? segments[index]?.transportMode;
-    const isSelected = selectedLocationId === location.id;
+    const isMultiSelected = selectedIds.has(location.id);
+    const isSelected = selectedLocationId === location.id || isMultiSelected;
 
     timelineItems.push(
       <div key={location.id} className="relative">
@@ -380,6 +527,9 @@ export default memo(function RouteList({
             total={locationCount}
             transportMode={incomingMode}
             selected={isSelected}
+            isMultiSelected={isMultiSelected}
+            onMultiSelect={handleMultiSelect}
+            dragDisabled={isSelectionMode}
             onRemove={removeLocation}
             onToggleWaypoint={toggleWaypoint}
             onClick={(clickedIndex) => {
@@ -491,7 +641,8 @@ export default memo(function RouteList({
                 {waypointIndexes.map((waypointIndex, waypointListIndex) => {
                   const waypoint = locations[waypointIndex];
                   const waypointSegment = segments[waypointIndex - 1];
-                  const waypointSelected = selectedLocationId === waypoint.id;
+                  const waypointMultiSelected = selectedIds.has(waypoint.id);
+                  const waypointSelected = selectedLocationId === waypoint.id || waypointMultiSelected;
                   const showConnector = waypointListIndex < waypointIndexes.length - 1 || nextStopIndex > waypointIndex;
 
                   return (
@@ -522,6 +673,9 @@ export default memo(function RouteList({
                               segments[waypointIndex]?.transportMode
                             }
                             selected={waypointSelected}
+                            isMultiSelected={waypointMultiSelected}
+                            onMultiSelect={handleMultiSelect}
+                            dragDisabled={isSelectionMode}
                             onRemove={removeLocation}
                             onToggleWaypoint={toggleWaypoint}
                             onClick={(clickedIndex) => {
@@ -586,17 +740,81 @@ export default memo(function RouteList({
         strategy={verticalListSortingStrategy}
       >
         <div className="overflow-x-auto px-2 py-4 sm:px-4">
-          <div className="relative min-w-[21.5rem] pb-4 pl-2 pr-3 sm:min-w-0">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute bottom-6 top-7 w-[2px] rounded-full"
-              style={{
-                left: 25,
-                background: `linear-gradient(180deg, ${brand.colors.primary[300]} 0%, ${brand.colors.ocean[400]} 100%)`,
-              }}
-            />
+          <div className="min-w-[21.5rem] pb-4 pl-2 pr-3 sm:min-w-0">
+            {selectedIds.size > 0 && (
+              <div
+                className="mb-4 rounded-[24px] border px-3.5 py-3"
+                role="toolbar"
+                aria-label="Selected route stop actions"
+                style={{
+                  borderColor: brand.colors.ocean[200],
+                  background: "linear-gradient(160deg, rgba(240,249,255,0.96) 0%, rgba(255,255,255,0.94) 100%)",
+                  boxShadow: brand.shadows.sm,
+                }}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p
+                    className="text-sm font-semibold"
+                    style={{ color: brand.colors.ocean[700] }}
+                  >
+                    {selectedIds.size} selected
+                  </p>
 
-            <div className="space-y-3">{timelineItems}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+                      style={{
+                        color: "#991b1b",
+                        backgroundColor: "rgba(254,242,242,0.96)",
+                        border: "1px solid rgba(248,113,113,0.3)",
+                      }}
+                      onClick={handleBatchDelete}
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      disabled={toggleableSelectionCount === 0}
+                      className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{
+                        color: brand.colors.ocean[700],
+                        backgroundColor: "rgba(224,242,254,0.92)",
+                        border: `1px solid ${brand.colors.ocean[200]}`,
+                      }}
+                      onClick={handleBatchTogglePassThrough}
+                    >
+                      Toggle Pass-through
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+                      style={{
+                        color: brand.colors.warm[700],
+                        backgroundColor: "rgba(255,255,255,0.92)",
+                        border: `1px solid ${brand.colors.warm[200]}`,
+                      }}
+                      onClick={clearSelection}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="relative">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute bottom-6 top-7 w-[2px] rounded-full"
+                style={{
+                  left: 25,
+                  background: `linear-gradient(180deg, ${brand.colors.primary[300]} 0%, ${brand.colors.ocean[400]} 100%)`,
+                }}
+              />
+
+              <div className="space-y-3">{timelineItems}</div>
+            </div>
           </div>
         </div>
       </SortableContext>
