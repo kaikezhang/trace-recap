@@ -765,12 +765,6 @@ export default memo(function LocationCard({
         boxShadow: brand.shadows.sm,
       }}
     >
-      <WaypointSwitch
-        isWaypoint={isWaypoint}
-        size="actionDesktop"
-        disabled={!canToggleWaypoint}
-        onToggle={handleTogglePassThrough}
-      />
       <button
         type="button"
         data-no-seek
@@ -793,12 +787,6 @@ export default memo(function LocationCard({
   );
   const mobileActionBar = (
     <div className="flex items-center gap-1">
-      <WaypointSwitch
-        isWaypoint={isWaypoint}
-        size="actionMobile"
-        disabled={!canToggleWaypoint}
-        onToggle={handleTogglePassThrough}
-      />
       <button
         type="button"
         data-no-seek
