@@ -212,7 +212,7 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
             onChange={(e) => search(e.target.value)}
             onKeyDown={handleKeyDown}
             className={cn([
-              "pl-9 h-11 text-base transition-all duration-200",
+              "city-search-input pl-9 h-11 text-base transition-all duration-200",
               "focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10",
             ].join(" "), inputClassName)}
           />
@@ -230,7 +230,7 @@ const CitySearch = forwardRef<CitySearchHandle, CitySearchProps>(
             id={listboxId}
             role="listbox"
             aria-label="City search results"
-            className="absolute left-3 right-3 top-[88px] z-50 rounded-xl border bg-popover shadow-lg overflow-hidden"
+            className="search-dropdown absolute left-3 right-3 top-[88px] z-50 overflow-hidden rounded-xl border bg-popover shadow-lg"
           >
             {results.length > 0 ? results.map((r, index) => {
               const { city, region } = splitPlaceName(r.place_name);

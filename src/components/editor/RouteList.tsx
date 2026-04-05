@@ -173,7 +173,7 @@ function TimelineSegmentCard({
           </div>
 
           <ChevronDown
-            className={`h-4 w-4 shrink-0 transition-transform duration-200 ease-out ${
+            className={`segment-card-chevron h-4 w-4 shrink-0 transition-transform duration-200 ease-out ${
               expanded ? "rotate-180" : ""
             }`}
             style={{ color: brand.colors.warm[500] }}
@@ -181,7 +181,7 @@ function TimelineSegmentCard({
         </button>
 
         <div
-          className="grid"
+          className="segment-card-content grid"
           style={{
             gridTemplateRows: expanded ? "1fr" : "0fr",
             transition: "grid-template-rows 200ms ease-out",
@@ -189,7 +189,7 @@ function TimelineSegmentCard({
         >
           <div className="overflow-hidden">
             <div
-              className="border-t px-3 pb-3 pt-2.5"
+              className="segment-card-content border-t px-3 pb-3 pt-2.5"
               style={{
                 borderColor: brand.colors.warm[200],
                 opacity: expanded ? 1 : 0,
