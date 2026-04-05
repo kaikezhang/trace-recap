@@ -979,7 +979,11 @@ function SettingsContent({
             className="w-full rounded-lg border px-3 py-1.5 text-xs"
             style={{ borderColor: "#d6d3d1", color: "#57534e", backgroundColor: "#fafaf9" }}
             value={localLanguage}
-            onChange={(e) => setLocalLanguage(e.target.value as LocalLanguageCode)}
+            onChange={(e) => {
+              setLocalLanguage(e.target.value as LocalLanguageCode);
+              // Re-fetch all local names in the new language
+              setTimeout(() => useProjectStore.getState().enrichLocalNames(true), 0);
+            }}
           >
             {SUPPORTED_LOCAL_LANGUAGES.map((lang) => (
               <option key={lang.code} value={lang.code}>{lang.label}</option>

@@ -261,7 +261,7 @@ interface ProjectState {
   loadRouteData: (data: ImportRouteData) => Promise<void>;
   regenerateSegmentGeometries: () => Promise<void>;
   restorePersistedProject: () => Promise<void>;
-  enrichLocalNames: () => Promise<void>;
+  enrichLocalNames: (force?: boolean) => Promise<void>;
   exportRoute: () => Promise<ImportRouteData>;
 
   // Multi-project operations
@@ -1890,10 +1890,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  enrichLocalNames: async () => {
+  enrichLocalNames: async (force?: boolean) => {
     const { locations } = get();
     const { localLanguage } = useUIStore.getState();
-    const needsLocal = locations.filter((l) => !l.nameLocal && !l.isWaypoint);
+    const needsLocal = locations.filter((l) => (force || !l.nameLocal) && !l.isWaypoint);
     if (needsLocal.length === 0) return;
 
     const updates = await Promise.all(
