@@ -16,6 +16,8 @@ import RouteList from "./RouteList";
 interface LeftPanelProps {
   onLocationClick?: (index: number) => void;
   onEditLayout?: (locationId: string) => void;
+  selectedLocationIndex?: number | null;
+  onSelectedLocationIndexChange?: (index: number | null) => void;
   searchHintMessage?: string;
   onDismissSearchHint?: () => void;
   searchRef?: RefObject<CitySearchHandle | null>;
@@ -44,6 +46,8 @@ function formatCompactDistance(distanceKm: number): string {
 export default function LeftPanel({
   onLocationClick,
   onEditLayout,
+  selectedLocationIndex,
+  onSelectedLocationIndexChange,
   searchHintMessage,
   onDismissSearchHint,
   searchRef,
@@ -311,6 +315,8 @@ export default function LeftPanel({
           <RouteList
             onLocationClick={onLocationClick}
             onEditLayout={onEditLayout}
+            selectedLocationIndex={selectedLocationIndex}
+            onSelectedLocationIndexChange={onSelectedLocationIndexChange}
           />
         </ScrollArea>
       </div>
