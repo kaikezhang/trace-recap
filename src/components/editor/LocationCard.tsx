@@ -111,7 +111,7 @@ function shouldIgnoreContextMenuTarget(target: HTMLElement | null): boolean {
 
   return Boolean(
     target.closest(
-      "button, input, textarea, select, label, a, [data-drag-handle], [data-no-seek], [data-delete-btn], [data-context-menu-ignore]",
+      "button:not([data-card-disclosure]), input, textarea, select, label, a, [data-drag-handle], [data-no-seek], [data-delete-btn], [data-context-menu-ignore]",
     ),
   );
 }
@@ -164,17 +164,19 @@ function EditableName({
   }
 
   return (
-    <span
+    <button
+      type="button"
       data-no-seek
-      className={`cursor-pointer decoration-dotted underline-offset-2 hover:underline ${className ?? ""}`}
+      className={`cursor-pointer bg-transparent p-0 text-left decoration-dotted underline-offset-2 hover:underline ${className ?? ""}`}
       onClick={() => {
         setDraft(value);
         setEditing(true);
       }}
+      aria-label={`Edit ${placeholder}`}
       title="Click to edit"
     >
       {value || <span className="italic text-muted-foreground">{placeholder}</span>}
-    </span>
+    </button>
   );
 }
 
@@ -386,6 +388,8 @@ export default memo(function LocationCard({
     || (isWaypoint ? "Pass-through stop" : "Main destination");
   const mobileDateLabel = location.chapterDate || `Day ${index + 1}`;
   const mobilePhotoLabel = `${photoCount} photo${photoCount === 1 ? "" : "s"}`;
+  const detailsId = `location-card-details-${locationId}`;
+  const stopLabel = location.name || `stop ${index + 1}`;
 
   const transformValue = CSS.Transform.toString(transform);
   const composedTransform = [
@@ -437,6 +441,11 @@ export default memo(function LocationCard({
 
   const dismissEditHint = () => {
     onDismissEditHint?.();
+  };
+
+  const toggleExpanded = () => {
+    setIsExpanded((expanded) => !expanded);
+    onClick?.(index);
   };
 
   const startNameEditing = () => {
@@ -547,27 +556,28 @@ export default memo(function LocationCard({
         />
 
         <div
-          className={`flex cursor-pointer flex-col gap-2 ${
+          className={`relative flex flex-col gap-2 ${
             isWaypoint ? "p-3 md:gap-3 md:p-3.5" : "p-3.5 md:gap-3 md:p-4"
           } md:flex-row md:items-center`}
-          onClick={(e) => {
-            const target = e.target as HTMLElement;
-            if (
-              target.closest("[data-drag-handle]") ||
-              target.closest("[data-delete-btn]") ||
-              target.closest("[data-no-seek]") ||
-              target.closest("input")
-            ) {
-              return;
-            }
-            setIsExpanded((expanded) => !expanded);
-            onClick?.(index);
-          }}
         >
+          <button
+            type="button"
+            data-card-disclosure
+            aria-expanded={isExpanded}
+            aria-controls={detailsId}
+            aria-label={`${isExpanded ? "Collapse" : "Expand"} details for ${stopLabel}`}
+            onClick={toggleExpanded}
+            className={`absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74] focus-visible:ring-inset ${
+              isWaypoint ? "rounded-[24px]" : "rounded-[30px]"
+            }`}
+          />
           <div className="flex min-w-0 items-center gap-2 md:flex-1 md:gap-3">
-            <div
+            <button
+              type="button"
               data-drag-handle
-              className={`touch-target-mobile flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
+              aria-label="Reorder stop"
+              title="Reorder stop"
+              className={`touch-target-mobile relative z-20 flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
                 isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
               }`}
               style={{
@@ -578,7 +588,7 @@ export default memo(function LocationCard({
               {...listeners}
             >
               <DragGrip />
-            </div>
+            </button>
 
             <div
               className={`flex shrink-0 items-center justify-center font-semibold text-white ${
@@ -616,7 +626,7 @@ export default memo(function LocationCard({
                       onClick={(e) => e.stopPropagation()}
                       placeholder="English name"
                       data-no-seek
-                      className={`h-8 border-[#fdba74] bg-white/92 px-2.5 py-0 text-sm font-semibold ${
+                      className={`relative z-20 h-8 border-[#fdba74] bg-white/92 px-2.5 py-0 text-sm font-semibold ${
                         isWaypoint ? "text-sm" : "md:text-[15px]"
                       }`}
                     />
@@ -628,7 +638,7 @@ export default memo(function LocationCard({
                         e.stopPropagation();
                         startNameEditing();
                       }}
-                      className="inline-flex max-w-full items-center rounded-md text-left hover:underline"
+                      className="relative z-20 inline-flex max-w-full items-center rounded-md text-left hover:underline"
                       title="Tap to edit stop name"
                     >
                       <span
@@ -666,7 +676,7 @@ export default memo(function LocationCard({
                     startNameEditing();
                   }}
                   disabled={isNameEditing}
-                  className="touch-target-mobile hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60 md:inline-flex"
+                  className="touch-target-mobile relative z-20 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60 md:inline-flex"
                   style={{
                     borderColor: brand.colors.primary[200],
                     backgroundColor: "rgba(255,255,255,0.8)",
@@ -809,7 +819,7 @@ export default memo(function LocationCard({
                 startNameEditing();
               }}
               disabled={isNameEditing}
-              className="touch-target-mobile inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-[transform,background-color] duration-150 active:scale-95 disabled:cursor-default disabled:opacity-60"
+              className="touch-target-mobile relative z-20 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-[transform,background-color] duration-150 active:scale-95 disabled:cursor-default disabled:opacity-60"
               style={{
                 borderColor: brand.colors.primary[200],
                 backgroundColor: "rgba(255,255,255,0.8)",
@@ -822,7 +832,7 @@ export default memo(function LocationCard({
             </button>
             <button
               data-delete-btn
-              className="touch-target-mobile inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-[transform,background-color] duration-150 active:scale-95 hover:bg-[#fff1f2]"
+              className="touch-target-mobile relative z-20 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-[transform,background-color] duration-150 active:scale-95 hover:bg-[#fff1f2]"
               onClick={(e) => {
                 e.stopPropagation();
                 handleRemove();
@@ -835,7 +845,7 @@ export default memo(function LocationCard({
 
           <button
             data-delete-btn
-            className="touch-target-mobile hidden h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2] md:flex"
+            className="touch-target-mobile relative z-20 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2] md:flex"
             onClick={(e) => {
               e.stopPropagation();
               handleRemove();
@@ -853,6 +863,7 @@ export default memo(function LocationCard({
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.22, ease: "easeInOut" }}
+              id={detailsId}
               className="overflow-hidden"
             >
               <div
