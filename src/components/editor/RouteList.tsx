@@ -64,6 +64,16 @@ const TRANSPORT_ACCENTS: Record<TransportMode, string> = {
   bicycle: "#155e75",
 };
 
+const TRANSPORT_META_LABELS: Record<TransportMode, string> = {
+  flight: "Flight",
+  car: "Drive",
+  train: "Train",
+  bus: "Bus",
+  ferry: "Ferry",
+  walk: "Walk",
+  bicycle: "Bike",
+};
+
 const WHOLE_NUMBER_FORMAT = new Intl.NumberFormat("en-US");
 const ONE_DECIMAL_FORMAT = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 1,
@@ -134,6 +144,7 @@ function TimelineSegmentCard({
   const Icon = TRANSPORT_ICONS[segment.transportMode];
   const accent = TRANSPORT_ACCENTS[segment.transportMode];
   const formattedDistance = formatDistance(distanceKm);
+  const transportLabel = TRANSPORT_META_LABELS[segment.transportMode];
 
   return (
     <div className={`relative ${indented ? "ml-6" : ""} pl-11 sm:pl-12`}>
@@ -151,25 +162,28 @@ function TimelineSegmentCard({
       >
         <button
           type="button"
-          className="touch-target-mobile flex min-h-9 w-full items-center justify-between gap-3 px-3 py-2 text-left"
+          className="touch-target-mobile flex min-h-9 w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
           aria-expanded={expanded}
           aria-label={`${expanded ? "Collapse" : "Expand"} ${segment.transportMode} segment details`}
           onClick={onToggle}
         >
-          <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex min-w-0 items-start gap-2.5">
             <span
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
               style={{ backgroundColor: `${accent}1A` }}
             >
               <Icon className="h-3.5 w-3.5" style={{ color: accent }} />
             </span>
 
-            <span
-              className="truncate text-sm font-medium"
-              style={{ color: brand.colors.warm[800] }}
-            >
-              {formattedDistance ?? "Distance pending"}
-            </span>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium" style={{ color: brand.colors.warm[500] }}>
+                {transportLabel}
+                {formattedDistance ? ` · ${formattedDistance}` : ""}
+              </p>
+              <p className="truncate text-sm font-medium" style={{ color: brand.colors.warm[800] }}>
+                {fromLabel} to {toLabel}
+              </p>
+            </div>
           </div>
 
           <ChevronDown
@@ -198,53 +212,14 @@ function TimelineSegmentCard({
                 transition: "opacity 200ms ease-out, transform 200ms ease-out",
               }}
             >
-              <div className="flex items-start gap-3">
-                <span
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                  style={{ backgroundColor: `${accent}1A` }}
-                >
-                  <Icon className="h-3.5 w-3.5" style={{ color: accent }} />
-                </span>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p
-                      className="truncate text-[11px] font-semibold uppercase tracking-[0.18em]"
-                      style={{ color: brand.colors.warm[500] }}
-                    >
-                      {segment.transportMode}
-                    </p>
-                    {formattedDistance && (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium"
-                        style={{
-                          color: brand.colors.warm[700],
-                          borderColor: brand.colors.warm[200],
-                          backgroundColor: "rgba(255,255,255,0.88)",
-                        }}
-                      >
-                        <Route className="h-3 w-3" />
-                        {formattedDistance}
-                      </span>
-                    )}
-                  </div>
-
-                  <p
-                    className="mt-1 truncate text-sm font-medium"
-                    style={{ color: brand.colors.warm[800] }}
-                  >
-                    {fromLabel} to {toLabel}
+              <div className="space-y-2.5">
+                {!formattedDistance && (
+                  <p className="text-xs font-medium" style={{ color: brand.colors.warm[500] }}>
+                    Distance pending
                   </p>
-
-                  <div
-                    className="mt-3 overflow-hidden rounded-[18px] border"
-                    style={{
-                      borderColor: brand.colors.warm[200],
-                      backgroundColor: "rgba(255,255,255,0.76)",
-                    }}
-                  >
-                    <TransportSelector segment={segment} />
-                  </div>
+                )}
+                <div className="-mx-2">
+                  <TransportSelector segment={segment} />
                 </div>
               </div>
             </div>
