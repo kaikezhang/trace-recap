@@ -1099,9 +1099,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             : layout.layoutSeed,
         });
       }
-      replayEnterPreview();
     },
-    [effectiveFreeTransforms, layout.layoutSeed, photoFrameStyle, replayEnterPreview, updateLayout]
+    [effectiveFreeTransforms, layout.layoutSeed, photoFrameStyle, updateLayout]
   );
 
   const refreshRandomLayout = useCallback(() => {
