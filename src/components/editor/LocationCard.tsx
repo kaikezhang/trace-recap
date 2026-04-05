@@ -972,10 +972,10 @@ export default memo(function LocationCard({
                         className={`truncate border-b border-dashed border-transparent text-sm font-semibold transition-colors hover:border-current ${
                           isWaypoint ? "" : "md:text-[15px]"
                         }`}
-                        style={{ color: brand.colors.warm[900], cursor: "text" }}
+                        style={{ color: brand.colors.warm[800], cursor: "text" }}
                       >
                         {location.name || (
-                          <span className="italic" style={{ color: brand.colors.warm[400] }}>
+                          <span className="italic" style={{ color: brand.colors.warm[500] }}>
                             English name
                           </span>
                         )}
@@ -1029,9 +1029,9 @@ export default memo(function LocationCard({
                 )}
                 {isWaypoint && (
                   <span
-                    className="hidden shrink-0 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] md:inline-flex"
+                    className="hidden shrink-0 rounded-full px-2 py-1 text-xs font-medium md:inline-flex"
                     style={{
-                      color: brand.colors.warm[600],
+                      color: brand.colors.warm[500],
                       backgroundColor: brand.colors.warm[100],
                     }}
                   >
@@ -1054,7 +1054,7 @@ export default memo(function LocationCard({
               {location.chapterNote && (
                 <p
                   className="mt-1 hidden truncate text-xs md:block"
-                  style={{ color: brand.colors.warm[600] }}
+                  style={{ color: brand.colors.warm[500] }}
                 >
                   {location.chapterNote}
                 </p>
@@ -1118,15 +1118,15 @@ export default memo(function LocationCard({
                   >
                     <AccentIcon className="h-3 w-3" style={{ color: accentColor }} />
                   </span>
-                  <span className="shrink-0 font-medium" style={{ color: brand.colors.warm[700] }}>
+                  <span className="shrink-0 font-medium" style={{ color: brand.colors.warm[500] }}>
                     {transportMetaLabel}
                   </span>
                 </>
               ) : isWaypoint ? (
                 <span
-                  className="shrink-0 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
+                  className="shrink-0 rounded-full px-2 py-1 text-xs font-medium"
                   style={{
-                    color: brand.colors.warm[600],
+                    color: brand.colors.warm[500],
                     backgroundColor: brand.colors.warm[100],
                   }}
                 >
@@ -1194,7 +1194,7 @@ export default memo(function LocationCard({
                   contentId={`location-card-basics-${locationId}`}
                 >
                   <div className="space-y-3">
-                    <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2 md:flex md:flex-col md:gap-1.5">
+                    <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2 md:grid-cols-1 md:gap-2">
                       <div className="min-w-0">
                         <EditableName
                           value={location.name}
@@ -1215,17 +1215,14 @@ export default memo(function LocationCard({
 
                     {!isFirst && (
                       <div
-                        className="flex items-center justify-between rounded-2xl border px-3 py-2.5"
-                        style={{
-                          borderColor: brand.colors.warm[200],
-                          backgroundColor: "rgba(255,255,255,0.68)",
-                        }}
+                        className="flex items-start justify-between gap-3 border-t pt-3"
+                        style={{ borderColor: brand.colors.warm[200] }}
                       >
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-xs font-medium" style={{ color: brand.colors.warm[800] }}>
                             Pass-through
                           </p>
-                          <p className="text-[11px]" style={{ color: brand.colors.warm[500] }}>
+                          <p className="mt-1 text-xs leading-5" style={{ color: brand.colors.warm[500] }}>
                             Mark as a brief stop the route passes through, without its own chapter.
                           </p>
                         </div>
@@ -1246,16 +1243,10 @@ export default memo(function LocationCard({
                     onToggle={() => toggleSection("chapter")}
                     contentId={`location-card-chapter-${locationId}`}
                   >
-                    <div className="grid gap-2 md:gap-3">
-                      <div
-                        className="rounded-2xl border px-3 py-3"
-                        style={{
-                          borderColor: brand.colors.warm[200],
-                          backgroundColor: "rgba(255,255,255,0.7)",
-                        }}
-                      >
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
                         <span
-                          className="block text-[10px] font-medium uppercase tracking-[0.18em]"
+                          className="block text-xs font-medium"
                           style={{ color: brand.colors.warm[500] }}
                         >
                           Chapter
@@ -1264,19 +1255,13 @@ export default memo(function LocationCard({
                           value={location.chapterTitle ?? ""}
                           placeholder="Chapter title"
                           onSave={(value) => updateLocation(locationId, { chapterTitle: value || undefined })}
-                          className="mt-1.5 block text-sm"
+                          className="block text-sm"
                         />
                       </div>
 
-                      <div
-                        className="rounded-2xl border px-3 py-3"
-                        style={{
-                          borderColor: brand.colors.warm[200],
-                          backgroundColor: "rgba(255,255,255,0.7)",
-                        }}
-                      >
+                      <div className="space-y-1.5">
                         <span
-                          className="block text-[10px] font-medium uppercase tracking-[0.18em]"
+                          className="block text-xs font-medium"
                           style={{ color: brand.colors.warm[500] }}
                         >
                           Note
@@ -1285,20 +1270,17 @@ export default memo(function LocationCard({
                           value={location.chapterNote ?? ""}
                           placeholder="e.g. Temples and gardens"
                           onSave={(value) => updateLocation(locationId, { chapterNote: value || undefined })}
-                          className="mt-1.5 block text-sm"
+                          className="block text-sm"
                         />
                       </div>
 
-                      <div className="grid grid-cols-[1fr_auto] gap-2 md:gap-3">
-                        <div
-                          className="rounded-2xl border px-3 py-3"
-                          style={{
-                            borderColor: brand.colors.warm[200],
-                            backgroundColor: "rgba(255,255,255,0.7)",
-                          }}
-                        >
+                      <div
+                        className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t pt-3"
+                        style={{ borderColor: brand.colors.warm[200] }}
+                      >
+                        <div className="space-y-1.5">
                           <span
-                            className="block text-[10px] font-medium uppercase tracking-[0.18em]"
+                            className="block text-xs font-medium"
                             style={{ color: brand.colors.warm[500] }}
                           >
                             Date
@@ -1307,29 +1289,21 @@ export default memo(function LocationCard({
                             value={location.chapterDate ?? ""}
                             placeholder="e.g. Mar 15-17"
                             onSave={(value) => updateLocation(locationId, { chapterDate: value || undefined })}
-                            className="mt-1.5 block text-sm"
+                            className="block text-sm"
                           />
                         </div>
 
-                        <div
-                          className="flex flex-col items-center rounded-2xl border px-3 py-3"
-                          style={{
-                            borderColor: brand.colors.warm[200],
-                            backgroundColor: "rgba(255,255,255,0.7)",
-                          }}
-                        >
+                        <div className="space-y-1.5">
                           <span
-                            className="text-[10px] font-medium uppercase tracking-[0.18em]"
+                            className="block text-xs font-medium"
                             style={{ color: brand.colors.warm[500] }}
                           >
                             Icon
                           </span>
-                          <div className="mt-1.5">
-                            <EmojiPicker
-                              value={location.chapterEmoji ?? ""}
-                              onSelect={(value) => updateLocation(locationId, { chapterEmoji: value || undefined })}
-                            />
-                          </div>
+                          <EmojiPicker
+                            value={location.chapterEmoji ?? ""}
+                            onSelect={(value) => updateLocation(locationId, { chapterEmoji: value || undefined })}
+                          />
                         </div>
                       </div>
                     </div>
