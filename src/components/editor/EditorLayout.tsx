@@ -5,6 +5,15 @@ import { length } from "@turf/length";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import mapboxgl from "mapbox-gl";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { brand } from "@/lib/brand";
 import { MapProvider, useMap } from "./MapContext";
 import TopToolbar from "./TopToolbar";
 import QuickStyleBar from "./QuickStyleBar";
@@ -101,6 +110,19 @@ function measureStageSize(element: HTMLDivElement): {
     width: element.clientWidth - paddingX,
     height: element.clientHeight - paddingY,
   };
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable
+  );
 }
 
 function EditorContent() {
@@ -466,6 +488,10 @@ function EditorContent() {
     null,
   );
   const [selectedLocationIndex, setSelectedLocationIndex] = useState<number | null>(null);
+  const [goToStopOpen, setGoToStopOpen] = useState(false);
+  const [goToStopQuery, setGoToStopQuery] = useState("");
+  const [goToStopError, setGoToStopError] = useState<string | null>(null);
+  const goToStopInputRef = useRef<HTMLInputElement>(null);
   const editingLocation =
     locations.find((l) => l.id === editingLocationId) ?? null;
   const visiblePhotoLocation =
@@ -487,6 +513,30 @@ function EditorContent() {
   useEffect(() => {
     setOnboardingState(readOnboardingState());
   }, []);
+
+  useEffect(() => {
+    setSelectedLocationIndex((current) => {
+      if (current === null) {
+        return current;
+      }
+
+      if (locations.length === 0) {
+        return null;
+      }
+
+      return current < locations.length ? current : locations.length - 1;
+    });
+  }, [locations.length]);
+
+  useEffect(() => {
+    if (!goToStopOpen) {
+      setGoToStopError(null);
+      return;
+    }
+
+    goToStopInputRef.current?.focus();
+    goToStopInputRef.current?.select();
+  }, [goToStopOpen]);
 
   useEffect(() => {
     if (!demoQueryChecked || !shouldLoadDemo || demoLoadedRef.current) return;
@@ -1091,17 +1141,116 @@ function EditorContent() {
     [locations, setPlaybackState],
   );
 
+  const jumpToLocation = useCallback((index: number) => {
+    setSelectedLocationIndex(index);
+    handleLocationClick(index);
+  }, [handleLocationClick]);
+
+  const openGoToStopDialog = useCallback(() => {
+    setGoToStopQuery("");
+    setGoToStopError(null);
+    setGoToStopOpen(true);
+  }, []);
+
+  const closeGoToStopDialog = useCallback((nextOpen: boolean) => {
+    setGoToStopOpen(nextOpen);
+    if (!nextOpen) {
+      setGoToStopError(null);
+      setGoToStopQuery("");
+    }
+  }, []);
+
+  const goToStopPreview = useMemo(() => {
+    const query = goToStopQuery.trim();
+    if (!query) {
+      return null;
+    }
+
+    if (/^\d+$/.test(query)) {
+      const targetIndex = Number.parseInt(query, 10) - 1;
+      const targetLocation = locations[targetIndex];
+      if (!targetLocation) {
+        return null;
+      }
+
+      return `${targetIndex + 1}. ${targetLocation.name || "Untitled stop"}`;
+    }
+
+    const normalizedQuery = query.toLocaleLowerCase();
+    const targetIndex = locations.findIndex((location) =>
+      location.name.toLocaleLowerCase().includes(normalizedQuery) ||
+      (location.nameLocal?.toLocaleLowerCase() ?? "").includes(normalizedQuery),
+    );
+
+    if (targetIndex === -1) {
+      return null;
+    }
+
+    const targetLocation = locations[targetIndex];
+    return `${targetIndex + 1}. ${targetLocation.name || "Untitled stop"}`;
+  }, [goToStopQuery, locations]);
+
+  const handleGoToStopSubmit = useCallback(() => {
+    const query = goToStopQuery.trim();
+    if (!query) {
+      setGoToStopError("Enter a stop number or name.");
+      return;
+    }
+
+    let targetIndex = -1;
+    if (/^\d+$/.test(query)) {
+      targetIndex = Number.parseInt(query, 10) - 1;
+    } else {
+      const normalizedQuery = query.toLocaleLowerCase();
+      targetIndex = locations.findIndex((location) =>
+        location.name.toLocaleLowerCase().includes(normalizedQuery) ||
+        (location.nameLocal?.toLocaleLowerCase() ?? "").includes(normalizedQuery),
+      );
+    }
+
+    if (targetIndex < 0 || targetIndex >= locations.length) {
+      setGoToStopError(`No stop matches "${query}".`);
+      return;
+    }
+
+    jumpToLocation(targetIndex);
+    setGoToStopOpen(false);
+    setGoToStopQuery("");
+    setGoToStopError(null);
+  }, [goToStopQuery, jumpToLocation, locations]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      )
-        return;
-
       const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key === "z" && !e.shiftKey) {
+      const key = e.key.toLowerCase();
+      const editableTarget = isEditableTarget(e.target);
+
+      if (goToStopOpen && e.code === "Escape") {
+        setGoToStopOpen(false);
+        setGoToStopError(null);
+        return;
+      }
+
+      if (editableTarget) return;
+
+      if (mod && key === "g") {
+        e.preventDefault();
+        openGoToStopDialog();
+        return;
+      }
+
+      if (!mod && !e.altKey && !e.shiftKey && e.key === "/") {
+        e.preventDefault();
+        openGoToStopDialog();
+        return;
+      }
+
+      if (goToStopOpen) {
+        return;
+      }
+
+      if (mod && key === "z" && !e.shiftKey) {
         e.preventDefault();
         const { canUndo, undo } = useHistoryStore.getState();
         if (canUndo) {
@@ -1109,7 +1258,7 @@ function EditorContent() {
         }
         return;
       }
-      if (mod && e.key === "z" && e.shiftKey) {
+      if (mod && key === "z" && e.shiftKey) {
         e.preventDefault();
         const { canRedo, redo } = useHistoryStore.getState();
         if (canRedo) {
@@ -1131,10 +1280,9 @@ function EditorContent() {
       }
       // Number keys 1-9: jump to stop
       const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= 9) {
+      if (num >= 1 && num <= 9 && locations[num - 1]) {
         e.preventDefault();
-        handleLocationClick(num - 1);
-        setSelectedLocationIndex(num - 1);
+        jumpToLocation(num - 1);
         return;
       }
       if (e.code === "Escape") {
@@ -1156,7 +1304,16 @@ function EditorContent() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handlePlay, handlePause, handleReset, handleLocationClick, locations, selectedLocationIndex]);
+  }, [
+    goToStopOpen,
+    handlePause,
+    handlePlay,
+    handleReset,
+    jumpToLocation,
+    locations,
+    openGoToStopDialog,
+    selectedLocationIndex,
+  ]);
 
   const isPlaying = playbackState === "playing";
   const isPlaybackActive =
@@ -1264,8 +1421,10 @@ function EditorContent() {
             }`}
           >
             <LeftPanel
-              onLocationClick={handleLocationClick}
+              onLocationClick={jumpToLocation}
               onEditLayout={handleEditLayout}
+              selectedLocationIndex={selectedLocationIndex}
+              onSelectedLocationIndexChange={setSelectedLocationIndex}
               searchHintMessage={searchHintMessage}
               onDismissSearchHint={handleSearchHintDismiss}
               searchRef={searchRef}
@@ -1369,13 +1528,90 @@ function EditorContent() {
       {!isPlaying && (
         <div className="md:hidden">
           <BottomSheet
-            onLocationClick={handleLocationClick}
+            onLocationClick={jumpToLocation}
             onEditLayout={handleEditLayout}
+            selectedLocationIndex={selectedLocationIndex}
+            onSelectedLocationIndexChange={setSelectedLocationIndex}
             searchHintMessage={searchHintMessage}
             onDismissSearchHint={handleSearchHintDismiss}
           />
         </div>
       )}
+      <Dialog open={goToStopOpen} onOpenChange={closeGoToStopDialog}>
+        <DialogContent
+          className="touch-target-mobile-scope sm:max-w-sm"
+          showCloseButton={false}
+        >
+          <DialogHeader className="pr-10">
+            <DialogTitle style={{ color: brand.colors.warm[900] }}>
+              Go to stop
+            </DialogTitle>
+            <DialogDescription style={{ color: brand.colors.warm[600] }}>
+              Type a stop number or name. Shortcuts: `1-9`, `Ctrl+G`, or `/`.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              ref={goToStopInputRef}
+              value={goToStopQuery}
+              onChange={(event) => {
+                setGoToStopQuery(event.target.value);
+                if (goToStopError) {
+                  setGoToStopError(null);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleGoToStopSubmit();
+                }
+              }}
+              placeholder="12 or Kyoto"
+              className="h-11 rounded-2xl border-[#fed7aa] bg-white/90 px-3 text-sm focus-visible:border-[#f97316] focus-visible:ring-[#f97316]/15"
+              aria-label="Go to stop"
+            />
+
+            {goToStopPreview && !goToStopError && (
+              <p className="text-xs font-medium" style={{ color: brand.colors.warm[500] }}>
+                Jumping to {goToStopPreview}
+              </p>
+            )}
+
+            {goToStopError && (
+              <p className="text-xs font-medium text-[#b91c1c]">
+                {goToStopError}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-full border px-3 py-1.5 text-xs font-medium"
+                onClick={() => closeGoToStopDialog(false)}
+                style={{
+                  borderColor: brand.colors.warm[200],
+                  color: brand.colors.warm[600],
+                  backgroundColor: "rgba(255,255,255,0.8)",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-3 py-1.5 text-xs font-medium text-white"
+                onClick={handleGoToStopSubmit}
+                style={{
+                  backgroundColor: brand.colors.primary[500],
+                  boxShadow: brand.shadows.sm,
+                }}
+              >
+                Jump
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

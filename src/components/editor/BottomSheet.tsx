@@ -15,6 +15,8 @@ import RouteList from "./RouteList";
 interface BottomSheetProps {
   onLocationClick?: (index: number) => void;
   onEditLayout?: (locationId: string) => void;
+  selectedLocationIndex?: number | null;
+  onSelectedLocationIndexChange?: (index: number | null) => void;
   searchHintMessage?: string;
   onDismissSearchHint?: () => void;
 }
@@ -42,6 +44,8 @@ function formatCompactDistance(distanceKm: number): string {
 export default function BottomSheet({
   onLocationClick,
   onEditLayout,
+  selectedLocationIndex,
+  onSelectedLocationIndexChange,
   searchHintMessage,
   onDismissSearchHint,
 }: BottomSheetProps) {
@@ -209,7 +213,12 @@ export default function BottomSheet({
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border/60">
           <ScrollArea className="flex-1 min-h-0">
-            <RouteList onLocationClick={onLocationClick} onEditLayout={onEditLayout} />
+            <RouteList
+              onLocationClick={onLocationClick}
+              onEditLayout={onEditLayout}
+              selectedLocationIndex={selectedLocationIndex}
+              onSelectedLocationIndexChange={onSelectedLocationIndexChange}
+            />
           </ScrollArea>
         </div>
       </motion.div>

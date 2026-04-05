@@ -47,8 +47,11 @@ interface LocationCardProps {
   isMultiSelected?: boolean;
   onMultiSelect?: (id: string, shiftKey: boolean) => void;
   dragDisabled?: boolean;
+  bulkExpandSignal?: number;
+  bulkExpandMode?: "expand" | "collapse" | null;
   onRemove: (id: string) => void;
   onToggleWaypoint: (id: string) => void;
+  onExpandedChange?: (expanded: boolean) => void;
   onClick?: (index: number) => void;
   onEditLayout?: (locationId: string) => void;
   showEditHint?: boolean;
@@ -488,8 +491,11 @@ export default memo(function LocationCard({
   isMultiSelected = false,
   onMultiSelect,
   dragDisabled = false,
+  bulkExpandSignal = 0,
+  bulkExpandMode = null,
   onRemove,
   onToggleWaypoint,
+  onExpandedChange,
   onClick,
   onEditLayout,
   showEditHint = false,
@@ -608,6 +614,20 @@ export default memo(function LocationCard({
     });
   }, [isMobile]);
 
+  useEffect(() => {
+    if (bulkExpandSignal === 0 || !bulkExpandMode) {
+      return;
+    }
+
+    const nextExpanded = bulkExpandMode === "expand";
+    setIsExpanded(nextExpanded);
+    if (nextExpanded) {
+      setOpenSections((current) => (
+        hasOpenSections(current) ? current : DEFAULT_OPEN_SECTIONS
+      ));
+    }
+  }, [bulkExpandMode, bulkExpandSignal]);
+
   const openContextMenu = (x: number, y: number) => {
     onClick?.(index);
     setContextMenu({ x, y });
@@ -635,6 +655,7 @@ export default memo(function LocationCard({
           hasOpenSections(current) ? current : DEFAULT_OPEN_SECTIONS
         ));
       }
+      onExpandedChange?.(nextExpanded);
       return nextExpanded;
     });
     onClick?.(index);
@@ -948,10 +969,12 @@ export default memo(function LocationCard({
             <button
               type="button"
               data-drag-handle
-              aria-label="Reorder stop"
-              title="Reorder stop"
+              aria-label={dragDisabled ? "Reordering unavailable" : "Reorder stop"}
+              title={dragDisabled ? "Reordering is temporarily unavailable" : "Reorder stop"}
               disabled={dragDisabled}
-              className={`touch-target-mobile relative z-20 flex shrink-0 cursor-grab items-center justify-center border transition-colors active:cursor-grabbing touch-none ${
+              className={`touch-target-mobile relative z-20 flex shrink-0 items-center justify-center border transition-colors touch-none disabled:cursor-not-allowed disabled:opacity-55 ${
+                dragDisabled ? "" : "cursor-grab active:cursor-grabbing"
+              } ${
                 isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
               }`}
               style={{
@@ -959,8 +982,8 @@ export default memo(function LocationCard({
                 backgroundColor: isHovered ? "rgba(255,255,255,0.98)" : "rgba(255,251,245,0.92)",
                 cursor: dragDisabled ? "default" : undefined,
               }}
-              {...attributes}
-              {...listeners}
+              {...(dragDisabled ? {} : attributes)}
+              {...(dragDisabled ? {} : listeners)}
             >
               <DragGrip />
             </button>
