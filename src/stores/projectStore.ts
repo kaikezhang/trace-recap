@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useUIStore } from "@/stores/uiStore";
+import { useAuthStore } from "@/stores/authStore";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import type {
   AspectRatio,
@@ -283,6 +284,7 @@ interface ProjectState {
   renameProjectById: (projectId: string, name: string) => Promise<void>;
   duplicateProjectById: (projectId: string) => Promise<ProjectMeta | null>;
   refreshProjectList: () => Promise<void>;
+  resetForSignOut: () => Promise<void>;
 }
 
 let nextId = 1;
@@ -2108,6 +2110,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   createNewProject: async (name) =>
     runProjectTransition("create a new project", async () => {
+      // Anonymous users get exactly 1 local project
+      if (!useAuthStore.getState().user) {
+        const existing = await listProjectsFromDB();
+        if (existing.length > 0) {
+          throw new Error("SIGN_IN_REQUIRED");
+        }
+      }
+
       cancelPendingPersist();
 
       const state = get();
@@ -2309,6 +2319,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   duplicateProjectById: async (projectId) => {
+    if (!useAuthStore.getState().user) {
+      throw new Error("SIGN_IN_REQUIRED");
+    }
     try {
       const newId = crypto.randomUUID();
       const projects = get().projects;
@@ -2335,6 +2348,50 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.error("Failed to refresh project list.", error);
       throw error;
     }
+  },
+
+  resetForSignOut: async () => {
+    cancelPendingPersist();
+
+    // Flush current project to IDB before clearing (ensures sync can pick it up)
+    const state = get();
+    if (state.currentProjectId) {
+      await persistCurrentProject(state);
+    }
+
+    // Soft-clear: wipe project/ref stores but keep photo asset blobs as cache
+    const { clearAllLocalData } = await import("@/lib/storage");
+    await clearAllLocalData();
+
+    // Reset in-memory state to a single empty project
+    const id = crypto.randomUUID();
+    const name = DEFAULT_ROUTE_NAME;
+    const now = Date.now();
+    const meta: ProjectMeta = {
+      id,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      locationCount: 0,
+      previewLocations: [],
+    };
+    const data = createEmptyProjectData(name);
+    const { withSyncMuted, saveProject } = await import("@/lib/storage");
+    await withSyncMuted(() => saveProject(meta, data));
+
+    clearDirtyTracking();
+    diffCheckDisabled = false;
+    set({
+      currentProjectId: id,
+      currentProjectName: name,
+      projects: [meta],
+      locations: [],
+      segments: [],
+      mapStyle: DEFAULT_MAP_STYLE,
+      segmentTimingOverrides: {},
+      segmentColors: {},
+    });
+    useHistoryStore.getState().resetHistory();
   },
 }));
 

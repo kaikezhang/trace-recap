@@ -30,6 +30,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useAuthStore } from "@/stores/authStore";
 import type { ProjectMeta } from "@/types";
 
 function formatDate(epoch: number): string {
@@ -56,6 +57,7 @@ function ProjectRow({
   project,
   isCurrent,
   disabled,
+  isAuthenticated,
   onSwitch,
   onRename,
   onDelete,
@@ -64,6 +66,7 @@ function ProjectRow({
   project: ProjectMeta;
   isCurrent: boolean;
   disabled: boolean;
+  isAuthenticated: boolean;
   onSwitch: () => Promise<void>;
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -254,12 +257,14 @@ function ProjectRow({
               <Pencil className="h-4 w-4" />
               Rename
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => void runRowAction("duplicate", onDuplicate)}
-            >
-              <Copy className="h-4 w-4" />
-              Duplicate
-            </DropdownMenuItem>
+            {isAuthenticated && (
+              <DropdownMenuItem
+                onClick={() => void runRowAction("duplicate", onDuplicate)}
+              >
+                <Copy className="h-4 w-4" />
+                Duplicate
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
@@ -286,12 +291,17 @@ export default function ProjectListDialog() {
   const renameProjectById = useProjectStore((s) => s.renameProjectById);
   const duplicateProjectById = useProjectStore((s) => s.duplicateProjectById);
   const isSwitchingProject = useProjectStore((s) => s.isSwitchingProject);
+  const user = useAuthStore((s) => s.user);
 
   const handleNewProject = useCallback(async () => {
     try {
       await createNewProject();
       setOpen(false);
     } catch (error) {
+      if (error instanceof Error && error.message === "SIGN_IN_REQUIRED") {
+        // Handled in UI below
+        return;
+      }
       console.error("Failed to create a new project.", error);
     }
   }, [createNewProject, setOpen]);
@@ -326,6 +336,7 @@ export default function ProjectListDialog() {
                 project={project}
                 isCurrent={project.id === currentProjectId}
                 disabled={isSwitchingProject}
+                isAuthenticated={!!user}
                 onSwitch={() => handleSwitch(project.id)}
                 onRename={(name) => renameProjectById(project.id, name)}
                 onDelete={() => deleteProjectById(project.id)}
@@ -343,16 +354,22 @@ export default function ProjectListDialog() {
         </ScrollArea>
 
         <div className="-mx-4 -mb-4 rounded-b-xl border-t bg-muted/50 p-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => void handleNewProject()}
-            disabled={isSwitchingProject}
-          >
-            <Plus className="h-4 w-4" />
-            {isSwitchingProject ? "Working..." : "New Project"}
-          </Button>
+          {user ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => void handleNewProject()}
+              disabled={isSwitchingProject}
+            >
+              <Plus className="h-4 w-4" />
+              {isSwitchingProject ? "Working..." : "New Project"}
+            </Button>
+          ) : (
+            <p className="text-center text-xs text-muted-foreground">
+              Sign in to create more projects
+            </p>
+          )}
         </div>
       </DialogContent>
     </Dialog>

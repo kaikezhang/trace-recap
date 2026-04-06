@@ -277,6 +277,32 @@ export async function deleteProject(id: string): Promise<void> {
   if (syncMuteDepth === 0) syncListener.onProjectDeleted?.(id);
 }
 
+/** Soft-clear: wipe UI-visible project metadata but keep photo asset blobs as cache.
+ *  Resets refCounts to 0 so re-attach on next login doesn't double-count.
+ *  On next login, onAuthReady can skip re-downloading assets whose blob already exists. */
+export async function clearAllLocalData(): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction(
+    [STORE_PROJECTS, STORE_PROJECT_DATA, STORE_PHOTO_REFS, STORE_PHOTO_ASSETS],
+    "readwrite",
+  );
+  await Promise.all([
+    tx.objectStore(STORE_PROJECTS).clear(),
+    tx.objectStore(STORE_PROJECT_DATA).clear(),
+    tx.objectStore(STORE_PHOTO_REFS).clear(),
+  ]);
+
+  // Reset refCounts on cached photo assets to avoid leaks on re-attach
+  const assetStore = tx.objectStore(STORE_PHOTO_ASSETS);
+  let cursor = await assetStore.openCursor();
+  while (cursor) {
+    await cursor.update({ ...cursor.value, refCount: 0 });
+    cursor = await cursor.continue();
+  }
+
+  await tx.done;
+}
+
 export async function renameProject(
   id: string,
   name: string,
