@@ -26,7 +26,10 @@ export function toCloudProjectData(
           photoRefs: loc.photos
             .map((photo): CloudPhotoRef | null => {
               const assetId = photoAssetMap.get(photo.id);
-              if (!assetId) return null;
+              if (!assetId) {
+                console.warn(`[sync] Photo ${photo.id} has no asset mapping — skipping cloud sync for this photo`);
+                return null;
+              }
               return {
                 photoId: photo.id,
                 assetId,
@@ -106,7 +109,7 @@ export function fromCloudProjectData(cloud: CloudProjectData): {
   return {
     locations,
     segments,
-    mapStyle: cloud.mapStyle ?? "streets",
+    mapStyle: cloud.mapStyle ?? "light",
     timingOverrides: cloud.timingOverrides ?? {},
     name: cloud.name,
   };
