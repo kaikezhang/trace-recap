@@ -116,10 +116,8 @@ export default function ChapterPinsOverlay() {
       const x = projected.x;
       let y = projected.y;
 
-      // Clamp Y so album pins have enough room above to avoid cutoff.
-      // Album height ≈ 200px (book + label + stem). For non-visited pins,
-      // ensure pin bottom anchor is far enough from the top of the container.
-      const isAlbumPin = entry.state === "album-open" || entry.state === "album-collecting";
+      // Clamp Y so the collecting album has enough room above to avoid cutoff.
+      const isAlbumPin = entry.state === "album-collecting";
       if (isAlbumPin) {
         const minY = 210;
         y = Math.max(y, minY);

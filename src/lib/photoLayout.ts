@@ -32,6 +32,7 @@ interface LayoutSlot {
 const MIN_ASPECT = 0.25;
 const MIN_CONTAINER_ASPECT = 0.1;
 const PORTRAIT_THRESHOLD = 0.9;
+const PANORAMA_THRESHOLD = 1.8;
 const SQUARE_LAYOUT_ASPECT_RANGE = 0.28;
 const COMPACT_LAYOUT_MAX_WIDTH_PX = 480;
 const COMPACT_LAYOUT_WIDTH_RANGE_PX = 180;
@@ -996,6 +997,31 @@ function layoutMagazine(photos: PhotoMeta[], containerAspect: number, gap: numbe
   ];
 }
 
+function resolveTemplateForPhotoSet(
+  photos: PhotoMeta[],
+  template: LayoutTemplate,
+): LayoutTemplate {
+  if (photos.length < 2) {
+    return template;
+  }
+
+  const panoramaCount = photos.filter(
+    (photo) => safeAspect(photo.aspect) >= PANORAMA_THRESHOLD,
+  ).length;
+  const allPanoramas = panoramaCount === photos.length;
+  const panoramaMajority = panoramaCount >= Math.ceil(photos.length * 0.66);
+
+  if (allPanoramas && (template === "hero" || template === "polaroid")) {
+    return "rows";
+  }
+
+  if (panoramaMajority && template === "magazine") {
+    return "rows";
+  }
+
+  return template;
+}
+
 /**
  * Compute layout using a specific template.
  * For "auto" mode, delegates to computeAutoLayout.
@@ -1011,8 +1037,9 @@ export function computeTemplateLayout(
 ): PhotoRect[] {
   const gapPx = gap ?? 8;
   const g = gapPx / GAP_REFERENCE_WIDTH; // gap as fraction (resolution-independent)
+  const resolvedTemplate = resolveTemplateForPhotoSet(photos, template);
 
-  switch (template) {
+  switch (resolvedTemplate) {
     case "grid":
       return layoutGrid(photos, containerAspect, g, customProportions);
     case "collage":

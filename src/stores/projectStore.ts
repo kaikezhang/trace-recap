@@ -3,7 +3,9 @@ import { useUIStore } from "@/stores/uiStore";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import type {
   AspectRatio,
+  AlbumStyle,
   PhotoAnimation,
+  PhotoFrameStyle,
   PhotoStyle,
   SceneTransition,
   Location,
@@ -50,7 +52,10 @@ export interface RouteUISettings {
   routeLabelBottomPercent?: number;
   photoAnimation?: PhotoAnimation;
   photoStyle?: PhotoStyle;
+  photoFrameStyle?: PhotoFrameStyle;
   sceneTransition?: SceneTransition;
+  albumStyle?: AlbumStyle;
+  albumCaptionsEnabled?: boolean;
   moodColorsEnabled?: boolean;
   chapterPinsEnabled?: boolean;
   breadcrumbsEnabled?: boolean;
@@ -430,7 +435,9 @@ const VALID_TRANSPORT_MODES: TransportMode[] = [
 const VALID_VIEWPORT_RATIOS: AspectRatio[] = ["free", "16:9", "9:16", "4:3", "3:4", "1:1"];
 const VALID_PHOTO_ANIMATIONS: PhotoAnimation[] = ["scale", "fade", "slide", "flip", "scatter", "typewriter", "none"];
 const VALID_PHOTO_STYLES: PhotoStyle[] = ["classic", "kenburns", "portal"];
+const VALID_PHOTO_FRAME_STYLES: PhotoFrameStyle[] = ["polaroid", "borderless", "film-strip", "classic-border", "rounded-card"];
 const VALID_SCENE_TRANSITIONS: SceneTransition[] = ["cut", "dissolve", "blur-dissolve", "wipe"];
+const VALID_ALBUM_STYLES: AlbumStyle[] = ["vintage-leather", "japanese-minimal", "classic-hardcover", "travel-scrapbook"];
 const MIN_SPEED_MULTIPLIER = 0.5;
 const MAX_SPEED_MULTIPLIER = 2;
 
@@ -520,7 +527,10 @@ function collectRouteUISettings(): RouteUISettings {
     routeLabelBottomPercent: uiState.routeLabelBottomPercent,
     photoAnimation: uiState.photoAnimation,
     photoStyle: uiState.photoStyle,
+    photoFrameStyle: uiState.photoFrameStyle,
     sceneTransition: uiState.sceneTransition,
+    albumStyle: uiState.albumStyle,
+    albumCaptionsEnabled: uiState.albumCaptionsEnabled,
     moodColorsEnabled: uiState.moodColorsEnabled,
     chapterPinsEnabled: uiState.chapterPinsEnabled,
     breadcrumbsEnabled: uiState.breadcrumbsEnabled,
@@ -557,8 +567,17 @@ function parseImportedUISettings(data: ImportRouteData): RouteUISettings {
     ...(VALID_PHOTO_STYLES.includes(data.photoStyle as PhotoStyle)
       ? { photoStyle: data.photoStyle }
       : {}),
+    ...(VALID_PHOTO_FRAME_STYLES.includes(data.photoFrameStyle as PhotoFrameStyle)
+      ? { photoFrameStyle: data.photoFrameStyle }
+      : {}),
     ...(VALID_SCENE_TRANSITIONS.includes(data.sceneTransition as SceneTransition)
       ? { sceneTransition: data.sceneTransition }
+      : {}),
+    ...(VALID_ALBUM_STYLES.includes(data.albumStyle as AlbumStyle)
+      ? { albumStyle: data.albumStyle }
+      : {}),
+    ...(typeof data.albumCaptionsEnabled === "boolean"
+      ? { albumCaptionsEnabled: data.albumCaptionsEnabled }
       : {}),
     ...(typeof data.moodColorsEnabled === "boolean"
       ? { moodColorsEnabled: data.moodColorsEnabled }
@@ -587,7 +606,10 @@ function applyImportedUISettings(uiSettings: RouteUISettings): void {
   if (uiSettings.routeLabelBottomPercent !== undefined) nextState.routeLabelBottomPercent = uiSettings.routeLabelBottomPercent;
   if (uiSettings.photoAnimation !== undefined) nextState.photoAnimation = uiSettings.photoAnimation;
   if (uiSettings.photoStyle !== undefined) nextState.photoStyle = uiSettings.photoStyle;
+  if (uiSettings.photoFrameStyle !== undefined) nextState.photoFrameStyle = uiSettings.photoFrameStyle;
   if (uiSettings.sceneTransition !== undefined) nextState.sceneTransition = uiSettings.sceneTransition;
+  if (uiSettings.albumStyle !== undefined) nextState.albumStyle = uiSettings.albumStyle;
+  if (uiSettings.albumCaptionsEnabled !== undefined) nextState.albumCaptionsEnabled = uiSettings.albumCaptionsEnabled;
   if (uiSettings.moodColorsEnabled !== undefined) nextState.moodColorsEnabled = uiSettings.moodColorsEnabled;
   if (uiSettings.chapterPinsEnabled !== undefined) nextState.chapterPinsEnabled = uiSettings.chapterPinsEnabled;
   if (uiSettings.breadcrumbsEnabled !== undefined) nextState.breadcrumbsEnabled = uiSettings.breadcrumbsEnabled;
