@@ -5,6 +5,7 @@ import {
   saveProject,
   getProjectMeta,
   getProjectData,
+  getPhotoAsset,
   listProjects,
   listPhotoRefsByProject,
   attachPhotoRef,
@@ -51,6 +52,15 @@ async function pushProject(projectId: string): Promise<void> {
 
     const photoRefs = await listPhotoRefsByProject(projectId);
     const assetMap = new Map(photoRefs.map((r) => [r.photoId, r.assetId]));
+
+    // Extract cloud:assetId placeholder URLs as fallback mappings
+    for (const loc of store.locations) {
+      for (const photo of loc.photos) {
+        if (photo.url.startsWith("cloud:") && !assetMap.has(photo.id)) {
+          assetMap.set(photo.id, photo.url.slice("cloud:".length));
+        }
+      }
+    }
 
     const cloudData = toCloudProjectData(
       store.locations,
@@ -151,6 +161,15 @@ async function pushProjectFromIDB(projectId: string): Promise<void> {
 
     const photoRefs = await listPhotoRefsByProject(projectId);
     const assetMap = new Map(photoRefs.map((r) => [r.photoId, r.assetId]));
+
+    // Also extract cloud:assetId placeholder URLs as fallback mappings
+    for (const loc of locations) {
+      for (const photo of loc.photos) {
+        if (photo.url.startsWith("cloud:") && !assetMap.has(photo.id)) {
+          assetMap.set(photo.id, photo.url.slice("cloud:".length));
+        }
+      }
+    }
 
     const cloudData = toCloudProjectData(
       locations, segments, data.mapStyle ?? "light",
@@ -293,9 +312,10 @@ async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjec
   for (const loc of cloud.locations) {
     if (!loc.photoRefs?.length) continue;
     for (const ref of loc.photoRefs) {
-      // Create a stub asset record if it doesn't exist locally
-      // (Phase 4 photoSync will download the actual blob)
-      try {
+      // Only create stub asset if it doesn't exist locally
+      // (avoids overwriting already-downloaded blobs from Phase 4)
+      const existingAsset = await getPhotoAsset(ref.assetId);
+      if (!existingAsset) {
         await putPhotoAsset({
           id: ref.assetId,
           blob: new Blob(), // Empty placeholder — Phase 4 downloads real blob
@@ -307,8 +327,6 @@ async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjec
           lastAccessedAt: Date.now(),
           refCount: 0, // attachPhotoRef will increment
         });
-      } catch {
-        // Asset may already exist — that's fine
       }
 
       await attachPhotoRef({
