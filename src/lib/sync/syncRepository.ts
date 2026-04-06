@@ -179,7 +179,7 @@ async function pushProjectFromIDB(projectId: string): Promise<void> {
     const { data: result, error } = await supabase.rpc("upsert_project_data", {
       p_project_id: projectId,
       p_data: cloudData,
-      p_base_revision: 0,
+      p_base_revision: meta.cloudRevision ?? 0,
       p_name: meta.name,
       p_location_count: meta.locationCount,
       p_preview_locations: meta.previewLocations,
@@ -448,11 +448,22 @@ async function onAuthReady(): Promise<void> {
       }
     }
 
-    // 2. Push local-only (unsynced) projects to cloud
-    // Skip empty auto-created projects (locationCount === 0, just created by restorePersistedProject)
+    // 2. Push local projects that need syncing
     for (const local of localProjects) {
-      if (!cloudById.has(local.id) && !local.cloudRevision && local.locationCount > 0) {
+      // Skip empty auto-created projects
+      if (local.locationCount === 0 && !local.cloudRevision) continue;
+
+      if (!cloudById.has(local.id) && !local.cloudRevision) {
+        // Local-only, never synced — push to cloud
         await pushProjectFromIDB(local.id);
+      } else if (local.cloudRevision) {
+        // Previously synced — check if local is newer than last known cloud revision
+        const cloudMeta = cloudById.get(local.id);
+        const cloudRev = cloudMeta?.cloudRevision ?? 0;
+        if (local.cloudRevision >= cloudRev && local.updatedAt > (cloudMeta?.updatedAt ?? 0)) {
+          // Local has edits made since last sync — push
+          await pushProjectFromIDB(local.id);
+        }
       }
     }
 
