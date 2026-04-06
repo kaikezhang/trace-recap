@@ -52,6 +52,7 @@ import { SUPPORTED_LOCAL_LANGUAGES } from "@/types";
 import type { AlbumStyle, AspectRatio, LocalLanguageCode, MapStyle, MapStyleCategory } from "@/types";
 import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
 import { ALBUM_STYLE_CONFIGS } from "@/lib/albumStyles";
+import AuthButton from "./AuthButton";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -556,6 +557,8 @@ export default function TopToolbar() {
               </TooltipTrigger>
               <TooltipContent>Share link</TooltipContent>
             </Tooltip>
+
+            <AuthButton />
 
             {/* Export — primary CTA */}
             <button
