@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
 interface AuthState {
@@ -36,7 +36,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (initPromise) return initPromise;
 
     initPromise = (async () => {
+      if (!isSupabaseConfigured()) {
+        set({ initialized: true });
+        return;
+      }
+
       const supabase = createClient();
+      if (!supabase) {
+        set({ initialized: true });
+        return;
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -63,8 +73,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signInWithEmail: async (email, password) => {
-    set({ loading: true });
     const supabase = createClient();
+    if (!supabase) return { error: "Auth is not configured" };
+    set({ loading: true });
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -74,8 +85,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUpWithEmail: async (email, password) => {
-    set({ loading: true });
     const supabase = createClient();
+    if (!supabase) return { error: "Auth is not configured" };
+    set({ loading: true });
     const { error } = await supabase.auth.signUp({ email, password });
     set({ loading: false });
     return { error: error?.message };
@@ -83,6 +95,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signInWithGoogle: async () => {
     const supabase = createClient();
+    if (!supabase) return;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -96,6 +109,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     const supabase = createClient();
+    if (!supabase) return;
     await supabase.auth.signOut();
     set({ user: null, session: null });
   },
