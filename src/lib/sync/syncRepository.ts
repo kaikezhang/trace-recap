@@ -372,21 +372,26 @@ async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjec
     for (const ref of loc.photoRefs) {
       // Only create stub asset if it doesn't exist locally
       const existingAsset = await getPhotoAsset(ref.assetId);
-      if (!existingAsset || existingAsset.byteSize === 0) {
-        // Download from cloud (or retry if previous download failed and left empty stub)
+      let hasLocalAsset = !!existingAsset && existingAsset.byteSize > 0;
+
+      if (!hasLocalAsset) {
+        // Download from cloud (or retry if previous download left empty stub)
         const blob = await downloadPhoto(ref.assetId);
-        if (!blob) {
-          // Download failed — skip creating stub so future hydrations retry
-          console.warn(`[sync] Failed to download photo ${ref.assetId} — will retry on next hydration`);
+        if (blob) {
+          hasLocalAsset = true;
+        } else {
+          console.warn(`[sync] Failed to download photo ${ref.assetId} — will retry later`);
         }
-        // downloadPhoto wrote to IDB if successful
       }
 
-      await attachPhotoRef({
-        projectId,
-        photoId: ref.photoId,
-        assetId: ref.assetId,
-      });
+      // Only attach ref if the asset actually exists locally
+      if (hasLocalAsset) {
+        await attachPhotoRef({
+          projectId,
+          photoId: ref.photoId,
+          assetId: ref.assetId,
+        });
+      }
     }
   }
 }
@@ -511,6 +516,25 @@ async function onAuthReady(): Promise<void> {
         if (local.cloudRevision >= cloudRev && local.updatedAt > (cloudMeta?.updatedAt ?? 0)) {
           // Local has edits made since last sync — push
           await pushProjectFromIDB(local.id);
+        }
+      }
+    }
+
+    // 3. Retry failed photo downloads for existing local projects with cloud data
+    const { downloadPhoto: dlPhoto } = await import("./photoSync");
+    for (const cloudMeta of cloudProjects) {
+      const cloudData = await pullProjectData(cloudMeta.id);
+      if (!cloudData) continue;
+      for (const loc of cloudData.locations) {
+        if (!loc.photoRefs?.length) continue;
+        for (const ref of loc.photoRefs) {
+          const asset = await getPhotoAsset(ref.assetId);
+          if (!asset || asset.byteSize === 0) {
+            const blob = await dlPhoto(ref.assetId);
+            if (blob) {
+              await attachPhotoRef({ projectId: cloudMeta.id, photoId: ref.photoId, assetId: ref.assetId });
+            }
+          }
         }
       }
     }
