@@ -924,7 +924,7 @@ export default memo(function LocationCard({
                 {/* Chevron expand/collapse toggle */}
                 <button
                   type="button"
-                  className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="relative z-20 shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
                   aria-label={isExpanded ? "Collapse" : "Expand"}
                 >
@@ -933,7 +933,7 @@ export default memo(function LocationCard({
               </div>
 
               {/* Metadata line */}
-              {(location.nameLocal || photoCount > 0 || hasChapterContent) && (
+              {(location.nameLocal || photoCount > 0 || hasChapterContent || isWaypoint) && (
                 <div className="mt-0.5 flex items-center gap-1.5 text-xs" style={{ color: brand.colors.warm[500] }}>
                   {location.nameLocal && <span className="truncate">{location.nameLocal}</span>}
                   {location.nameLocal && (photoCount > 0 || hasChapterContent) && <span>·</span>}
@@ -1030,9 +1030,11 @@ export default memo(function LocationCard({
               >
                 {/* Action row */}
                 <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2 pt-1">
-                  <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors hover:bg-muted" style={{ color: brand.colors.warm[600] }} onClick={() => toggleSection("chapter")}>
-                    <BookOpen className="h-3.5 w-3.5" /> Chapter
-                  </button>
+                  {!isWaypoint && (
+                    <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors hover:bg-muted" style={{ color: brand.colors.warm[600] }} onClick={() => toggleSection("chapter")}>
+                      <BookOpen className="h-3.5 w-3.5" /> Chapter
+                    </button>
+                  )}
                   <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors hover:bg-muted" style={{ color: brand.colors.warm[600] }} onClick={() => toggleSection("photos")}>
                     <Camera className="h-3.5 w-3.5" /> Photos
                   </button>
