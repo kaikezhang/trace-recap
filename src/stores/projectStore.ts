@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useUIStore } from "@/stores/uiStore";
+import { useAuthStore } from "@/stores/authStore";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
 import type {
   AspectRatio,
@@ -281,8 +282,10 @@ interface ProjectState {
   deleteProjectById: (projectId: string) => Promise<void>;
   renameCurrentProject: (name: string) => Promise<void>;
   renameProjectById: (projectId: string, name: string) => Promise<void>;
+  replaceCurrentProject: (name?: string) => Promise<string>;
   duplicateProjectById: (projectId: string) => Promise<ProjectMeta | null>;
   refreshProjectList: () => Promise<void>;
+  resetForSignOut: () => Promise<void>;
 }
 
 let nextId = 1;
@@ -2108,11 +2111,69 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   createNewProject: async (name) =>
     runProjectTransition("create a new project", async () => {
+      // Anonymous users: replace current project instead of creating a second one.
+      // Throw CONFIRM_REPLACE if the current project has user content so UI can confirm.
+      if (!useAuthStore.getState().user) {
+        const existing = await listProjectsFromDB();
+        const current = existing.find((p) => p.id === get().currentProjectId);
+        if (current && current.locationCount > 0) {
+          // Has user content — ask for confirmation (UI catches this and re-calls with force)
+          throw new Error("CONFIRM_REPLACE");
+        }
+        // Empty or demo project — delete silently before creating new one
+        for (const p of existing) {
+          await deleteProjectFromDB(p.id);
+        }
+      } else {
+        cancelPendingPersist();
+        const state = get();
+        if (state.currentProjectId) {
+          await persistCurrentProject(state);
+        }
+      }
+
+      const id = crypto.randomUUID();
+      const projectName = name ?? DEFAULT_ROUTE_NAME;
+      const now = Date.now();
+      const meta: ProjectMeta = {
+        id,
+        name: projectName,
+        createdAt: now,
+        updatedAt: now,
+        locationCount: 0,
+        previewLocations: [],
+      };
+      const data = createEmptyProjectData(projectName);
+
+      await saveProject(meta, data);
+      const projects = await listProjectsFromDB();
+
+      clearDirtyTracking();
+      diffCheckDisabled = false;
+      set({
+        currentProjectId: id,
+        currentProjectName: projectName,
+        projects,
+        locations: [],
+        segments: [],
+        mapStyle: DEFAULT_MAP_STYLE,
+        segmentTimingOverrides: {},
+        segmentColors: {},
+      });
+      tryUpdateLastSavedJson(data);
+      useHistoryStore.getState().resetHistory();
+
+      return id;
+    }),
+
+  replaceCurrentProject: async (name) =>
+    runProjectTransition("replace current project", async () => {
       cancelPendingPersist();
 
-      const state = get();
-      if (state.currentProjectId) {
-        await persistCurrentProject(state);
+      // Delete all existing local projects
+      const existing = await listProjectsFromDB();
+      for (const p of existing) {
+        await deleteProjectFromDB(p.id);
       }
 
       const id = crypto.randomUUID();
@@ -2309,6 +2370,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   duplicateProjectById: async (projectId) => {
+    if (!useAuthStore.getState().user) {
+      throw new Error("SIGN_IN_REQUIRED");
+    }
     try {
       const newId = crypto.randomUUID();
       const projects = get().projects;
@@ -2335,6 +2399,50 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.error("Failed to refresh project list.", error);
       throw error;
     }
+  },
+
+  resetForSignOut: async () => {
+    cancelPendingPersist();
+
+    // Flush current project to IDB before clearing (ensures sync can pick it up)
+    const state = get();
+    if (state.currentProjectId) {
+      await persistCurrentProject(state);
+    }
+
+    // Soft-clear: wipe project/ref stores but keep photo asset blobs as cache
+    const { clearAllLocalData } = await import("@/lib/storage");
+    await clearAllLocalData();
+
+    // Reset in-memory state to a single empty project
+    const id = crypto.randomUUID();
+    const name = DEFAULT_ROUTE_NAME;
+    const now = Date.now();
+    const meta: ProjectMeta = {
+      id,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      locationCount: 0,
+      previewLocations: [],
+    };
+    const data = createEmptyProjectData(name);
+    const { withSyncMuted, saveProject } = await import("@/lib/storage");
+    await withSyncMuted(() => saveProject(meta, data));
+
+    clearDirtyTracking();
+    diffCheckDisabled = false;
+    set({
+      currentProjectId: id,
+      currentProjectName: name,
+      projects: [meta],
+      locations: [],
+      segments: [],
+      mapStyle: DEFAULT_MAP_STYLE,
+      segmentTimingOverrides: {},
+      segmentColors: {},
+    });
+    useHistoryStore.getState().resetHistory();
   },
 }));
 

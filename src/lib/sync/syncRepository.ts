@@ -10,6 +10,7 @@ import {
   listPhotoRefsByProject,
   attachPhotoRef,
   putPhotoAsset,
+  deleteProject,
 } from "@/lib/storage";
 import type { ImportRouteData } from "@/stores/projectStore";
 import { toCloudProjectData } from "./converters";
@@ -342,6 +343,17 @@ async function convertToV2WithRefs(
       chapterEmoji: loc.chapterEmoji,
     }));
 
+    // Convert segment-ID-keyed overrides to index-keyed for local format
+    const localTimingOverrides: Record<string, number> = {};
+    if (cloud.timingOverrides) {
+      for (const [segId, duration] of Object.entries(cloud.timingOverrides)) {
+        const idx = cloud.segments.findIndex((s) => s.id === segId);
+        if (idx >= 0) {
+          localTimingOverrides[String(idx)] = duration;
+        }
+      }
+    }
+
     return {
       schemaVersion: 2,
       name: cloud.name,
@@ -355,7 +367,7 @@ async function convertToV2WithRefs(
         iconVariant: seg.iconVariant,
       })),
       mapStyle: cloud.mapStyle,
-      timingOverrides: cloud.timingOverrides,
+      timingOverrides: localTimingOverrides,
     };
   } catch (err) {
     console.error("[sync] Failed to convert to V2:", err);
@@ -462,120 +474,114 @@ async function onAuthReady(): Promise<void> {
   if (!isSupabaseConfigured() || !useAuthStore.getState().user) return;
 
   try {
+    updateSyncState({ remote: "syncing" });
+
     const cloudProjects = await pullProjectList();
     const localProjects = await listProjects();
-    const localById = new Map(localProjects.map((p) => [p.id, p]));
     const cloudById = new Map(cloudProjects.map((p) => [p.id, p]));
 
-    // 1. Pull cloud-only projects to local IDB
+    // 1. Migrate all anonymous local projects (no cloudRevision, non-empty)
+    const anonymousProjects = localProjects.filter(
+      (p) => !p.cloudRevision && p.locationCount > 0,
+    );
+
+    for (const anonProject of anonymousProjects) {
+      await migrateAnonymousProject(anonProject.id);
+    }
+
+    // 2. Reconcile cloud projects with local cache
     for (const cloudMeta of cloudProjects) {
-      const local = localById.get(cloudMeta.id);
+      const local = localProjects.find((p) => p.id === cloudMeta.id);
+      const localRev = local?.cloudRevision ?? 0;
+      const cloudRev = cloudMeta.cloudRevision ?? 0;
 
-      if (!local) {
-        // Cloud-only: pull to local
-        const cloudData = await pullProjectData(cloudMeta.id);
-        if (!cloudData) continue;
-        const persistedData = cloudToPersistedData(cloudData);
-        await withSyncMuted(() => saveProject(cloudMeta, persistedData));
-        await createPhotoRefsForCloudData(cloudMeta.id, cloudData);
-
-        // Re-save in V2 format so hydration can find photos via photoAssets/photoRefs
-        const v2Data = await convertToV2WithRefs(cloudMeta.id, cloudData);
-        if (v2Data) {
-          await withSyncMuted(() => saveProject(cloudMeta, v2Data));
+      if (local && localRev >= cloudRev) {
+        // Same revision — check if local has unpushed edits (e.g. offline edits)
+        if (local.updatedAt > (cloudMeta.updatedAt ?? 0)) {
+          await pushProjectFromIDB(local.id);
         }
+        // Otherwise local cache is current — no transfer needed
         continue;
       }
 
-      // Exists in both: compare revisions
-      const localRev = local.cloudRevision ?? 0;
-      const cloudRev = cloudMeta.cloudRevision ?? 0;
-      if (cloudRev > localRev) {
-        // Cloud has a newer revision. To prevent silent data loss,
-        // always mark as conflict. The user can resolve by choosing
-        // to keep local or pull cloud version.
-        // This is intentionally conservative — for a single-user MVP,
-        // this case only happens with multi-device concurrent editing.
-        console.warn(`[sync] Conflict: project ${cloudMeta.id} — cloud rev ${cloudRev} > local rev ${localRev}`);
-        updateSyncState({ remote: "conflict" });
-      }
-    }
-
-    // 2. Push local projects that need syncing
-    for (const local of localProjects) {
-      // Skip empty auto-created projects
-      if (local.locationCount === 0 && !local.cloudRevision) continue;
-
-      if (!cloudById.has(local.id) && !local.cloudRevision) {
-        // Local-only, never synced — push to cloud
-        await pushProjectFromIDB(local.id);
-      } else if (local.cloudRevision) {
-        // Previously synced — check if local is newer than last known cloud revision
-        const cloudMeta = cloudById.get(local.id);
-        const cloudRev = cloudMeta?.cloudRevision ?? 0;
-        if (local.cloudRevision >= cloudRev && local.updatedAt > (cloudMeta?.updatedAt ?? 0)) {
-          // Local has edits made since last sync — push
-          await pushProjectFromIDB(local.id);
+      if (local && cloudRev > localRev) {
+        // Cloud is newer but local might have unpushed edits too
+        if (local.updatedAt > (cloudMeta.updatedAt ?? 0)) {
+          // Both sides changed — conflict
+          console.warn(`[sync] Conflict: project ${cloudMeta.id} — cloud rev ${cloudRev} > local rev ${localRev}, but local has newer edits`);
+          updateSyncState({ remote: "conflict" });
+          continue;
         }
       }
-    }
 
-    // 3. Retry failed photo downloads for existing local projects with cloud data
-    const { downloadPhoto: dlPhoto } = await import("./photoSync");
-    for (const cloudMeta of cloudProjects) {
+      // Cloud is newer (or local doesn't exist) — pull
       const cloudData = await pullProjectData(cloudMeta.id);
       if (!cloudData) continue;
 
-      let needsV2Resave = false;
+      const persistedData = cloudToPersistedData(cloudData);
+      await withSyncMuted(() => saveProject(cloudMeta, persistedData));
+      await createPhotoRefsForCloudData(cloudMeta.id, cloudData);
 
-      for (const loc of cloudData.locations) {
-        if (!loc.photoRefs?.length) continue;
-        for (const ref of loc.photoRefs) {
-          const asset = await getPhotoAsset(ref.assetId);
-          if (!asset || asset.byteSize === 0) {
-            const blob = await dlPhoto(ref.assetId);
-            if (blob) {
-              await attachPhotoRef({ projectId: cloudMeta.id, photoId: ref.photoId, assetId: ref.assetId });
-              needsV2Resave = true;
-            }
-          }
-        }
-      }
-
-      // Also check if project data is still in legacy format with cloud: placeholders
-      // (covers previously-poisoned projects where blobs exist but V2 data is stale)
-      const localData = await getProjectData(cloudMeta.id);
-      if (localData) {
-        const hasCloudPlaceholders = localData.locations?.some((loc) =>
-          loc.photos?.some((p) => typeof p.url === "string" && p.url.startsWith("cloud:")),
-        );
-        if (hasCloudPlaceholders) needsV2Resave = true;
-      }
-
-      // Re-save in V2 format and reload active project if needed
-      if (needsV2Resave) {
-        const latestMeta = await getProjectMeta(cloudMeta.id);
-        const v2Data = await convertToV2WithRefs(cloudMeta.id, cloudData);
-        if (latestMeta && v2Data) {
-          await withSyncMuted(() => saveProject(latestMeta, v2Data));
-
-          // Reload active project to pick up newly downloaded photos
-          if (cloudMeta.id === useProjectStore.getState().currentProjectId) {
-            await withSyncMuted(async () => {
-              useProjectStore.setState({ currentProjectId: null });
-              await useProjectStore.getState().switchProject(cloudMeta.id);
-            });
-          }
-        }
+      const v2Data = await convertToV2WithRefs(cloudMeta.id, cloudData);
+      if (v2Data) {
+        await withSyncMuted(() => saveProject(cloudMeta, v2Data));
       }
     }
 
-    // Refresh project list in store
+    // 3. Clean up empty default projects left from logout soft-clear
+    for (const local of localProjects) {
+      if (!local.cloudRevision && local.locationCount === 0 && !cloudById.has(local.id)) {
+        await withSyncMuted(() => deleteProject(local.id));
+      }
+    }
+
+    // Refresh project list and switch to most recent project
     const refreshed = await listProjects();
     useProjectStore.setState({ projects: refreshed });
+
+    // If current project was cleared (soft-clear), switch to first available
+    const currentId = useProjectStore.getState().currentProjectId;
+    if (!currentId || !refreshed.find((p) => p.id === currentId)) {
+      if (refreshed.length > 0) {
+        await withSyncMuted(() =>
+          useProjectStore.getState().switchProject(refreshed[0].id),
+        );
+      }
+    }
+
+    updateSyncState({ remote: "synced" });
   } catch (err) {
     console.error("[sync] Auth ready hydration failed:", err);
+    updateSyncState({ remote: "error" });
   }
+}
+
+/** Upload all photos for a local-only project, then push project data to cloud. */
+async function migrateAnonymousProject(projectId: string): Promise<void> {
+  const { queueUpload } = await import("./photoSync");
+
+  const photoRefs = await listPhotoRefsByProject(projectId);
+
+  // Upload all local photo blobs — await each to ensure cloud assets exist
+  const uploadPromises: Promise<void>[] = [];
+  for (const ref of photoRefs) {
+    const asset = await getPhotoAsset(ref.assetId);
+    if (asset && asset.blob && asset.byteSize > 0) {
+      uploadPromises.push(queueUpload(ref.assetId, asset.blob, projectId));
+    }
+  }
+
+  if (uploadPromises.length > 0) {
+    const results = await Promise.allSettled(uploadPromises);
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      console.error(`[sync] ${failures.length} photo upload(s) failed during migration`);
+      // Continue with push — photos that uploaded will be linked, others will be retried later
+    }
+  }
+
+  // Push project data to cloud
+  await pushProjectFromIDB(projectId);
 }
 
 // ---------------------------------------------------------------------------

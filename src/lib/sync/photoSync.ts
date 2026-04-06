@@ -3,7 +3,16 @@ import { getPhotoAsset, putPhotoAsset } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 
 const MAX_CONCURRENT_UPLOADS = 3;
-const uploadQueue: Array<{ assetId: string; blob: Blob; projectId?: string }> = [];
+
+interface UploadQueueItem {
+  assetId: string;
+  blob: Blob;
+  projectId?: string;
+  resolve: () => void;
+  reject: (err: unknown) => void;
+}
+
+const uploadQueue: UploadQueueItem[] = [];
 let activeUploads = 0;
 
 function getStoragePath(userId: string, assetId: string): string {
@@ -18,8 +27,10 @@ async function processUploadQueue(): Promise<void> {
     activeUploads++;
     try {
       await uploadToStorage(item.assetId, item.blob, item.projectId);
+      item.resolve();
     } catch (err) {
       console.error(`[photoSync] Upload failed for ${item.assetId}:`, err);
+      item.reject(err);
     } finally {
       activeUploads--;
     }
@@ -27,10 +38,10 @@ async function processUploadQueue(): Promise<void> {
 }
 
 async function uploadToStorage(assetId: string, blob: Blob, projectId?: string): Promise<void> {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
   const supabase = createClient();
   const user = useAuthStore.getState().user;
-  if (!supabase || !user) return;
+  if (!supabase || !user) throw new Error("Not authenticated");
 
   const storagePath = getStoragePath(user.id, assetId);
 
@@ -42,8 +53,7 @@ async function uploadToStorage(assetId: string, blob: Blob, projectId?: string):
     });
 
   if (error) {
-    console.error(`[photoSync] Storage upload failed:`, error.message);
-    return;
+    throw new Error(`Storage upload failed for ${assetId}: ${error.message}`);
   }
 
   // Update local asset record with storage path
@@ -72,10 +82,12 @@ async function uploadToStorage(assetId: string, blob: Blob, projectId?: string):
   }
 }
 
-/** Queue a photo for background upload to Supabase Storage */
-export function queueUpload(assetId: string, blob: Blob, projectId?: string): void {
-  uploadQueue.push({ assetId, blob, projectId });
-  void processUploadQueue();
+/** Queue a photo for background upload to Supabase Storage. Returns a promise that resolves when the upload completes. */
+export function queueUpload(assetId: string, blob: Blob, projectId?: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    uploadQueue.push({ assetId, blob, projectId, resolve, reject });
+    void processUploadQueue();
+  });
 }
 
 /** Download a photo from Supabase Storage and save to local IDB */

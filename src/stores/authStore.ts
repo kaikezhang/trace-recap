@@ -112,5 +112,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!supabase) return;
     await supabase.auth.signOut();
     set({ user: null, session: null });
+
+    // Soft-clear: reset UI state, keep IDB photo cache for next login
+    const { useProjectStore } = await import("@/stores/projectStore");
+    await useProjectStore.getState().resetForSignOut();
   },
 }));
