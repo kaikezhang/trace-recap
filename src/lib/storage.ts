@@ -12,6 +12,33 @@ const STORE_PHOTO_REFS = "photoRefs";
 
 export type LegacyProjectData = ImportRouteData;
 
+// ---------------------------------------------------------------------------
+// Sync listener — notifies SyncRepository of IDB mutations
+// ---------------------------------------------------------------------------
+
+export type SyncListener = {
+  onProjectSaved?: (projectId: string) => void;
+  onProjectDeleted?: (projectId: string) => void;
+  onProjectRenamed?: (projectId: string, name: string) => void;
+  onProjectDuplicated?: (newProjectId: string) => void;
+};
+
+let syncListener: SyncListener = {};
+let syncMuteDepth = 0;
+
+export function setSyncListener(listener: SyncListener) {
+  syncListener = listener;
+}
+
+export async function withSyncMuted<T>(fn: () => Promise<T>): Promise<T> {
+  syncMuteDepth++;
+  try {
+    return await fn();
+  } finally {
+    syncMuteDepth--;
+  }
+}
+
 export interface StoredPhoto {
   id: string;
   assetId: string;
@@ -246,6 +273,7 @@ export async function deleteProject(id: string): Promise<void> {
   ]);
 
   await tx.done;
+  if (syncMuteDepth === 0) syncListener.onProjectDeleted?.(id);
 }
 
 export async function renameProject(
@@ -258,6 +286,7 @@ export async function renameProject(
   meta.name = name;
   meta.updatedAt = Date.now();
   await db.put(STORE_PROJECTS, meta);
+  if (syncMuteDepth === 0) syncListener.onProjectRenamed?.(id, name);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +331,7 @@ export async function saveProject(
     tx.objectStore(STORE_PROJECT_DATA).put(data, meta.id),
     tx.done,
   ]);
+  if (syncMuteDepth === 0) syncListener.onProjectSaved?.(meta.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -507,6 +537,7 @@ export async function duplicateProject(
   }
 
   await tx.done;
+  if (syncMuteDepth === 0) syncListener.onProjectDuplicated?.(newId);
   return newMeta;
 }
 

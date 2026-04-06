@@ -38,6 +38,7 @@ import {
 } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
 import { useAuthStore } from "@/stores/authStore";
+import { initSyncRepository } from "@/lib/sync/syncRepository";
 import { useUIStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { ToastViewport } from "@/components/ui/toast";
@@ -509,6 +510,7 @@ function EditorContent() {
     setDemoQueryChecked(true);
     initializeProjectPersistence({ skipRestore: nextShouldLoadDemo });
     void useAuthStore.getState().initialize();
+    initSyncRepository();
   }, []);
 
   useEffect(() => {
