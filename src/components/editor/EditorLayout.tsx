@@ -132,6 +132,7 @@ function EditorContent() {
   const locations = useProjectStore((s) => s.locations);
   const segments = useProjectStore((s) => s.segments);
   const createNewProject = useProjectStore((s) => s.createNewProject);
+  const replaceCurrentProject = useProjectStore((s) => s.replaceCurrentProject);
   const loadRouteData = useProjectStore((s) => s.loadRouteData);
   const segmentTimingOverrides = useProjectStore(
     (s) => s.segmentTimingOverrides,
@@ -548,7 +549,8 @@ function EditorContent() {
 
     const loadDemoProject = async () => {
       try {
-        await createNewProject(demoProject.name);
+        // Demo always replaces the current project without confirmation
+        await replaceCurrentProject(demoProject.name);
         await loadRouteData(demoProject);
       } catch (error) {
         console.error("Failed to load demo project.", error);
@@ -566,7 +568,7 @@ function EditorContent() {
     };
 
     void loadDemoProject();
-  }, [createNewProject, demoQueryChecked, loadRouteData, shouldLoadDemo]);
+  }, [replaceCurrentProject, demoQueryChecked, loadRouteData, shouldLoadDemo]);
 
   // Rebuild engine when project changes
   useEffect(() => {

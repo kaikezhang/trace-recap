@@ -287,24 +287,36 @@ export default function ProjectListDialog() {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const switchProject = useProjectStore((s) => s.switchProject);
   const createNewProject = useProjectStore((s) => s.createNewProject);
+  const replaceCurrentProject = useProjectStore((s) => s.replaceCurrentProject);
   const deleteProjectById = useProjectStore((s) => s.deleteProjectById);
   const renameProjectById = useProjectStore((s) => s.renameProjectById);
   const duplicateProjectById = useProjectStore((s) => s.duplicateProjectById);
   const isSwitchingProject = useProjectStore((s) => s.isSwitchingProject);
   const user = useAuthStore((s) => s.user);
+  const [confirmReplace, setConfirmReplace] = useState(false);
 
   const handleNewProject = useCallback(async () => {
     try {
       await createNewProject();
       setOpen(false);
     } catch (error) {
-      if (error instanceof Error && error.message === "SIGN_IN_REQUIRED") {
-        // Handled in UI below
+      if (error instanceof Error && error.message === "CONFIRM_REPLACE") {
+        setConfirmReplace(true);
         return;
       }
       console.error("Failed to create a new project.", error);
     }
   }, [createNewProject, setOpen]);
+
+  const handleConfirmReplace = useCallback(async () => {
+    try {
+      await replaceCurrentProject();
+      setConfirmReplace(false);
+      setOpen(false);
+    } catch (error) {
+      console.error("Failed to replace project.", error);
+    }
+  }, [replaceCurrentProject, setOpen]);
 
   const handleSwitch = useCallback(
     async (projectId: string) => {
@@ -354,7 +366,33 @@ export default function ProjectListDialog() {
         </ScrollArea>
 
         <div className="-mx-4 -mb-4 rounded-b-xl border-t bg-muted/50 p-3">
-          {user ? (
+          {confirmReplace ? (
+            <div className="space-y-2">
+              <p className="text-center text-xs text-muted-foreground">
+                This will replace your current project. Continue?
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setConfirmReplace(false)}
+                  disabled={isSwitchingProject}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => void handleConfirmReplace()}
+                  disabled={isSwitchingProject}
+                >
+                  {isSwitchingProject ? "Working..." : "Start Fresh"}
+                </Button>
+              </div>
+            </div>
+          ) : (
             <Button
               variant="outline"
               size="sm"
@@ -365,10 +403,6 @@ export default function ProjectListDialog() {
               <Plus className="h-4 w-4" />
               {isSwitchingProject ? "Working..." : "New Project"}
             </Button>
-          ) : (
-            <p className="text-center text-xs text-muted-foreground">
-              Sign in to create more projects
-            </p>
           )}
         </div>
       </DialogContent>
