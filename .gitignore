@@ -62,3 +62,23 @@ next-env.d.ts
 
 # vibeflow
 .vibeflow/
+
+# claude code
+.claude/
+
+# crowd test artifacts
+crowd-test/
+crowdtest-screenshots/
+crowdtest-report-*.md
+test-screenshots/
+
+# skills / agents
+.agents/
+skills/
+skills-lock.json
+
+# ephemeral runtime data
+action-log.json
+feedback.json
+journey.json
+artifacts/
