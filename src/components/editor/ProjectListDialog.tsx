@@ -391,6 +391,9 @@ export default function ProjectListDialog() {
                   {isSwitchingProject ? "Working..." : "Start Fresh"}
                 </Button>
               </div>
+              <p className="text-center text-xs text-muted-foreground">
+                Sign in to keep multiple projects
+              </p>
             </div>
           ) : (
             <Button
