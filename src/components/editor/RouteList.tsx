@@ -222,7 +222,7 @@ function TimelineSegmentCard({
   return (
     <div className={cn("relative", indented ? (mobileSheet ? "ml-4" : "ml-6") : "", timelinePaddingClassName)}>
       <div
-        className="relative overflow-hidden rounded-[20px] border"
+        className="relative overflow-hidden rounded-xl border"
         style={{
           borderColor: brand.colors.warm[200],
           borderLeftColor: accent,
@@ -721,6 +721,7 @@ export default memo(function RouteList({
           transportMode={incomingMode}
           selected={isSelected}
           isMultiSelected={isMultiSelected}
+          multiSelectActive={selectedIds.size > 0}
           onMultiSelect={handleMultiSelect}
           dragDisabled={dragDisabled || selectedIds.size > 0}
           bulkExpandSignal={bulkExpandSignal}
@@ -1123,7 +1124,7 @@ export default memo(function RouteList({
           )}
 
           {showToolbar && (
-            <div className={cn("mb-3 flex flex-wrap items-center gap-2", mobileSheet ? "" : "min-w-[21.5rem] pl-2 pr-3 sm:min-w-0")}>
+            <div className={cn("mb-3 flex flex-wrap items-center gap-2", mobileSheet ? "" : "pl-2 pr-3")}>
               <button
                 type="button"
                 className="touch-target-mobile inline-flex min-h-11 items-center rounded-full border px-3.5 py-2 text-xs font-medium transition-colors"
@@ -1165,7 +1166,7 @@ export default memo(function RouteList({
           )}
 
           {showFilterInput && (
-            <div className={cn("mb-3", mobileSheet ? "" : "min-w-[21.5rem] pl-2 pr-3 sm:min-w-0")}>
+            <div className={cn("mb-3", mobileSheet ? "" : "pl-2 pr-3")}>
               <div
                 className="rounded-[22px] border px-3 py-3"
                 style={{
@@ -1208,7 +1209,7 @@ export default memo(function RouteList({
           )}
 
           {isFiltering ? (
-            <div className={mobileSheet ? "pb-2" : "min-w-[21.5rem] pb-4 pl-2 pr-3 sm:min-w-0"}>
+            <div className={mobileSheet ? "pb-2" : "pb-4 pl-2 pr-3"}>
               {visibleLocations.length === 0 ? (
                 <div
                   className="rounded-[24px] border px-5 py-6 text-center"
@@ -1244,7 +1245,7 @@ export default memo(function RouteList({
               )}
             </div>
           ) : (
-            <div className={cn("relative", mobileSheet ? "pb-2" : "min-w-[21.5rem] pb-4 pl-2 pr-3 sm:min-w-0")}>
+            <div className={cn("relative", mobileSheet ? "pb-2" : "pb-4 pl-2 pr-3")}>
               <div
                 aria-hidden
                 className="pointer-events-none absolute bottom-6 top-7 w-[2px] rounded-full"
