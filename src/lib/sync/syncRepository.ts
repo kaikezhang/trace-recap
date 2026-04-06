@@ -494,6 +494,13 @@ export function initSyncRepository(): void {
       debouncedPush(projectId);
     },
     onProjectDeleted: (projectId) => {
+      // Only delete from cloud if sync is not in conflict state
+      // (prevents accidentally deleting the authoritative cloud copy)
+      const syncState = useUIStore.getState().syncState;
+      if (syncState.remote === "conflict") {
+        console.warn("[sync] Skipping cloud delete — sync is in conflict state");
+        return;
+      }
       void deleteFromCloud(projectId);
     },
     onProjectRenamed: (projectId, name) => {
