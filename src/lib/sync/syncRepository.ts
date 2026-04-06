@@ -235,6 +235,10 @@ async function pullProjectData(projectId: string): Promise<CloudProjectData | nu
 }
 
 function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
+  // NOTE: Photos from cloud are excluded from the persisted data because they
+  // don't have local blob URLs. Photo download is handled by Phase 4 (photoSync).
+  // By excluding photos here, we avoid creating entries with broken url:"" that
+  // would be dropped on the next push cycle.
   return {
     name: cloud.name,
     locations: cloud.locations.map((loc) => ({
@@ -243,16 +247,7 @@ function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
       nameLocal: loc.nameLocal,
       coordinates: loc.coordinates,
       isWaypoint: loc.isWaypoint ?? false,
-      ...(loc.photoRefs?.length
-        ? {
-            photos: loc.photoRefs.map((ref) => ({
-              id: ref.photoId,
-              url: "", // Photos hydrated separately
-              caption: ref.caption,
-              focalPoint: ref.focalPoint,
-            })),
-          }
-        : {}),
+      // Photos intentionally omitted — they require blob download (Phase 4)
       photoLayout: loc.photoLayout,
       chapterTitle: loc.chapterTitle,
       chapterNote: loc.chapterNote,
@@ -367,10 +362,14 @@ async function onAuthReady(): Promise<void> {
         const mergedMeta = { ...local, ...cloudMeta };
         await withSyncMuted(() => saveProject(mergedMeta, persistedData));
 
-        // If this is the active project, reload it into Zustand
+        // If this is the active project, reload it into Zustand from IDB
         if (cloudMeta.id === useProjectStore.getState().currentProjectId) {
           await withSyncMuted(async () => {
-            await useProjectStore.getState().switchProject(cloudMeta.id);
+            // Force reload by temporarily clearing currentProjectId
+            // then switching back, bypassing the early return guard
+            const store = useProjectStore.getState();
+            useProjectStore.setState({ currentProjectId: null });
+            await store.switchProject(cloudMeta.id);
           });
         }
       }
