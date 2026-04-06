@@ -1480,7 +1480,7 @@ function EditorContent() {
               {constrainedMapSize && (
                 <div
                   ref={mapContainerRef}
-                  className="relative overflow-hidden rounded-lg border border-white/10 bg-background shadow-2xl"
+                  className={`relative rounded-lg border border-white/10 bg-background shadow-2xl ${locations.length === 0 ? "" : "overflow-hidden"}`}
                   style={{
                     width: constrainedMapSize.width,
                     height: constrainedMapSize.height,

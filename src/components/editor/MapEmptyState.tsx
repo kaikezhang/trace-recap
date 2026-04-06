@@ -163,7 +163,7 @@ export default function MapEmptyState({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4 py-8">
+    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-4 py-8">
       <motion.div
         initial={{ opacity: 0, y: 18, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
