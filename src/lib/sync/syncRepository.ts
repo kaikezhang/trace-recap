@@ -427,7 +427,17 @@ async function onAuthReady(): Promise<void> {
       const localRev = local.cloudRevision ?? 0;
       const cloudRev = cloudMeta.cloudRevision ?? 0;
       if (cloudRev > localRev) {
-        // Cloud is newer — pull
+        // Cloud has a newer revision. Check if local also has unsaved changes
+        const localHasEdits = local.updatedAt > (cloudMeta.updatedAt ?? 0);
+
+        if (localHasEdits) {
+          // Both sides diverged — mark as conflict, don't overwrite either
+          console.warn(`[sync] Conflict: project ${cloudMeta.id} has both local edits and newer cloud revision`);
+          updateSyncState({ remote: "conflict" });
+          continue;
+        }
+
+        // No local edits — safe to pull cloud version
         const cloudData = await pullProjectData(cloudMeta.id);
         if (!cloudData) continue;
         const persistedData = cloudToPersistedData(cloudData);
@@ -438,8 +448,6 @@ async function onAuthReady(): Promise<void> {
         // If this is the active project, reload it into Zustand from IDB
         if (cloudMeta.id === useProjectStore.getState().currentProjectId) {
           await withSyncMuted(async () => {
-            // Force reload by temporarily clearing currentProjectId
-            // then switching back, bypassing the early return guard
             const store = useProjectStore.getState();
             useProjectStore.setState({ currentProjectId: null });
             await store.switchProject(cloudMeta.id);
