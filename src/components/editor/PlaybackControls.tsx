@@ -183,7 +183,8 @@ export default memo(function PlaybackControls({
       const isMobile = window.innerWidth < 768;
       const container = containerRef.current;
 
-      if (!isPlaying || exportDialogOpen || !isMobile || !container) {
+      const isPlaybackActive = playbackState === "playing" || playbackState === "paused";
+      if (!isPlaybackActive || exportDialogOpen || !isMobile || !container) {
         onPlayingMobileInsetChange(0);
         return;
       }
@@ -221,7 +222,7 @@ export default memo(function PlaybackControls({
       visualViewport?.removeEventListener("scroll", updateInset);
       onPlayingMobileInsetChange(0);
     };
-  }, [exportDialogOpen, isPlaying, onPlayingMobileInsetChange]);
+  }, [exportDialogOpen, playbackState, onPlayingMobileInsetChange]);
 
   useEffect(() => {
     if (!hoveredTickId) return;
