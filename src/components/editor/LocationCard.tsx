@@ -2,20 +2,25 @@
 
 import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import {
+  ArrowRightLeft,
   Bike,
+  BookOpen,
   Bus,
+  Camera,
   Car,
   Check,
   ChevronDown,
   Copy,
   Footprints,
   Image as ImageIcon,
+  LayoutGrid,
   LayoutTemplate,
   Pencil,
   Plane,
   Ship,
   Smile,
   TrainFront,
+  Trash2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -23,13 +28,6 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { brand } from "@/lib/brand";
 import { useHistoryStore } from "@/stores/historyStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -47,6 +45,7 @@ interface LocationCardProps {
   transportMode?: TransportMode;
   selected?: boolean;
   isMultiSelected?: boolean;
+  multiSelectActive?: boolean;
   onMultiSelect?: (id: string, shiftKey: boolean) => void;
   dragDisabled?: boolean;
   bulkExpandSignal?: number;
@@ -111,18 +110,6 @@ function DragGrip() {
         />
       ))}
     </span>
-  );
-}
-
-const LONG_PRESS_DURATION_MS = 550;
-
-function shouldIgnoreContextMenuTarget(target: HTMLElement | null): boolean {
-  if (!target) return false;
-
-  return Boolean(
-    target.closest(
-      "button:not([data-card-disclosure]), input, textarea, select, label, a, [data-drag-handle], [data-no-seek], [data-delete-btn], [data-context-menu-ignore]",
-    ),
   );
 }
 
@@ -497,6 +484,7 @@ export default memo(function LocationCard({
   transportMode,
   selected = false,
   isMultiSelected = false,
+  multiSelectActive = false,
   onMultiSelect,
   dragDisabled = false,
   bulkExpandSignal = 0,
@@ -513,7 +501,6 @@ export default memo(function LocationCard({
   const location = useLocation(locationId);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isNameEditing, setIsNameEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [isMobile, setIsMobile] = useState(false);
@@ -521,8 +508,6 @@ export default memo(function LocationCard({
   const updateLocation = useProjectStore((s) => s.updateLocation);
   const duplicateLocation = useProjectStore((s) => s.duplicateLocation);
   const addToast = useUIStore((s) => s.addToast);
-  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchOriginRef = useRef<{ x: number; y: number } | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -573,15 +558,6 @@ export default memo(function LocationCard({
     opacity: isDragging ? 0.65 : isWaypoint ? 0.72 : 1,
     transformOrigin: "top center" as const,
   };
-
-  const clearLongPressTimer = () => {
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
-  };
-
-  useEffect(() => clearLongPressTimer, []);
 
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)");
@@ -637,23 +613,8 @@ export default memo(function LocationCard({
     }
   }, [bulkExpandMode, bulkExpandSignal]);
 
-  const openContextMenu = (x: number, y: number) => {
-    onClick?.(index);
-    setContextMenu({ x, y });
-  };
-
   const dismissEditHint = () => {
     onDismissEditHint?.();
-  };
-
-  const ensureSectionOpen = (section: LocationSection) => {
-    setOpenSections((current) => {
-      if (isMobile) {
-        return createExclusiveOpenSections(section);
-      }
-
-      return { ...current, [section]: true };
-    });
   };
 
   const toggleExpanded = () => {
@@ -752,45 +713,17 @@ export default memo(function LocationCard({
       return;
     }
 
+    if (multiSelectActive) {
+      onClick?.(index);
+      return;
+    }
+
     toggleExpanded();
   };
 
   const actionButtonClassName = "relative z-20 inline-flex items-center justify-center rounded-lg border transition-[transform,background-color,border-color] duration-150 hover:bg-white active:scale-95";
-  const desktopActionButtonClassName = `${actionButtonClassName} h-8 w-8`;
   const mobileActionButtonClassName = `touch-target-mobile ${actionButtonClassName} h-11 w-11 rounded-xl`;
-  const desktopActionBar = (
-    <div
-      className={`absolute bottom-3 right-14 z-20 hidden items-center gap-1 rounded-xl border px-1.5 py-1 transition-all duration-200 md:flex ${
-        isHovered && !isDragging
-          ? "translate-y-0 opacity-100"
-          : "pointer-events-none translate-y-1 opacity-0"
-      }`}
-      style={{
-        borderColor: brand.colors.warm[200],
-        backgroundColor: "rgba(255,251,245,0.92)",
-        boxShadow: brand.shadows.sm,
-      }}
-    >
-      <button
-        type="button"
-        data-no-seek
-        disabled={!onEditLayout}
-        className={`${desktopActionButtonClassName} disabled:cursor-not-allowed disabled:opacity-50`}
-        style={{
-          borderColor: brand.colors.warm[200],
-          color: brand.colors.warm[700],
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEditLayout();
-        }}
-        aria-label="Edit layout"
-        title="Edit layout"
-      >
-        <LayoutTemplate className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
+  const hasChapterContent = !!(location.chapterTitle || location.chapterNote);
   const mobileActionBar = (
     <div className="flex items-center gap-1.5">
       <button
@@ -816,13 +749,12 @@ export default memo(function LocationCard({
   );
 
   return (
-    <>
       <div
         ref={setNodeRef}
         {...dropProps}
         className={`group relative origin-top overflow-hidden border transition-[transform,border-color,box-shadow,background-color] duration-200 ${
           isDragOver ? "ring-2 ring-[#fdba74] ring-offset-1 ring-offset-[#fffbf5]" : ""
-        } ${isWaypoint ? "rounded-[24px]" : "rounded-[30px]"}`}
+        } ${isWaypoint ? "rounded-xl" : "rounded-2xl"}`}
         style={{
           ...style,
           borderColor: isMultiSelected
@@ -843,54 +775,6 @@ export default memo(function LocationCard({
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        onContextMenu={(e) => {
-          const target = e.target as HTMLElement;
-          if (shouldIgnoreContextMenuTarget(target)) {
-            return;
-          }
-
-          e.preventDefault();
-          e.stopPropagation();
-          openContextMenu(e.clientX, e.clientY);
-        }}
-        onTouchStart={(e) => {
-          const target = e.target as HTMLElement;
-          if (shouldIgnoreContextMenuTarget(target) || e.touches.length !== 1) {
-            return;
-          }
-
-          const touch = e.touches[0];
-          touchOriginRef.current = { x: touch.clientX, y: touch.clientY };
-          clearLongPressTimer();
-          longPressTimeoutRef.current = setTimeout(() => {
-            openContextMenu(touch.clientX, touch.clientY);
-          }, LONG_PRESS_DURATION_MS);
-        }}
-        onTouchMove={(e) => {
-          if (!touchOriginRef.current) {
-            return;
-          }
-
-          const touch = e.touches[0];
-          if (!touch) {
-            clearLongPressTimer();
-            return;
-          }
-
-          const deltaX = Math.abs(touch.clientX - touchOriginRef.current.x);
-          const deltaY = Math.abs(touch.clientY - touchOriginRef.current.y);
-          if (deltaX > 10 || deltaY > 10) {
-            clearLongPressTimer();
-          }
-        }}
-        onTouchEnd={() => {
-          clearLongPressTimer();
-          touchOriginRef.current = null;
-        }}
-        onTouchCancel={() => {
-          clearLongPressTimer();
-          touchOriginRef.current = null;
-        }}
       >
         {isMultiSelected && (
           <div
@@ -922,7 +806,7 @@ export default memo(function LocationCard({
 
         <div
           className={`relative flex flex-col gap-2 ${
-            isWaypoint ? "p-3.5 md:gap-3 md:p-3.5" : "p-4 md:gap-3 md:p-4"
+            isWaypoint ? "px-3 py-2 md:gap-3 md:px-3 md:py-2" : "p-4 md:gap-3 md:px-3 md:py-2.5"
           } md:flex-row md:items-center`}
         >
           <button
@@ -933,7 +817,7 @@ export default memo(function LocationCard({
             aria-label={`${isExpanded ? "Collapse" : "Expand"} details for ${stopLabel}`}
             onClick={handleCardClick}
             className={`absolute inset-0 z-10 transition-colors active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74] focus-visible:ring-inset ${
-              isWaypoint ? "rounded-[24px]" : "rounded-[30px]"
+              isWaypoint ? "rounded-xl" : "rounded-2xl"
             }`}
           />
           <div className="flex min-w-0 items-center gap-2 md:flex-1 md:gap-3">
@@ -946,7 +830,7 @@ export default memo(function LocationCard({
               className={`touch-target-mobile relative z-20 flex shrink-0 items-center justify-center border transition-colors touch-none disabled:cursor-not-allowed disabled:opacity-55 ${
                 dragDisabled ? "" : "cursor-grab active:cursor-grabbing"
               } ${
-                isWaypoint ? "h-10 w-10 rounded-xl" : "h-11 w-11 rounded-2xl"
+                isWaypoint ? "h-7 w-7 rounded-lg" : "h-7 w-7 rounded-xl"
               }`}
               style={{
                 borderColor: brand.colors.warm[200],
@@ -962,8 +846,8 @@ export default memo(function LocationCard({
             <div
               className={`flex shrink-0 items-center justify-center font-semibold text-white ${
                 isWaypoint
-                  ? "h-8 w-8 rounded-[14px] text-xs"
-                  : "h-8 w-8 rounded-[14px] text-xs md:h-10 md:w-10 md:rounded-[16px] md:text-sm"
+                  ? "h-6 w-6 rounded-lg text-xs"
+                  : "h-7 w-7 rounded-xl text-xs"
               }`}
               style={{
                 background: isWaypoint
@@ -1037,110 +921,30 @@ export default memo(function LocationCard({
                   )}
                 </div>
 
+                {/* Chevron expand/collapse toggle */}
                 <button
                   type="button"
-                  data-no-seek
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startNameEditing();
-                  }}
-                  disabled={isNameEditing}
-                  className="touch-target-mobile relative z-20 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60 md:inline-flex"
-                  style={{
-                    borderColor: brand.colors.primary[200],
-                    backgroundColor: "rgba(255,255,255,0.8)",
-                    color: brand.colors.primary[600],
-                  }}
-                  aria-label="Edit stop name"
-                  title="Edit stop name"
+                  className="relative z-20 shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
+                  aria-label={isExpanded ? "Collapse" : "Expand"}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                 </button>
-
-                {AccentIcon && (
-                  <div
-                    className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-full md:inline-flex"
-                    style={{ backgroundColor: `${accentColor}18` }}
-                    title={transportLabel}
-                  >
-                    <AccentIcon
-                      className="h-3.5 w-3.5"
-                      style={{ color: accentColor }}
-                    />
-                  </div>
-                )}
-                {isWaypoint && (
-                  <span
-                    className="hidden shrink-0 rounded-full px-2 py-1 text-xs font-medium md:inline-flex"
-                    style={{
-                      color: brand.colors.warm[500],
-                      backgroundColor: brand.colors.warm[100],
-                    }}
-                  >
-                    Pass-through
-                  </span>
-                )}
               </div>
 
-              <div
-                className="mt-1 hidden items-center gap-2 overflow-hidden text-xs md:flex"
-                style={{ color: brand.colors.warm[500] }}
-              >
-                <span className="truncate">{desktopMetaLabel}</span>
-                <span className="shrink-0">•</span>
-                <span className="truncate">
-                  {photoCount > 0 ? mobilePhotoLabel : "No photos yet"}
-                </span>
-              </div>
-
-              {location.chapterNote && (
-                <p
-                  className="mt-1 hidden truncate text-xs md:block"
-                  style={{ color: brand.colors.warm[500] }}
-                >
-                  {location.chapterNote}
-                </p>
-              )}
-            </div>
-
-            <div
-              className={`relative shrink-0 overflow-hidden ${
-                isWaypoint
-                  ? "h-11 w-11 rounded-[14px] md:h-12 md:w-12 md:rounded-[16px]"
-                  : "h-11 w-11 rounded-[14px] md:h-14 md:w-14 md:rounded-[18px]"
-              }`}
-              style={{
-                boxShadow: brand.shadows.sm,
-                ...(coverPhoto
-                  ? {}
-                  : {
-                      border: `1px solid ${brand.colors.warm[200]}`,
-                      background: `linear-gradient(160deg, ${brand.colors.sand[100]} 0%, ${brand.colors.primary[50]} 100%)`,
-                    }),
-              }}
-            >
-              {coverPhoto ? (
-                <>
-                  <img
-                    src={coverPhoto.url}
-                    alt={location.name ? `${location.name} photo` : "Location photo"}
-                    className="h-full w-full object-cover"
-                  />
-                  {photoCount > 1 && (
-                    <div
-                      className="absolute bottom-1 right-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium text-white"
-                      style={{ backgroundColor: "rgba(28,25,23,0.72)" }}
-                    >
-                      +{photoCount - 1}
-                    </div>
+              {/* Metadata line */}
+              {(location.nameLocal || photoCount > 0 || hasChapterContent || isWaypoint) && (
+                <div className="mt-0.5 flex items-center gap-1.5 text-xs" style={{ color: brand.colors.warm[500] }}>
+                  {location.nameLocal && <span className="truncate">{location.nameLocal}</span>}
+                  {location.nameLocal && (photoCount > 0 || hasChapterContent) && <span>·</span>}
+                  {photoCount > 0 && (
+                    <span className="flex shrink-0 items-center gap-0.5">
+                      <Camera className="h-3 w-3" /> {photoCount}
+                    </span>
                   )}
-                </>
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <ImageIcon
-                    className="h-4 w-4"
-                    style={{ color: brand.colors.warm[400] }}
-                  />
+                  {photoCount > 0 && hasChapterContent && <span>·</span>}
+                  {hasChapterContent && <BookOpen className="h-3 w-3 shrink-0" />}
+                  {isWaypoint && <span className="ml-0.5 italic">pass-through</span>}
                 </div>
               )}
             </div>
@@ -1203,19 +1007,6 @@ export default memo(function LocationCard({
             </div>
           </div>
 
-          <button
-            data-delete-btn
-            className="touch-target-mobile relative z-20 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[#fff1f2] md:flex"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleRemove();
-            }}
-            aria-label="Remove location"
-          >
-            <X className="h-4 w-4" style={{ color: brand.colors.warm[500] }} />
-          </button>
-
-          {desktopActionBar}
         </div>
 
         <AnimatePresence initial={false}>
@@ -1237,6 +1028,34 @@ export default memo(function LocationCard({
                   background: `linear-gradient(180deg, rgba(255,251,245,0.94) 0%, rgba(255,247,237,0.55) 100%)`,
                 }}
               >
+                {/* Action row */}
+                <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2 pt-1">
+                  {!isWaypoint && (
+                    <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors hover:bg-muted" style={{ color: brand.colors.warm[600] }} onClick={() => toggleSection("chapter")}>
+                      <BookOpen className="h-3.5 w-3.5" /> Chapter
+                    </button>
+                  )}
+                  <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors hover:bg-muted" style={{ color: brand.colors.warm[600] }} onClick={() => toggleSection("photos")}>
+                    <Camera className="h-3.5 w-3.5" /> Photos
+                  </button>
+                  <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors hover:bg-muted" style={{ color: brand.colors.warm[600] }} onClick={handleEditLayout}>
+                    <LayoutGrid className="h-3.5 w-3.5" /> Layout
+                  </button>
+                  <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors hover:bg-muted" style={{ color: brand.colors.warm[600] }} onClick={() => { onClick?.(index); duplicateLocation(locationId); }}>
+                    <Copy className="h-3.5 w-3.5" /> Duplicate
+                  </button>
+                  {canToggleWaypoint && (
+                    <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors hover:bg-muted" style={{ color: brand.colors.warm[600] }} onClick={handleTogglePassThrough}>
+                      <ArrowRightLeft className="h-3.5 w-3.5" /> {isWaypoint ? "Destination" : "Pass-through"}
+                    </button>
+                  )}
+                  <div className="flex-1" />
+                  <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 hover:text-red-600" onClick={handleRemove}>
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                </div>
+                <div className="border-t" style={{ borderColor: brand.colors.warm[100] }} />
+
                 <SectionDisclosure
                   title="Basics"
                   icon={Pencil}
@@ -1378,84 +1197,5 @@ export default memo(function LocationCard({
           )}
         </AnimatePresence>
       </div>
-
-      <DropdownMenu
-        open={Boolean(contextMenu)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setContextMenu(null);
-          }
-        }}
-      >
-        <DropdownMenuTrigger
-          render={(
-            <button
-              type="button"
-              aria-hidden
-              tabIndex={-1}
-              data-context-menu-ignore
-              className="pointer-events-none fixed h-0 w-0 opacity-0"
-              style={{
-                left: contextMenu?.x ?? 0,
-                top: contextMenu?.y ?? 0,
-              }}
-            />
-          )}
-        />
-        <DropdownMenuContent align="start" side="bottom" sideOffset={6} className="w-48">
-          <DropdownMenuItem
-            onClick={() => {
-              setIsExpanded(true);
-              ensureSectionOpen("photos");
-              onClick?.(index);
-              setContextMenu(null);
-            }}
-          >
-            <ImageIcon className="h-4 w-4" />
-            Edit Photos
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!onEditLayout}
-            onClick={() => {
-              onEditLayout?.(locationId);
-              setContextMenu(null);
-            }}
-          >
-            <LayoutTemplate className="h-4 w-4" />
-            Edit Layout
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!canToggleWaypoint}
-            onClick={() => {
-              onToggleWaypoint(locationId);
-              setContextMenu(null);
-            }}
-          >
-            <span className="text-sm leading-none">{isWaypoint ? "●" : "○"}</span>
-            Toggle Pass-through
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              duplicateLocation(locationId);
-              setContextMenu(null);
-            }}
-          >
-            <Copy className="h-4 w-4" />
-            Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => {
-              handleRemove();
-              setContextMenu(null);
-            }}
-          >
-            <X className="h-4 w-4" />
-            Remove
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
   );
 });
