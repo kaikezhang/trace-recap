@@ -77,7 +77,6 @@ type LayoutStyle =
   | "single"
   | "carousel"
   | "scatter"
-  | "polaroid"
   | "overlap"
   | "diagonal"
   | "rows"
@@ -94,7 +93,6 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "single", label: "Single", icon: ImageIcon, template: "single" },
   { id: "carousel", label: "Carousel", icon: Images, template: "filmstrip" },
   { id: "scatter", label: "Scatter", icon: Shuffle, template: "scatter" },
-  { id: "polaroid", label: "Polaroid", icon: Square, template: "polaroid" },
   { id: "overlap", label: "Overlap", icon: Layers, template: "overlap" },
   { id: "diagonal", label: "Diagonal", icon: BetweenHorizontalStart, template: "diagonal" },
   { id: "rows", label: "Rows", icon: Rows3, template: "rows" },
@@ -103,7 +101,7 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
   { id: "free", label: "Free", icon: Hand, template: "auto" },
 ];
 
-const RANDOM_LAYOUT_TEMPLATES: LayoutTemplateType[] = ["scatter", "polaroid", "overlap"];
+const RANDOM_LAYOUT_TEMPLATES: LayoutTemplateType[] = ["scatter", "overlap"];
 
 const PHOTO_ANIMATION_OPTIONS: PhotoAnimation[] = [
   "scale",
@@ -959,8 +957,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     if (activeTemplate === "collage" || activeTemplate === "hero") return "collage";
     if (activeTemplate === "single") return "single";
     if (activeTemplate === "filmstrip") return "carousel";
-    if (activeTemplate === "scatter") return "scatter";
-    if (activeTemplate === "polaroid") return "polaroid";
+    if (activeTemplate === "scatter" || activeTemplate === "polaroid") return "scatter";
     if (activeTemplate === "overlap") return "overlap";
     if (activeTemplate === "diagonal") return "diagonal";
     if (activeTemplate === "rows") return "rows";
@@ -1367,8 +1364,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
             </div>
           </div>
 
-          {/* Preview area — takes up remaining space above controls */}
-          <div ref={mobilePreviewRef} className="flex-1 min-h-0 flex items-center justify-center p-4 bg-gray-950/5">
+          {/* Preview area — limited height so controls are always scrollable */}
+          <div ref={mobilePreviewRef} className="shrink-0 flex items-center justify-center p-4 bg-gray-950/5" style={{ height: "40vh" }}>
             <PreviewWithMapBackground
               mapSnapshot={mapSnapshot}
               previewContainerStyle={previewContainerStyle}
@@ -1379,8 +1376,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
           </div>
 
           {/* Bottom controls */}
-          <div className="max-h-[50vh] shrink-0 border-t border-gray-100 bg-white flex min-h-0 flex-col">
-            <div className="min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 border-t border-gray-100 bg-white flex flex-col" style={{ maxHeight: "60vh" }}>
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
               <div className="space-y-3 px-4 py-3">
                 <SettingsGroup title="Layout" defaultOpen>
                   <LayoutStyleSelectorSection
