@@ -10,6 +10,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Redirect OAuth code from root to /auth/callback
+  // (Supabase PKCE flow sends code to Site URL, not redirectTo)
+  const { pathname, searchParams } = request.nextUrl;
+  if (pathname === "/" && searchParams.has("code")) {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = "/auth/callback";
+    return NextResponse.redirect(callbackUrl);
+  }
+
   return await updateSession(request);
 }
 
