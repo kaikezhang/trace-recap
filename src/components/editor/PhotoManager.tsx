@@ -3,20 +3,25 @@
 import { useRef, useState, useCallback } from "react";
 import { Upload, Trash2, LayoutGrid, Undo2, Redo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { compressImage } from "@/lib/imageUtils";
+import { compressImage, getImageDimensions } from "@/lib/imageUtils";
 import { useProjectStore } from "@/stores/projectStore";
 import { useHistoryStore } from "@/stores/historyStore";
+import { useAuthStore } from "@/stores/authStore";
+import { putPhotoAsset, attachPhotoRef } from "@/lib/storage";
+import { queueUpload } from "@/lib/sync/photoSync";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 async function processImageFiles(
   files: FileList | null,
   maxCount: number,
-  addPhoto: (locationId: string, photo: { url: string }) => void,
+  addPhoto: (locationId: string, photo: { url: string }) => string,
   locationId: string
 ) {
   if (!files) return;
   const toAdd = Array.from(files).slice(0, maxCount);
+  const currentProjectId = useProjectStore.getState().currentProjectId;
+
   for (const file of toAdd) {
     const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
     if (!allowedTypes.includes(file.type)) continue;
@@ -26,13 +31,43 @@ async function processImageFiles(
     }
     // Compress: resize to max 1920px + JPEG 80% → typically 100-300KB per photo
     const compressed = await compressImage(file);
+
     // Convert directly to data URL for persistence safety — blob URLs die on page reload
     const dataUrl = await new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.readAsDataURL(compressed);
     });
-    addPhoto(locationId, { url: dataUrl });
+
+    // Get dimensions from the data URL
+    const dimensions = await getImageDimensions(dataUrl);
+    const width = dimensions?.width ?? 0;
+    const height = dimensions?.height ?? 0;
+
+    const photoId = addPhoto(locationId, { url: dataUrl });
+
+    // Write blob to IDB photoAssets for cloud sync
+    const assetId = crypto.randomUUID();
+    await putPhotoAsset({
+      id: assetId,
+      blob: compressed,
+      mimeType: compressed.type || "image/jpeg",
+      byteSize: compressed.size,
+      width,
+      height,
+      createdAt: Date.now(),
+      lastAccessedAt: Date.now(),
+      refCount: 0, // attachPhotoRef will increment to 1
+    });
+
+    if (currentProjectId) {
+      await attachPhotoRef({ projectId: currentProjectId, photoId, assetId });
+    }
+
+    // Queue cloud upload if authenticated
+    if (useAuthStore.getState().user) {
+      queueUpload(assetId, compressed);
+    }
   }
 }
 
