@@ -4,6 +4,7 @@ import {
   withSyncMuted,
   saveProject,
   getProjectMeta,
+  getProjectData,
   listProjects,
   listPhotoRefsByProject,
 } from "@/lib/storage";
@@ -102,6 +103,85 @@ async function pushProject(projectId: string): Promise<void> {
   } catch (err) {
     console.error("[sync] Push error:", err);
     updateSyncState({ remote: "error" });
+  }
+}
+
+/** Push a project from IDB data (for non-active projects, e.g., first login migration) */
+async function pushProjectFromIDB(projectId: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = createClient();
+  if (!supabase || !useAuthStore.getState().user) return;
+
+  try {
+    const meta = await getProjectMeta(projectId);
+    if (!meta) return;
+
+    const data = await getProjectData(projectId);
+    if (!data) return;
+
+    // Parse locations/segments from persisted data for cloud conversion
+    const locations = (data.locations ?? []).map((loc, i) => ({
+      id: loc.id ?? `loc-${i}`,
+      name: loc.name,
+      nameLocal: loc.nameLocal,
+      coordinates: loc.coordinates as [number, number],
+      isWaypoint: loc.isWaypoint ?? false,
+      photos: (loc.photos ?? []).map((p, j) => ({
+        id: p.id ?? `photo-${i}-${j}`,
+        locationId: loc.id ?? `loc-${i}`,
+        url: p.url ?? "",
+        caption: p.caption,
+        focalPoint: p.focalPoint,
+      })),
+      photoLayout: loc.photoLayout,
+      chapterTitle: loc.chapterTitle,
+      chapterNote: loc.chapterNote,
+      chapterDate: loc.chapterDate,
+      chapterEmoji: loc.chapterEmoji,
+    }));
+
+    const segments = (data.segments ?? []).map((seg, i) => ({
+      id: seg.id ?? `seg-${i}`,
+      fromId: locations[seg.fromIndex]?.id ?? "",
+      toId: locations[seg.toIndex]?.id ?? "",
+      transportMode: seg.transportMode,
+      iconStyle: (seg.iconStyle ?? "solid") as import("@/types").TransportIconStyle,
+      iconVariant: seg.iconVariant,
+      geometry: null as GeoJSON.LineString | null,
+    }));
+
+    const photoRefs = await listPhotoRefsByProject(projectId);
+    const assetMap = new Map(photoRefs.map((r) => [r.photoId, r.assetId]));
+
+    const cloudData = toCloudProjectData(
+      locations, segments, data.mapStyle ?? "light",
+      data.timingOverrides ?? {}, meta.name, assetMap,
+    );
+
+    const { data: result, error } = await supabase.rpc("upsert_project_data", {
+      p_project_id: projectId,
+      p_data: cloudData,
+      p_base_revision: 0,
+      p_name: meta.name,
+      p_location_count: meta.locationCount,
+      p_preview_locations: meta.previewLocations,
+    });
+
+    if (error) {
+      console.error("[sync] IDB push failed:", error.message);
+      return;
+    }
+
+    if (result?.new_revision) {
+      meta.cloudRevision = result.new_revision;
+      await withSyncMuted(async () => {
+        const { openDB } = await import("idb");
+        const db = await openDB("trace-recap", 2);
+        await db.put("projects", meta);
+      });
+    }
+  } catch (err) {
+    console.error("[sync] IDB push error:", err);
   }
 }
 
@@ -220,18 +300,33 @@ async function renameOnCloud(projectId: string, name: string): Promise<void> {
   const supabase = createClient();
   if (!supabase || !useAuthStore.getState().user) return;
 
-  // Use revision-aware update to avoid overwriting concurrent changes
-  const { error } = await supabase
-    .from("projects")
-    .update({
-      name,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", projectId)
-    .eq("user_id", useAuthStore.getState().user!.id);
+  // Bump revision atomically so concurrent pushes don't silently revert
+  const { error } = await supabase.rpc("rename_project", {
+    p_project_id: projectId,
+    p_name: name,
+  });
 
   if (error) {
     console.error("[sync] Cloud rename failed:", error.message);
+  } else {
+    // Update local cloudRevision
+    const meta = await getProjectMeta(projectId);
+    if (meta) {
+      // Re-fetch revision from cloud
+      const { data } = await supabase
+        .from("projects")
+        .select("revision")
+        .eq("id", projectId)
+        .single();
+      if (data) {
+        meta.cloudRevision = data.revision;
+        await withSyncMuted(async () => {
+          const { openDB } = await import("idb");
+          const db = await openDB("trace-recap", 2);
+          await db.put("projects", meta);
+        });
+      }
+    }
   }
 }
 
@@ -271,15 +366,20 @@ async function onAuthReady(): Promise<void> {
         const persistedData = cloudToPersistedData(cloudData);
         const mergedMeta = { ...local, ...cloudMeta };
         await withSyncMuted(() => saveProject(mergedMeta, persistedData));
+
+        // If this is the active project, reload it into Zustand
+        if (cloudMeta.id === useProjectStore.getState().currentProjectId) {
+          await withSyncMuted(async () => {
+            await useProjectStore.getState().switchProject(cloudMeta.id);
+          });
+        }
       }
     }
 
     // 2. Push local-only (unsynced) projects to cloud
     for (const local of localProjects) {
       if (!cloudById.has(local.id) && !local.cloudRevision) {
-        if (local.id === useProjectStore.getState().currentProjectId) {
-          await pushProject(local.id);
-        }
+        await pushProjectFromIDB(local.id);
       }
     }
 
@@ -328,8 +428,8 @@ export function initSyncRepository(): void {
     },
     onProjectDuplicated: (newProjectId) => {
       if (!useAuthStore.getState().user) return;
-      // Push the duplicated project to cloud
-      void pushProject(newProjectId);
+      // Push the duplicated project from IDB (it's not the active project)
+      void pushProjectFromIDB(newProjectId);
     },
   });
 

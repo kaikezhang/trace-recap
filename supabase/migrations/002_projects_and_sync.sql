@@ -94,3 +94,20 @@ begin
   return json_build_object('status', 'ok', 'new_revision', new_rev);
 end;
 $$ language plpgsql security definer set search_path = public;
+
+-- =========================================================================
+-- Rename RPC with revision bump
+-- =========================================================================
+create or replace function rename_project(
+  p_project_id uuid,
+  p_name text
+) returns void as $$
+begin
+  update projects
+  set name = p_name,
+      revision = revision + 1,
+      updated_at = now()
+  where id = p_project_id
+  and user_id = auth.uid();
+end;
+$$ language plpgsql security definer set search_path = public;
