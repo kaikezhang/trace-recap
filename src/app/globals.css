@@ -242,3 +242,49 @@
     }
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Landing page animations                                                   */
+/* -------------------------------------------------------------------------- */
+
+.landing-animate-in {
+  opacity: 0;
+  transform: translateY(24px);
+  animation: landingFadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes landingFadeInUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Stagger children */
+.landing-animate-in:nth-child(2) { animation-delay: 0.1s; }
+.landing-animate-in:nth-child(3) { animation-delay: 0.2s; }
+
+/* Route line drawing effect */
+.landing-route-draw path {
+  stroke-dashoffset: 1000;
+  animation: landingRouteDraw 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s forwards;
+}
+
+@keyframes landingRouteDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-animate-in {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+
+  .landing-route-draw path {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+}
