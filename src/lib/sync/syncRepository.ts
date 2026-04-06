@@ -427,32 +427,13 @@ async function onAuthReady(): Promise<void> {
       const localRev = local.cloudRevision ?? 0;
       const cloudRev = cloudMeta.cloudRevision ?? 0;
       if (cloudRev > localRev) {
-        // Cloud has a newer revision. Check if local also has unsaved changes
-        const localHasEdits = local.updatedAt > (cloudMeta.updatedAt ?? 0);
-
-        if (localHasEdits) {
-          // Both sides diverged — mark as conflict, don't overwrite either
-          console.warn(`[sync] Conflict: project ${cloudMeta.id} has both local edits and newer cloud revision`);
-          updateSyncState({ remote: "conflict" });
-          continue;
-        }
-
-        // No local edits — safe to pull cloud version
-        const cloudData = await pullProjectData(cloudMeta.id);
-        if (!cloudData) continue;
-        const persistedData = cloudToPersistedData(cloudData);
-        const mergedMeta = { ...local, ...cloudMeta };
-        await withSyncMuted(() => saveProject(mergedMeta, persistedData));
-        await createPhotoRefsForCloudData(cloudMeta.id, cloudData);
-
-        // If this is the active project, reload it into Zustand from IDB
-        if (cloudMeta.id === useProjectStore.getState().currentProjectId) {
-          await withSyncMuted(async () => {
-            const store = useProjectStore.getState();
-            useProjectStore.setState({ currentProjectId: null });
-            await store.switchProject(cloudMeta.id);
-          });
-        }
+        // Cloud has a newer revision. To prevent silent data loss,
+        // always mark as conflict. The user can resolve by choosing
+        // to keep local or pull cloud version.
+        // This is intentionally conservative — for a single-user MVP,
+        // this case only happens with multi-device concurrent editing.
+        console.warn(`[sync] Conflict: project ${cloudMeta.id} — cloud rev ${cloudRev} > local rev ${localRev}`);
+        updateSyncState({ remote: "conflict" });
       }
     }
 
