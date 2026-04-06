@@ -53,6 +53,8 @@ import type { AlbumStyle, AspectRatio, LocalLanguageCode, MapStyle, MapStyleCate
 import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
 import { ALBUM_STYLE_CONFIGS } from "@/lib/albumStyles";
 import AuthButton from "./AuthButton";
+import SyncIndicator from "./SyncIndicator";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +70,8 @@ export default function TopToolbar() {
   const setLeftPanelOpen = useUIStore((s) => s.setLeftPanelOpen);
   const setImmersiveMode = useUIStore((s) => s.setImmersiveMode);
   const saveStatus = useUIStore((s) => s.saveStatus);
+  const cloudSyncStatus = useUIStore((s) => s.syncState.remote);
+  const user = useAuthStore((s) => s.user);
   const exportRoute = useProjectStore((s) => s.exportRoute);
   const loadRouteData = useProjectStore((s) => s.loadRouteData);
   const enrichLocalNames = useProjectStore((s) => s.enrichLocalNames);
@@ -371,6 +375,9 @@ export default function TopToolbar() {
                   {saveStatusConfig[saveStatus].tooltip}
                 </TooltipContent>
               </Tooltip>
+            )}
+            {user && cloudSyncStatus !== "idle" && (
+              <SyncIndicator status={cloudSyncStatus} />
             )}
           </div>
 

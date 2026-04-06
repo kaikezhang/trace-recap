@@ -58,6 +58,19 @@ function persistSettings(state: PersistedUISettings): void {
 const saved = loadPersistedSettings();
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
+export type CloudSyncStatus = "idle" | "syncing" | "synced" | "error" | "offline" | "conflict";
+
+export interface SyncState {
+  local: SaveStatus;
+  remote: CloudSyncStatus;
+  pendingOps: number;
+}
+
+const DEFAULT_SYNC_STATE: SyncState = {
+  local: "idle",
+  remote: "idle",
+  pendingOps: 0,
+};
 
 const MIN_SPEED_MULTIPLIER = 0.5;
 const MAX_SPEED_MULTIPLIER = 2;
@@ -91,6 +104,7 @@ interface UIState {
   searchQuery: string;
   bottomSheetState: BottomSheetState;
   saveStatus: SaveStatus;
+  syncState: SyncState;
   toasts: ToastItem[];
   cityLabelSize: number; // CSS font size in px (default 18)
   cityLabelLang: "en" | "local"; // City label language toggle
@@ -114,6 +128,7 @@ interface UIState {
   addToast: (toast: Omit<ToastItem, "id">) => void;
   removeToast: (id: string) => void;
   setSaveStatus: (status: SaveStatus) => void;
+  setSyncState: (updater: Partial<SyncState> | ((prev: SyncState) => Partial<SyncState>)) => void;
   setLeftPanelOpen: (open: boolean) => void;
   setHeaderCollapsed: (collapsed: boolean) => void;
   toggleHeaderCollapsed: () => void;
@@ -171,6 +186,7 @@ export const useUIStore = create<UIState>((set) => ({
   breadcrumbsEnabled: saved.breadcrumbsEnabled ?? true,
   tripStatsEnabled: saved.tripStatsEnabled ?? true,
   saveStatus: "idle" as SaveStatus,
+  syncState: DEFAULT_SYNC_STATE,
   toasts: [],
 
   addToast: (toast) => {
@@ -181,6 +197,11 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
   },
   setSaveStatus: (saveStatus) => set({ saveStatus }),
+  setSyncState: (updater) =>
+    set((state) => {
+      const partial = typeof updater === "function" ? updater(state.syncState) : updater;
+      return { syncState: { ...state.syncState, ...partial } };
+    }),
   setLeftPanelOpen: (leftPanelOpen) => set({ leftPanelOpen }),
   setHeaderCollapsed: (headerCollapsed) => set({ headerCollapsed }),
   toggleHeaderCollapsed: () =>
