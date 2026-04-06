@@ -120,11 +120,12 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
           <div className="grid grid-cols-4 gap-1.5">
             {location.photos.map((photo) => (
               <div key={photo.id} className="relative">
-                <div className="relative aspect-square">
+                <div className="relative">
                   <img
                     src={photo.url}
                     alt=""
-                    className="w-full h-full rounded-lg object-cover bg-muted"
+                    className="w-full rounded-lg object-contain bg-muted"
+                    style={{ aspectRatio: "auto", maxHeight: "120px", minHeight: "60px" }}
                   />
                   <button
                     type="button"
