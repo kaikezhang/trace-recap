@@ -133,7 +133,7 @@ export default function LandingPage() {
               }}
             >
               Your travels deserve a movie,{" "}
-              <span className="gradient-sunset bg-clip-text text-transparent">
+              <span className="gradient-sunset">
                 not a forgotten camera roll.
               </span>
             </h1>
