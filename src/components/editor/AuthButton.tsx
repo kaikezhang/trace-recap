@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/authStore";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import AuthDialog from "./AuthDialog";
 
 export default function AuthButton() {
@@ -23,7 +24,8 @@ export default function AuthButton() {
   const initialized = useAuthStore((s) => s.initialized);
   const signOut = useAuthStore((s) => s.signOut);
 
-  if (!initialized) return null;
+  // Hide auth UI entirely when Supabase is not configured
+  if (!isSupabaseConfigured() || !initialized) return null;
 
   if (!user) {
     return (
