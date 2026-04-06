@@ -832,9 +832,10 @@ export default memo(function RouteList({
               type="button"
               className="touch-target-mobile mt-4 inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2 text-sm font-medium transition-colors active:scale-[0.99]"
               style={{
-                borderColor: brand.colors.primary[200],
-                color: brand.colors.primary[700],
-                backgroundColor: "rgba(255,247,237,0.95)",
+                borderColor: brand.colors.primary[300],
+                color: "white",
+                backgroundColor: brand.colors.primary[500],
+                boxShadow: brand.shadows.md,
               }}
               onClick={onAddStopRequest}
             >
@@ -1054,7 +1055,7 @@ export default memo(function RouteList({
           className={cn(
             "outline-none focus-visible:ring-2 focus-visible:ring-[#fdba74]/70 focus-visible:ring-inset",
             mobileSheet
-              ? "overflow-x-hidden px-3 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3"
+              ? "overflow-x-hidden px-3 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4"
               : "overflow-x-auto px-2 py-4 sm:px-4"
           )}
           onKeyDown={handleRouteListKeyDown}

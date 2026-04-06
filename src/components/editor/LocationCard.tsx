@@ -107,7 +107,7 @@ function DragGrip() {
         <span
           key={index}
           className="h-1 w-1 rounded-full transition-colors"
-          style={{ backgroundColor: brand.colors.warm[400] }}
+          style={{ backgroundColor: brand.colors.warm[500] }}
         />
       ))}
     </span>
@@ -249,14 +249,14 @@ function EmojiPicker({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: -4 }}
             transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
-            className="absolute bottom-full right-0 z-50 mb-1 w-[240px] rounded-2xl border p-2 shadow-lg"
+            className="absolute bottom-full right-0 z-50 mb-1 w-[220px] rounded-2xl border p-2 shadow-lg"
             style={{
               backgroundColor: "rgba(255,251,245,0.98)",
               borderColor: brand.colors.warm[200],
               boxShadow: brand.shadows.lg,
             }}
           >
-            <div className="grid max-h-[260px] grid-cols-5 gap-1 overflow-y-auto sm:max-h-[180px] sm:grid-cols-10 sm:gap-0.5">
+            <div className="grid max-h-[280px] grid-cols-4 gap-0.5 overflow-y-auto sm:max-h-[180px] sm:grid-cols-10 sm:gap-0.5">
               {TRAVEL_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
@@ -264,7 +264,7 @@ function EmojiPicker({
                     onSelect(emoji);
                     setOpen(false);
                   }}
-                  className="touch-target-mobile flex h-6 w-6 items-center justify-center rounded text-sm transition-colors hover:bg-white"
+                  className="touch-target-mobile flex h-11 w-11 items-center justify-center rounded-lg text-base transition-colors hover:bg-white"
                   style={{
                     boxShadow: value === emoji ? `inset 0 0 0 1px ${brand.colors.primary[400]}` : undefined,
                     backgroundColor: value === emoji ? brand.colors.primary[100] : "transparent",
@@ -414,7 +414,7 @@ function SectionDisclosure({
 }) {
   return (
     <section
-      className="overflow-hidden rounded-[22px] border"
+      className="overflow-hidden rounded-[16px] border"
       style={{
         borderColor: brand.colors.warm[200],
         background: "linear-gradient(180deg, rgba(255,255,255,0.8) 0%, rgba(255,250,245,0.72) 100%)",
@@ -946,7 +946,7 @@ export default memo(function LocationCard({
               className={`touch-target-mobile relative z-20 flex shrink-0 items-center justify-center border transition-colors touch-none disabled:cursor-not-allowed disabled:opacity-55 ${
                 dragDisabled ? "" : "cursor-grab active:cursor-grabbing"
               } ${
-                isWaypoint ? "h-8 w-8 rounded-xl" : "h-10 w-9 rounded-2xl"
+                isWaypoint ? "h-10 w-10 rounded-xl" : "h-11 w-11 rounded-2xl"
               }`}
               style={{
                 borderColor: brand.colors.warm[200],

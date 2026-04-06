@@ -199,7 +199,7 @@ export default function BottomSheet({
         initial={false}
         animate={{ y: currentOffset }}
         onDragEnd={handleDragEnd}
-        transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", damping: 32, stiffness: 320 }}
+        transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", damping: 30, stiffness: 280 }}
         className="fixed bottom-0 left-0 right-0 z-50 flex touch-pan-x flex-col overflow-hidden rounded-t-[30px] border-t"
         style={{ height: maxSheetHeight || "85vh" }}
       >
@@ -209,12 +209,12 @@ export default function BottomSheet({
             height: headerHeight,
             background: "linear-gradient(180deg, rgba(255,251,245,0.98) 0%, rgba(255,247,237,0.96) 62%, rgba(255,244,231,0.93) 100%)",
             borderTop: `1px solid ${brand.colors.warm[100]}`,
-            boxShadow: "0 -18px 40px rgba(120, 53, 15, 0.18)",
+            boxShadow: "0 -16px 48px rgba(120, 53, 15, 0.10)",
           }}
         >
           <div
-            className="mx-auto mb-3 h-1.5 w-10 rounded-full"
-            style={{ backgroundColor: "rgba(168,162,158,0.52)" }}
+            className="mx-auto mb-3 h-[5px] w-10 rounded-full"
+            style={{ backgroundColor: "rgba(120,113,108,0.36)" }}
           />
 
           {bottomSheetState === "collapsed" ? (
@@ -246,11 +246,11 @@ export default function BottomSheet({
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {collapsedStopsPreview.length > 0 ? (
-                  <div className="flex items-center -space-x-1.5">
+                  <div className="flex items-center -space-x-1">
                     {collapsedStopsPreview.map((stopInitial, index) => (
                       <span
                         key={`${stopInitial}-${index}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-semibold"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-semibold"
                         style={{
                           borderColor: "rgba(255,255,255,0.85)",
                           backgroundColor: index === 2 ? brand.colors.ocean[50] : brand.colors.primary[50],
@@ -263,7 +263,7 @@ export default function BottomSheet({
                   </div>
                 ) : null}
                 <span
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border"
                   style={{
                     borderColor: brand.colors.warm[200],
                     backgroundColor: "rgba(255,255,255,0.84)",
@@ -326,7 +326,7 @@ export default function BottomSheet({
                 onHintDismiss={onDismissSearchHint}
                 hideLabel
                 onInputFocus={() => setBottomSheetState("full")}
-                inputClassName="h-12 rounded-[22px] border-[#f2dbc2] bg-white/94 text-[15px] shadow-[0_18px_30px_-24px_rgba(120,53,15,0.45)]"
+                inputClassName="h-12 rounded-[22px] border-[#f2dbc2] bg-white/94 text-[15px] shadow-[0_14px_28px_-20px_rgba(120,53,15,0.18)]"
               />
             </div>
           )}
