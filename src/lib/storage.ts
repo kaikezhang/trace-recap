@@ -65,6 +65,7 @@ export interface PhotoAssetRecord {
   mimeType: string;
   byteSize: number;
   width: number;
+  storagePath?: string; // Supabase Storage path, set after upload
   height: number;
   createdAt: number;
   lastAccessedAt: number;

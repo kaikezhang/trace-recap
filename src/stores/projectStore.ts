@@ -250,7 +250,7 @@ interface ProjectState {
   addPhoto: (
     locationId: string,
     photo: Omit<Photo, "id" | "locationId">,
-  ) => void;
+  ) => string;
   removePhoto: (locationId: string, photoId: string) => void;
   setPhotoLayout: (locationId: string, layout: PhotoLayout) => void;
   setPhotoFocalPoint: (
@@ -1815,13 +1815,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   clearSegmentColors: () => set({ segmentColors: {} }),
 
-  addPhoto: (locationId, photo) => {
+  addPhoto: (locationId, photo): string => {
     useHistoryStore.getState().pushState();
     markLocationDirty(locationId);
     const newId = generateId();
     // Register the photo URL so undo/redo can restore it without cloning
     registerPhotoUrl(newId, photo.url);
-    return set((state) => ({
+    set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
           ? {
@@ -1831,18 +1831,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           : l,
       ),
     }));
+    return newId;
   },
 
   removePhoto: (locationId, photoId) => {
     useHistoryStore.getState().pushState();
     markLocationDirty(locationId);
-    return set((state) => ({
+    set((state) => ({
       locations: state.locations.map((l) =>
         l.id === locationId
           ? { ...l, photos: l.photos.filter((p) => p.id !== photoId) }
           : l,
       ),
     }));
+    // Detach photo ref from IDB (decrements refCount, cleans up orphan assets)
+    const projectId = get().currentProjectId;
+    if (projectId) {
+      void import("@/lib/storage").then(({ detachPhotoRef }) =>
+        detachPhotoRef(projectId, photoId).catch((err) =>
+          console.warn("[photo] Failed to detach photo ref:", err),
+        ),
+      );
+    }
   },
 
   setPhotoLayout: (locationId, layout) => {

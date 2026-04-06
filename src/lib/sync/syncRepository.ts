@@ -307,33 +307,91 @@ function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
   };
 }
 
-/** Create IDB photoRef entries for cloud photo references so pushes can find asset mappings */
+/** Convert cloud data to V2 format with photo asset references for proper IDB hydration */
+async function convertToV2WithRefs(
+  projectId: string,
+  cloud: CloudProjectData,
+): Promise<import("@/lib/storage").ProjectDataV2 | null> {
+  try {
+    const { listPhotoRefsByProject: listRefs } = await import("@/lib/storage");
+    const refs = await listRefs(projectId);
+    const refsByPhotoId = new Map(refs.map((r) => [r.photoId, r]));
+
+    const locations: import("@/lib/storage").StoredLocation[] = cloud.locations.map((loc) => ({
+      id: loc.id,
+      name: loc.name,
+      nameLocal: loc.nameLocal,
+      coordinates: loc.coordinates,
+      isWaypoint: loc.isWaypoint ?? false,
+      photos: loc.photoRefs
+        ?.map((ref) => {
+          const idbRef = refsByPhotoId.get(ref.photoId);
+          if (!idbRef) return null;
+          return {
+            id: ref.photoId,
+            assetId: idbRef.assetId,
+            caption: ref.caption,
+            focalPoint: ref.focalPoint,
+          };
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null),
+      photoLayout: loc.photoLayout,
+      chapterTitle: loc.chapterTitle,
+      chapterNote: loc.chapterNote,
+      chapterDate: loc.chapterDate,
+      chapterEmoji: loc.chapterEmoji,
+    }));
+
+    return {
+      schemaVersion: 2,
+      name: cloud.name,
+      locations,
+      segments: cloud.segments.map((seg) => ({
+        id: seg.id,
+        fromIndex: cloud.locations.findIndex((l) => l.id === seg.fromLocationId),
+        toIndex: cloud.locations.findIndex((l) => l.id === seg.toLocationId),
+        transportMode: seg.transportMode,
+        iconStyle: seg.iconStyle,
+        iconVariant: seg.iconVariant,
+      })),
+      mapStyle: cloud.mapStyle,
+      timingOverrides: cloud.timingOverrides,
+    };
+  } catch (err) {
+    console.error("[sync] Failed to convert to V2:", err);
+    return null;
+  }
+}
+
+/** Create IDB photoRef entries and download photos for cloud photo references */
 async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjectData): Promise<void> {
+  const { downloadPhoto } = await import("./photoSync");
+
   for (const loc of cloud.locations) {
     if (!loc.photoRefs?.length) continue;
     for (const ref of loc.photoRefs) {
       // Only create stub asset if it doesn't exist locally
-      // (avoids overwriting already-downloaded blobs from Phase 4)
       const existingAsset = await getPhotoAsset(ref.assetId);
-      if (!existingAsset) {
-        await putPhotoAsset({
-          id: ref.assetId,
-          blob: new Blob(), // Empty placeholder — Phase 4 downloads real blob
-          mimeType: "image/jpeg",
-          byteSize: 0,
-          width: 0,
-          height: 0,
-          createdAt: Date.now(),
-          lastAccessedAt: Date.now(),
-          refCount: 0, // attachPhotoRef will increment
-        });
+      let hasLocalAsset = !!existingAsset && existingAsset.byteSize > 0;
+
+      if (!hasLocalAsset) {
+        // Download from cloud (or retry if previous download left empty stub)
+        const blob = await downloadPhoto(ref.assetId);
+        if (blob) {
+          hasLocalAsset = true;
+        } else {
+          console.warn(`[sync] Failed to download photo ${ref.assetId} — will retry later`);
+        }
       }
 
-      await attachPhotoRef({
-        projectId,
-        photoId: ref.photoId,
-        assetId: ref.assetId,
-      });
+      // Only attach ref if the asset actually exists locally
+      if (hasLocalAsset) {
+        await attachPhotoRef({
+          projectId,
+          photoId: ref.photoId,
+          assetId: ref.assetId,
+        });
+      }
     }
   }
 }
@@ -420,6 +478,12 @@ async function onAuthReady(): Promise<void> {
         const persistedData = cloudToPersistedData(cloudData);
         await withSyncMuted(() => saveProject(cloudMeta, persistedData));
         await createPhotoRefsForCloudData(cloudMeta.id, cloudData);
+
+        // Re-save in V2 format so hydration can find photos via photoAssets/photoRefs
+        const v2Data = await convertToV2WithRefs(cloudMeta.id, cloudData);
+        if (v2Data) {
+          await withSyncMuted(() => saveProject(cloudMeta, v2Data));
+        }
         continue;
       }
 
@@ -452,6 +516,56 @@ async function onAuthReady(): Promise<void> {
         if (local.cloudRevision >= cloudRev && local.updatedAt > (cloudMeta?.updatedAt ?? 0)) {
           // Local has edits made since last sync — push
           await pushProjectFromIDB(local.id);
+        }
+      }
+    }
+
+    // 3. Retry failed photo downloads for existing local projects with cloud data
+    const { downloadPhoto: dlPhoto } = await import("./photoSync");
+    for (const cloudMeta of cloudProjects) {
+      const cloudData = await pullProjectData(cloudMeta.id);
+      if (!cloudData) continue;
+
+      let needsV2Resave = false;
+
+      for (const loc of cloudData.locations) {
+        if (!loc.photoRefs?.length) continue;
+        for (const ref of loc.photoRefs) {
+          const asset = await getPhotoAsset(ref.assetId);
+          if (!asset || asset.byteSize === 0) {
+            const blob = await dlPhoto(ref.assetId);
+            if (blob) {
+              await attachPhotoRef({ projectId: cloudMeta.id, photoId: ref.photoId, assetId: ref.assetId });
+              needsV2Resave = true;
+            }
+          }
+        }
+      }
+
+      // Also check if project data is still in legacy format with cloud: placeholders
+      // (covers previously-poisoned projects where blobs exist but V2 data is stale)
+      const localData = await getProjectData(cloudMeta.id);
+      if (localData) {
+        const hasCloudPlaceholders = localData.locations?.some((loc) =>
+          loc.photos?.some((p) => typeof p.url === "string" && p.url.startsWith("cloud:")),
+        );
+        if (hasCloudPlaceholders) needsV2Resave = true;
+      }
+
+      // Re-save in V2 format and reload active project if needed
+      if (needsV2Resave) {
+        const latestMeta = await getProjectMeta(cloudMeta.id);
+        const v2Data = await convertToV2WithRefs(cloudMeta.id, cloudData);
+        if (latestMeta && v2Data) {
+          await withSyncMuted(() => saveProject(latestMeta, v2Data));
+
+          // Reload active project to pick up newly downloaded photos
+          if (cloudMeta.id === useProjectStore.getState().currentProjectId) {
+            await withSyncMuted(async () => {
+              useProjectStore.setState({ currentProjectId: null });
+              await useProjectStore.getState().switchProject(cloudMeta.id);
+            });
+          }
         }
       }
     }
