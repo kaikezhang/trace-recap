@@ -47,11 +47,18 @@ create policy "owner_crud" on public.project_photo_refs for all
     where projects.id = project_photo_refs.project_id
     and projects.user_id = auth.uid()
   ))
-  with check (exists (
-    select 1 from public.projects
-    where projects.id = project_photo_refs.project_id
-    and projects.user_id = auth.uid()
-  ));
+  with check (
+    exists (
+      select 1 from public.projects
+      where projects.id = project_photo_refs.project_id
+      and projects.user_id = auth.uid()
+    )
+    and exists (
+      select 1 from public.photo_assets
+      where photo_assets.id = project_photo_refs.asset_id
+      and photo_assets.user_id = auth.uid()
+    )
+  );
 
 -- =========================================================================
 -- Orphan photo cleanup trigger

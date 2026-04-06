@@ -3,7 +3,7 @@ import { getPhotoAsset, putPhotoAsset } from "@/lib/storage";
 import { useAuthStore } from "@/stores/authStore";
 
 const MAX_CONCURRENT_UPLOADS = 3;
-const uploadQueue: Array<{ assetId: string; blob: Blob }> = [];
+const uploadQueue: Array<{ assetId: string; blob: Blob; projectId?: string }> = [];
 let activeUploads = 0;
 
 function getStoragePath(userId: string, assetId: string): string {
@@ -17,7 +17,7 @@ async function processUploadQueue(): Promise<void> {
 
     activeUploads++;
     try {
-      await uploadToStorage(item.assetId, item.blob);
+      await uploadToStorage(item.assetId, item.blob, item.projectId);
     } catch (err) {
       console.error(`[photoSync] Upload failed for ${item.assetId}:`, err);
     } finally {
@@ -26,7 +26,7 @@ async function processUploadQueue(): Promise<void> {
   }
 }
 
-async function uploadToStorage(assetId: string, blob: Blob): Promise<void> {
+async function uploadToStorage(assetId: string, blob: Blob, projectId?: string): Promise<void> {
   if (!isSupabaseConfigured()) return;
   const supabase = createClient();
   const user = useAuthStore.getState().user;
@@ -62,11 +62,19 @@ async function uploadToStorage(assetId: string, blob: Blob): Promise<void> {
     width: asset?.width ?? 0,
     height: asset?.height ?? 0,
   });
+
+  // Insert project_photo_refs row if projectId is known
+  if (projectId) {
+    await supabase.from("project_photo_refs").upsert({
+      project_id: projectId,
+      asset_id: assetId,
+    });
+  }
 }
 
 /** Queue a photo for background upload to Supabase Storage */
-export function queueUpload(assetId: string, blob: Blob): void {
-  uploadQueue.push({ assetId, blob });
+export function queueUpload(assetId: string, blob: Blob, projectId?: string): void {
+  uploadQueue.push({ assetId, blob, projectId });
   void processUploadQueue();
 }
 
@@ -96,7 +104,8 @@ export async function downloadPhoto(assetId: string): Promise<Blob | null> {
     return null;
   }
 
-  // Save to local IDB
+  // Save to local IDB — preserve existing refCount if asset already exists
+  const existingAsset = await getPhotoAsset(assetId);
   await putPhotoAsset({
     id: assetId,
     blob,
@@ -104,9 +113,9 @@ export async function downloadPhoto(assetId: string): Promise<Blob | null> {
     byteSize: cloudAsset.byte_size,
     width: cloudAsset.width,
     height: cloudAsset.height,
-    createdAt: Date.now(),
+    createdAt: existingAsset?.createdAt ?? Date.now(),
     lastAccessedAt: Date.now(),
-    refCount: 0, // Will be set by existing ref tracking
+    refCount: existingAsset?.refCount ?? 0,
     storagePath: cloudAsset.storage_path,
   });
 

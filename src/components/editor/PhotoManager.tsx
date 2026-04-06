@@ -65,8 +65,8 @@ async function processImageFiles(
     }
 
     // Queue cloud upload if authenticated
-    if (useAuthStore.getState().user) {
-      queueUpload(assetId, compressed);
+    if (useAuthStore.getState().user && currentProjectId) {
+      queueUpload(assetId, compressed, currentProjectId);
     }
   }
 }

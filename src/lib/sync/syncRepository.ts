@@ -307,26 +307,33 @@ function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
   };
 }
 
-/** Create IDB photoRef entries for cloud photo references so pushes can find asset mappings */
+/** Create IDB photoRef entries and download photos for cloud photo references */
 async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjectData): Promise<void> {
+  const { downloadPhoto } = await import("./photoSync");
+
   for (const loc of cloud.locations) {
     if (!loc.photoRefs?.length) continue;
     for (const ref of loc.photoRefs) {
       // Only create stub asset if it doesn't exist locally
-      // (avoids overwriting already-downloaded blobs from Phase 4)
       const existingAsset = await getPhotoAsset(ref.assetId);
       if (!existingAsset) {
-        await putPhotoAsset({
-          id: ref.assetId,
-          blob: new Blob(), // Empty placeholder — Phase 4 downloads real blob
-          mimeType: "image/jpeg",
-          byteSize: 0,
-          width: 0,
-          height: 0,
-          createdAt: Date.now(),
-          lastAccessedAt: Date.now(),
-          refCount: 0, // attachPhotoRef will increment
-        });
+        // Try to download from cloud first
+        const blob = await downloadPhoto(ref.assetId);
+        if (!blob) {
+          // Download failed — create empty stub as fallback
+          await putPhotoAsset({
+            id: ref.assetId,
+            blob: new Blob(),
+            mimeType: "image/jpeg",
+            byteSize: 0,
+            width: 0,
+            height: 0,
+            createdAt: Date.now(),
+            lastAccessedAt: Date.now(),
+            refCount: 0,
+          });
+        }
+        // downloadPhoto already wrote to IDB if successful
       }
 
       await attachPhotoRef({
