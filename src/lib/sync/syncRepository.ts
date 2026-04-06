@@ -525,6 +525,8 @@ async function onAuthReady(): Promise<void> {
     for (const cloudMeta of cloudProjects) {
       const cloudData = await pullProjectData(cloudMeta.id);
       if (!cloudData) continue;
+
+      let downloadedAny = false;
       for (const loc of cloudData.locations) {
         if (!loc.photoRefs?.length) continue;
         for (const ref of loc.photoRefs) {
@@ -533,8 +535,18 @@ async function onAuthReady(): Promise<void> {
             const blob = await dlPhoto(ref.assetId);
             if (blob) {
               await attachPhotoRef({ projectId: cloudMeta.id, photoId: ref.photoId, assetId: ref.assetId });
+              downloadedAny = true;
             }
           }
+        }
+      }
+
+      // Re-save project in V2 format if any photos were downloaded
+      if (downloadedAny) {
+        const latestMeta = await getProjectMeta(cloudMeta.id);
+        const v2Data = await convertToV2WithRefs(cloudMeta.id, cloudData);
+        if (latestMeta && v2Data) {
+          await withSyncMuted(() => saveProject(latestMeta, v2Data));
         }
       }
     }
