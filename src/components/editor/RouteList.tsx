@@ -709,7 +709,7 @@ export default memo(function RouteList({
 
     return (
       <div
-        key={location.id}
+        key={`${location.id}-${index}`}
         className={indented ? (mobileSheet ? "ml-4" : "ml-6") : undefined}
         data-route-stop-id={location.id}
       >
@@ -859,7 +859,7 @@ export default memo(function RouteList({
       const isSelected = selectedLocationId === location.id || selectedIds.has(location.id);
 
       timelineItems.push(
-        <div key={location.id} className="relative">
+        <div key={`${location.id}-${index}`} className="relative">
           <TimelineNode isWaypoint={false} selected={isSelected} mobileSheet={mobileSheet} />
 
           <div className={timelinePaddingClassName}>
