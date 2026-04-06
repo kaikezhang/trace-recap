@@ -52,6 +52,7 @@ import { SUPPORTED_LOCAL_LANGUAGES } from "@/types";
 import type { AlbumStyle, AspectRatio, LocalLanguageCode, MapStyle, MapStyleCategory } from "@/types";
 import { MAP_STYLE_CONFIGS, MAP_STYLE_CATEGORY_LABELS } from "@/lib/constants";
 import { ALBUM_STYLE_CONFIGS } from "@/lib/albumStyles";
+import AuthButton from "./AuthButton";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -557,6 +558,8 @@ export default function TopToolbar() {
               <TooltipContent>Share link</TooltipContent>
             </Tooltip>
 
+            <AuthButton />
+
             {/* Export — primary CTA */}
             <button
               className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.97]"
@@ -570,6 +573,8 @@ export default function TopToolbar() {
 
           {/* Right side — mobile */}
           <div className="flex md:hidden items-center gap-1.5">
+            <AuthButton />
+
             <Button
               variant="ghost"
               size="icon"

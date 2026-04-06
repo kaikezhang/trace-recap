@@ -37,6 +37,7 @@ import {
   useProjectStore,
 } from "@/stores/projectStore";
 import { useAnimationStore } from "@/stores/animationStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { ToastViewport } from "@/components/ui/toast";
@@ -507,6 +508,7 @@ function EditorContent() {
     setShouldLoadDemo(nextShouldLoadDemo);
     setDemoQueryChecked(true);
     initializeProjectPersistence({ skipRestore: nextShouldLoadDemo });
+    void useAuthStore.getState().initialize();
   }, []);
 
   useEffect(() => {
