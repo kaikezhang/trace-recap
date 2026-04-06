@@ -160,6 +160,7 @@ async function hydrateStoredProjectData(
             }
 
             return {
+              id: photo.id,
               url: URL.createObjectURL(asset.blob),
               ...(photo.caption !== undefined ? { caption: photo.caption } : {}),
               ...(photo.focalPoint ? { focalPoint: photo.focalPoint } : {}),
@@ -452,8 +453,9 @@ export async function duplicateProject(
   if (!meta || !data) return null;
 
   const now = Date.now();
+  const { cloudRevision: _, ...metaWithoutRevision } = meta;
   const newMeta: ProjectMeta = {
-    ...meta,
+    ...metaWithoutRevision,
     id: newId,
     name: newName,
     createdAt: now,
