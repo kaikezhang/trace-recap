@@ -526,7 +526,8 @@ async function onAuthReady(): Promise<void> {
       const cloudData = await pullProjectData(cloudMeta.id);
       if (!cloudData) continue;
 
-      let downloadedAny = false;
+      let needsV2Resave = false;
+
       for (const loc of cloudData.locations) {
         if (!loc.photoRefs?.length) continue;
         for (const ref of loc.photoRefs) {
@@ -535,18 +536,36 @@ async function onAuthReady(): Promise<void> {
             const blob = await dlPhoto(ref.assetId);
             if (blob) {
               await attachPhotoRef({ projectId: cloudMeta.id, photoId: ref.photoId, assetId: ref.assetId });
-              downloadedAny = true;
+              needsV2Resave = true;
             }
           }
         }
       }
 
-      // Re-save project in V2 format if any photos were downloaded
-      if (downloadedAny) {
+      // Also check if project data is still in legacy format with cloud: placeholders
+      // (covers previously-poisoned projects where blobs exist but V2 data is stale)
+      const localData = await getProjectData(cloudMeta.id);
+      if (localData) {
+        const hasCloudPlaceholders = localData.locations?.some((loc) =>
+          loc.photos?.some((p) => typeof p.url === "string" && p.url.startsWith("cloud:")),
+        );
+        if (hasCloudPlaceholders) needsV2Resave = true;
+      }
+
+      // Re-save in V2 format and reload active project if needed
+      if (needsV2Resave) {
         const latestMeta = await getProjectMeta(cloudMeta.id);
         const v2Data = await convertToV2WithRefs(cloudMeta.id, cloudData);
         if (latestMeta && v2Data) {
           await withSyncMuted(() => saveProject(latestMeta, v2Data));
+
+          // Reload active project to pick up newly downloaded photos
+          if (cloudMeta.id === useProjectStore.getState().currentProjectId) {
+            await withSyncMuted(async () => {
+              useProjectStore.setState({ currentProjectId: null });
+              await useProjectStore.getState().switchProject(cloudMeta.id);
+            });
+          }
         }
       }
     }
