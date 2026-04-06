@@ -218,6 +218,8 @@ export interface ProjectMeta {
   locationCount: number;
   /** First location name, used as subtitle in project list */
   previewLocations: string[];
+  /** Last known server revision for cloud sync (undefined = never synced) */
+  cloudRevision?: number;
 }
 
 export interface Project {

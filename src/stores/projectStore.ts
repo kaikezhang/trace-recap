@@ -65,11 +65,13 @@ export interface RouteUISettings {
 export interface ImportRouteData extends RouteUISettings {
   name: string;
   locations: {
+    id?: string;
     name: string;
     nameLocal?: string;
     coordinates: [number, number];
     isWaypoint?: boolean;
     photos?: {
+      id?: string;
       url: string;
       caption?: string;
       focalPoint?: { x: number; y: number };
@@ -81,6 +83,7 @@ export interface ImportRouteData extends RouteUISettings {
     chapterEmoji?: string;
   }[];
   segments: {
+    id?: string;
     fromIndex: number;
     toIndex: number;
     transportMode: TransportMode;
@@ -675,6 +678,7 @@ async function blobUrlToDataUrl(url: string): Promise<string | null> {
 
 async function serializeLocation(loc: Location): Promise<SerializedLocation> {
   return {
+    id: loc.id,
     name: loc.name,
     nameLocal: loc.nameLocal,
     coordinates: loc.coordinates as [number, number],
@@ -690,6 +694,7 @@ async function serializeLocation(loc: Location): Promise<SerializedLocation> {
               return null;
             }
             return {
+              id: photo.id,
               url: persistedUrl,
               caption: photo.caption,
               ...(photo.focalPoint ? { focalPoint: photo.focalPoint } : {}),
@@ -774,6 +779,7 @@ async function serializeProjectState(
     ...collectRouteUISettings(),
     locations: exportedLocations,
     segments: segments.map((segment) => ({
+      id: segment.id,
       fromIndex: locations.findIndex(
         (location) => location.id === segment.fromId,
       ),
@@ -993,6 +999,7 @@ function buildProjectMeta(
       .filter((l) => !l.isWaypoint)
       .slice(0, 3)
       .map((l) => l.name),
+    cloudRevision: existingMeta?.cloudRevision,
   };
 }
 
@@ -1023,7 +1030,7 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
       throw new Error(`Invalid route location at index ${locationIndex}.`);
     }
 
-    const locationId = generateId();
+    const locationId = (typeof loc.id === "string" && loc.id) || generateId();
     const photoInputs = Array.isArray(loc.photos) ? loc.photos : [];
     const photos: Photo[] = photoInputs.map((photo, photoIndex) => {
       if (!isObject(photo) || typeof photo.url !== "string") {
@@ -1033,7 +1040,7 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
       }
 
       return {
-        id: generateId(),
+        id: (typeof photo.id === "string" && photo.id) || generateId(),
         locationId,
         url: photo.url,
         caption: typeof photo.caption === "string" ? photo.caption : undefined,
@@ -1122,7 +1129,7 @@ function parseImportedProjectData(data: ImportRouteData): ParsedProjectData {
       : "flight";
 
     return {
-      id: generateId(),
+      id: (typeof segment.id === "string" && segment.id) || generateId(),
       fromId: locations[fromIndex].id,
       toId: locations[toIndex].id,
       transportMode,
