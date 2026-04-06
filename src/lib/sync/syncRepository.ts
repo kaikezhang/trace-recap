@@ -7,6 +7,8 @@ import {
   getProjectData,
   listProjects,
   listPhotoRefsByProject,
+  attachPhotoRef,
+  putPhotoAsset,
 } from "@/lib/storage";
 import type { ImportRouteData } from "@/stores/projectStore";
 import { toCloudProjectData } from "./converters";
@@ -286,6 +288,38 @@ function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
   };
 }
 
+/** Create IDB photoRef entries for cloud photo references so pushes can find asset mappings */
+async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjectData): Promise<void> {
+  for (const loc of cloud.locations) {
+    if (!loc.photoRefs?.length) continue;
+    for (const ref of loc.photoRefs) {
+      // Create a stub asset record if it doesn't exist locally
+      // (Phase 4 photoSync will download the actual blob)
+      try {
+        await putPhotoAsset({
+          id: ref.assetId,
+          blob: new Blob(), // Empty placeholder — Phase 4 downloads real blob
+          mimeType: "image/jpeg",
+          byteSize: 0,
+          width: 0,
+          height: 0,
+          createdAt: Date.now(),
+          lastAccessedAt: Date.now(),
+          refCount: 0, // attachPhotoRef will increment
+        });
+      } catch {
+        // Asset may already exist — that's fine
+      }
+
+      await attachPhotoRef({
+        projectId,
+        photoId: ref.photoId,
+        assetId: ref.assetId,
+      });
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Delete: remove from cloud
 // ---------------------------------------------------------------------------
@@ -367,6 +401,7 @@ async function onAuthReady(): Promise<void> {
         if (!cloudData) continue;
         const persistedData = cloudToPersistedData(cloudData);
         await withSyncMuted(() => saveProject(cloudMeta, persistedData));
+        await createPhotoRefsForCloudData(cloudMeta.id, cloudData);
         continue;
       }
 
@@ -380,6 +415,7 @@ async function onAuthReady(): Promise<void> {
         const persistedData = cloudToPersistedData(cloudData);
         const mergedMeta = { ...local, ...cloudMeta };
         await withSyncMuted(() => saveProject(mergedMeta, persistedData));
+        await createPhotoRefsForCloudData(cloudMeta.id, cloudData);
 
         // If this is the active project, reload it into Zustand from IDB
         if (cloudMeta.id === useProjectStore.getState().currentProjectId) {
@@ -395,8 +431,9 @@ async function onAuthReady(): Promise<void> {
     }
 
     // 2. Push local-only (unsynced) projects to cloud
+    // Skip empty auto-created projects (locationCount === 0, just created by restorePersistedProject)
     for (const local of localProjects) {
-      if (!cloudById.has(local.id) && !local.cloudRevision) {
+      if (!cloudById.has(local.id) && !local.cloudRevision && local.locationCount > 0) {
         await pushProjectFromIDB(local.id);
       }
     }
