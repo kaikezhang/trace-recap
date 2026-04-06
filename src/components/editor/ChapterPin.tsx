@@ -45,6 +45,14 @@ const OPEN_ALBUM_GEOMETRY = {
   tailHeight: 10,
 };
 
+const OPEN_LABEL_GEOMETRY = {
+  bodyHeight: 0,
+  labelGap: 0,
+  labelHeight: 18,
+  tailGap: 4,
+  tailHeight: 10,
+};
+
 const VISITED_GEOMETRY = {
   bodyHeight: 32,
   labelGap: 2,
@@ -61,6 +69,16 @@ export function getChapterPinTargetOffset(
         -(VISITED_GEOMETRY.labelHeight +
           VISITED_GEOMETRY.labelGap +
           VISITED_GEOMETRY.bodyHeight / 2),
+    };
+  }
+
+  if (state === "album-open") {
+    return {
+      x: 0,
+      y:
+        -(OPEN_LABEL_GEOMETRY.tailHeight +
+          OPEN_LABEL_GEOMETRY.tailGap +
+          OPEN_LABEL_GEOMETRY.labelHeight / 2),
     };
   }
 
@@ -128,6 +146,7 @@ export default function ChapterPin({
 }: ChapterPinProps) {
   const albumStyle = useUIStore((store) => store.albumStyle);
   const isVisited = state === "visited";
+  const isCollecting = state === "album-collecting";
   const refCallback = useCallback(
     (el: HTMLDivElement | null) => {
       registerRef(location.id, el);
@@ -173,12 +192,14 @@ export default function ChapterPin({
             className="flex flex-col items-center"
           >
             <div className="relative flex flex-col items-center gap-2">
-              <AlbumBook
-                albumStyle={albumStyle}
-                photos={location.photos}
-                showPhotos={state === "album-collecting"}
-                collecting={state === "album-collecting"}
-              />
+              {isCollecting ? (
+                <AlbumBook
+                  albumStyle={albumStyle}
+                  photos={location.photos}
+                  showPhotos
+                  collecting
+                />
+              ) : null}
               <PinLabel
                 emoji={location.chapterEmoji}
                 title={location.chapterTitle || location.name}
