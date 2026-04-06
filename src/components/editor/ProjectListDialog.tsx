@@ -10,6 +10,7 @@ import {
   X,
   FolderOpen,
   MapPin,
+  MoreVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -113,9 +121,44 @@ function ProjectRow({
     [project.id],
   );
 
+  // Delete confirmation bar
+  if (confirmDelete) {
+    return (
+      <div
+        className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/40 dark:bg-red-950/20"
+        aria-busy={isBusy}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-red-800 dark:text-red-200">
+            Delete &ldquo;{project.name}&rdquo;?
+          </p>
+          <p className="mt-0.5 text-xs text-red-600/80 dark:text-red-300/60">
+            This cannot be undone.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted"
+            onClick={() => setConfirmDelete(false)}
+            disabled={isBusy}
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            onClick={() => void runRowAction("delete", onDelete)}
+            disabled={isBusy}
+          >
+            {pendingAction === "delete" ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`group flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+      className={`group flex items-center gap-2 rounded-lg border p-3 transition-colors ${
         isCurrent
           ? "border-primary/30 bg-primary/5"
           : "border-transparent hover:border-border hover:bg-muted/50"
@@ -138,9 +181,9 @@ function ProjectRow({
         </div>
         <div className="min-w-0 flex-1">
           {editing ? (
-            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
               <input
-                className="h-6 w-full rounded border bg-background px-1.5 text-sm outline-none focus:border-primary"
+                className="h-8 w-full rounded-md border bg-background px-2 text-sm outline-none focus:border-primary"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onKeyDown={(e) => {
@@ -151,18 +194,20 @@ function ProjectRow({
                 autoFocus
               />
               <button
-                className="shrink-0 rounded p-0.5 text-green-600 hover:bg-green-50"
+                className="shrink-0 rounded-md p-1.5 text-green-600 hover:bg-green-50"
                 onClick={() => void handleSubmitRename()}
                 disabled={isBusy}
+                aria-label="Save"
               >
-                <Check className="h-3.5 w-3.5" />
+                <Check className="h-4 w-4" />
               </button>
               <button
-                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted"
+                className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted"
                 onClick={handleCancelRename}
                 disabled={isBusy}
+                aria-label="Cancel"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
           ) : (
@@ -185,66 +230,47 @@ function ProjectRow({
         </div>
       </button>
 
-      {/* Actions */}
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        {!editing && (
-          <button
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditName(project.name);
-              setEditing(true);
-            }}
-            disabled={isBusy}
-            title="Rename"
+      {/* Actions dropdown — always visible, touch-friendly */}
+      {!editing && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                className="touch-target-mobile shrink-0 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Project actions"
+                disabled={isBusy}
+              />
+            }
           >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        )}
-        <button
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          onClick={(e) => {
-            e.stopPropagation();
-            void runRowAction("duplicate", onDuplicate);
-          }}
-          disabled={isBusy}
-          title="Duplicate"
-        >
-          <Copy className="h-3.5 w-3.5" />
-        </button>
-        {confirmDelete ? (
-          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="rounded p-1 text-red-600 hover:bg-red-50"
-              onClick={() => void runRowAction("delete", onDelete)}
-              disabled={isBusy}
-              title="Confirm delete"
+            <MoreVertical className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="bottom" sideOffset={4}>
+            <DropdownMenuItem
+              onClick={() => {
+                setEditName(project.name);
+                setEditing(true);
+              }}
             >
-              <Check className="h-3.5 w-3.5" />
-            </button>
-            <button
-              className="rounded p-1 text-muted-foreground hover:bg-muted"
-              onClick={() => setConfirmDelete(false)}
-              disabled={isBusy}
-              title="Cancel"
+              <Pencil className="h-4 w-4" />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => void runRowAction("duplicate", onDuplicate)}
             >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : (
-          <button
-            className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmDelete(true);
-            }}
-            disabled={isBusy}
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+              <Copy className="h-4 w-4" />
+              Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }
