@@ -307,6 +307,62 @@ function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
   };
 }
 
+/** Convert cloud data to V2 format with photo asset references for proper IDB hydration */
+async function convertToV2WithRefs(
+  projectId: string,
+  cloud: CloudProjectData,
+): Promise<import("@/lib/storage").ProjectDataV2 | null> {
+  try {
+    const { listPhotoRefsByProject: listRefs } = await import("@/lib/storage");
+    const refs = await listRefs(projectId);
+    const refsByPhotoId = new Map(refs.map((r) => [r.photoId, r]));
+
+    const locations: import("@/lib/storage").StoredLocation[] = cloud.locations.map((loc) => ({
+      id: loc.id,
+      name: loc.name,
+      nameLocal: loc.nameLocal,
+      coordinates: loc.coordinates,
+      isWaypoint: loc.isWaypoint ?? false,
+      photos: loc.photoRefs
+        ?.map((ref) => {
+          const idbRef = refsByPhotoId.get(ref.photoId);
+          if (!idbRef) return null;
+          return {
+            id: ref.photoId,
+            assetId: idbRef.assetId,
+            caption: ref.caption,
+            focalPoint: ref.focalPoint,
+          };
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null),
+      photoLayout: loc.photoLayout,
+      chapterTitle: loc.chapterTitle,
+      chapterNote: loc.chapterNote,
+      chapterDate: loc.chapterDate,
+      chapterEmoji: loc.chapterEmoji,
+    }));
+
+    return {
+      schemaVersion: 2,
+      name: cloud.name,
+      locations,
+      segments: cloud.segments.map((seg) => ({
+        id: seg.id,
+        fromIndex: cloud.locations.findIndex((l) => l.id === seg.fromLocationId),
+        toIndex: cloud.locations.findIndex((l) => l.id === seg.toLocationId),
+        transportMode: seg.transportMode,
+        iconStyle: seg.iconStyle,
+        iconVariant: seg.iconVariant,
+      })),
+      mapStyle: cloud.mapStyle,
+      timingOverrides: cloud.timingOverrides,
+    };
+  } catch (err) {
+    console.error("[sync] Failed to convert to V2:", err);
+    return null;
+  }
+}
+
 /** Create IDB photoRef entries and download photos for cloud photo references */
 async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjectData): Promise<void> {
   const { downloadPhoto } = await import("./photoSync");
@@ -427,6 +483,12 @@ async function onAuthReady(): Promise<void> {
         const persistedData = cloudToPersistedData(cloudData);
         await withSyncMuted(() => saveProject(cloudMeta, persistedData));
         await createPhotoRefsForCloudData(cloudMeta.id, cloudData);
+
+        // Re-save in V2 format so hydration can find photos via photoAssets/photoRefs
+        const v2Data = await convertToV2WithRefs(cloudMeta.id, cloudData);
+        if (v2Data) {
+          await withSyncMuted(() => saveProject(cloudMeta, v2Data));
+        }
         continue;
       }
 
