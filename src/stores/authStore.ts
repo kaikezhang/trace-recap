@@ -21,29 +21,45 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+let initPromise: Promise<void> | null = null;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
   loading: false,
   initialized: false,
 
-  initialize: async () => {
-    if (get().initialized) return;
+  initialize: () => {
+    if (get().initialized) return Promise.resolve();
 
-    const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    // Deduplicate concurrent calls (React StrictMode double-mount)
+    if (initPromise) return initPromise;
 
-    set({
-      user: session?.user ?? null,
-      session,
-      initialized: true,
-    });
+    initPromise = (async () => {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({ user: session?.user ?? null, session });
-    });
+      set({
+        user: session?.user ?? null,
+        session,
+        initialized: true,
+      });
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        set({ user: session?.user ?? null, session });
+      });
+
+      // Cleanup on page unload to prevent leaked subscriptions
+      if (typeof window !== "undefined") {
+        window.addEventListener("beforeunload", () => subscription.unsubscribe(), { once: true });
+      }
+    })();
+
+    return initPromise;
   },
 
   signInWithEmail: async (email, password) => {
@@ -67,12 +83,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signInWithGoogle: async () => {
     const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
+    if (error) {
+      console.error("[auth] Google sign-in failed:", error.message);
+    }
   },
 
   signOut: async () => {

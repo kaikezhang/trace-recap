@@ -573,6 +573,8 @@ export default function TopToolbar() {
 
           {/* Right side — mobile */}
           <div className="flex md:hidden items-center gap-1.5">
+            <AuthButton />
+
             <Button
               variant="ghost"
               size="icon"
