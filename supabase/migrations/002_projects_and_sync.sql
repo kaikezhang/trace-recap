@@ -78,14 +78,18 @@ begin
     location_count = p_location_count,
     preview_locations = p_preview_locations,
     revision = new_rev,
-    updated_at = now();
+    updated_at = now()
+  where projects.user_id = auth.uid();
 
   insert into project_data (project_id, data, revision)
   values (p_project_id, p_data, new_rev)
   on conflict (project_id) do update set
     data = excluded.data,
     revision = new_rev,
-    updated_at = now();
+    updated_at = now()
+  where project_data.project_id in (
+    select id from projects where user_id = auth.uid()
+  );
 
   return json_build_object('status', 'ok', 'new_revision', new_rev);
 end;

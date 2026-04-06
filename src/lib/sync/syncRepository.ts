@@ -6,15 +6,14 @@ import {
   getProjectMeta,
   listProjects,
   listPhotoRefsByProject,
-  type PersistedProjectData,
 } from "@/lib/storage";
+import type { ImportRouteData } from "@/stores/projectStore";
 import { toCloudProjectData } from "./converters";
 import type { CloudProjectData } from "./types";
 import type { ProjectMeta } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAuthStore } from "@/stores/authStore";
-import type { StoredLocation } from "@/lib/storage";
 
 let initialized = false;
 
@@ -40,8 +39,16 @@ async function pushProject(projectId: string): Promise<void> {
     const meta = await getProjectMeta(projectId);
     if (!meta) return;
 
-    // Build cloud data from current Zustand state
+    // Use Zustand state only if this is the active project, otherwise skip
+    // (debounce fires after IDB save, so Zustand state matches if project is current)
     const store = useProjectStore.getState();
+    if (store.currentProjectId !== projectId) {
+      // Not the active project — skip push (it was already saved to IDB)
+      console.warn(`[sync] Skipping push for non-active project ${projectId}`);
+      updateSyncState({ remote: "idle" });
+      return;
+    }
+
     const photoRefs = await listPhotoRefsByProject(projectId);
     const assetMap = new Map(photoRefs.map((r) => [r.photoId, r.assetId]));
 
@@ -147,7 +154,7 @@ async function pullProjectData(projectId: string): Promise<CloudProjectData | nu
   return data.data as CloudProjectData;
 }
 
-function cloudToPersistedData(cloud: CloudProjectData): PersistedProjectData {
+function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
   return {
     name: cloud.name,
     locations: cloud.locations.map((loc) => ({
@@ -213,10 +220,15 @@ async function renameOnCloud(projectId: string, name: string): Promise<void> {
   const supabase = createClient();
   if (!supabase || !useAuthStore.getState().user) return;
 
+  // Use revision-aware update to avoid overwriting concurrent changes
   const { error } = await supabase
     .from("projects")
-    .update({ name, updated_at: new Date().toISOString() })
-    .eq("id", projectId);
+    .update({
+      name,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", projectId)
+    .eq("user_id", useAuthStore.getState().user!.id);
 
   if (error) {
     console.error("[sync] Cloud rename failed:", error.message);
@@ -232,33 +244,43 @@ async function onAuthReady(): Promise<void> {
 
   try {
     const cloudProjects = await pullProjectList();
-    if (cloudProjects.length === 0) {
-      // No cloud projects — check if we should push local projects
-      const localProjects = await listProjects();
-      if (localProjects.length > 0 && localProjects.some((p) => !p.cloudRevision)) {
-        // First login with existing local projects — push them
-        for (const project of localProjects) {
-          if (project.id === useProjectStore.getState().currentProjectId) {
-            await pushProject(project.id);
-          }
-        }
+    const localProjects = await listProjects();
+    const localById = new Map(localProjects.map((p) => [p.id, p]));
+    const cloudById = new Map(cloudProjects.map((p) => [p.id, p]));
+
+    // 1. Pull cloud-only projects to local IDB
+    for (const cloudMeta of cloudProjects) {
+      const local = localById.get(cloudMeta.id);
+
+      if (!local) {
+        // Cloud-only: pull to local
+        const cloudData = await pullProjectData(cloudMeta.id);
+        if (!cloudData) continue;
+        const persistedData = cloudToPersistedData(cloudData);
+        await withSyncMuted(() => saveProject(cloudMeta, persistedData));
+        continue;
       }
-      return;
+
+      // Exists in both: compare revisions
+      const localRev = local.cloudRevision ?? 0;
+      const cloudRev = cloudMeta.cloudRevision ?? 0;
+      if (cloudRev > localRev) {
+        // Cloud is newer — pull
+        const cloudData = await pullProjectData(cloudMeta.id);
+        if (!cloudData) continue;
+        const persistedData = cloudToPersistedData(cloudData);
+        const mergedMeta = { ...local, ...cloudMeta };
+        await withSyncMuted(() => saveProject(mergedMeta, persistedData));
+      }
     }
 
-    // Merge cloud projects into local IDB
-    const localProjects = await listProjects();
-    const localIds = new Set(localProjects.map((p) => p.id));
-
-    for (const cloudMeta of cloudProjects) {
-      if (localIds.has(cloudMeta.id)) continue; // Already local
-
-      // Pull and save to IDB
-      const cloudData = await pullProjectData(cloudMeta.id);
-      if (!cloudData) continue;
-
-      const persistedData = cloudToPersistedData(cloudData);
-      await withSyncMuted(() => saveProject(cloudMeta, persistedData));
+    // 2. Push local-only (unsynced) projects to cloud
+    for (const local of localProjects) {
+      if (!cloudById.has(local.id) && !local.cloudRevision) {
+        if (local.id === useProjectStore.getState().currentProjectId) {
+          await pushProject(local.id);
+        }
+      }
     }
 
     // Refresh project list in store
@@ -273,16 +295,20 @@ async function onAuthReady(): Promise<void> {
 // Storage listener registration
 // ---------------------------------------------------------------------------
 
-// Debounce pushes to avoid hammering the API during rapid edits
-let pushTimer: ReturnType<typeof setTimeout> | null = null;
+// Per-project debounced pushes to avoid hammering the API during rapid edits
+const pushTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const PUSH_DEBOUNCE_MS = 5000;
 
 function debouncedPush(projectId: string) {
-  if (pushTimer) clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => {
-    void pushProject(projectId);
-    pushTimer = null;
-  }, PUSH_DEBOUNCE_MS);
+  const existing = pushTimers.get(projectId);
+  if (existing) clearTimeout(existing);
+  pushTimers.set(
+    projectId,
+    setTimeout(() => {
+      pushTimers.delete(projectId);
+      void pushProject(projectId);
+    }, PUSH_DEBOUNCE_MS),
+  );
 }
 
 export function initSyncRepository(): void {
