@@ -372,24 +372,14 @@ async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjec
     for (const ref of loc.photoRefs) {
       // Only create stub asset if it doesn't exist locally
       const existingAsset = await getPhotoAsset(ref.assetId);
-      if (!existingAsset) {
-        // Try to download from cloud first
+      if (!existingAsset || existingAsset.byteSize === 0) {
+        // Download from cloud (or retry if previous download failed and left empty stub)
         const blob = await downloadPhoto(ref.assetId);
         if (!blob) {
-          // Download failed — create empty stub as fallback
-          await putPhotoAsset({
-            id: ref.assetId,
-            blob: new Blob(),
-            mimeType: "image/jpeg",
-            byteSize: 0,
-            width: 0,
-            height: 0,
-            createdAt: Date.now(),
-            lastAccessedAt: Date.now(),
-            refCount: 0,
-          });
+          // Download failed — skip creating stub so future hydrations retry
+          console.warn(`[sync] Failed to download photo ${ref.assetId} — will retry on next hydration`);
         }
-        // downloadPhoto already wrote to IDB if successful
+        // downloadPhoto wrote to IDB if successful
       }
 
       await attachPhotoRef({
