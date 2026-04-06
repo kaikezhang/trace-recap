@@ -650,6 +650,8 @@ export function invalidateSerializationCache(): void {
  *  rather than persisting broken URLs. */
 async function blobUrlToDataUrl(url: string): Promise<string | null> {
   if (url.startsWith("data:")) return url;
+  // Preserve cloud placeholder URLs (cloud:assetId) through serialization
+  if (url.startsWith("cloud:")) return url;
   const cached = blobToDataUrlCache.get(url);
   if (cached) return cached;
   try {

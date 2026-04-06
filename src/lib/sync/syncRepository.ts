@@ -40,13 +40,10 @@ async function pushProject(projectId: string): Promise<void> {
     const meta = await getProjectMeta(projectId);
     if (!meta) return;
 
-    // Use Zustand state only if this is the active project, otherwise skip
-    // (debounce fires after IDB save, so Zustand state matches if project is current)
+    // If not the active project, delegate to IDB-based push
     const store = useProjectStore.getState();
     if (store.currentProjectId !== projectId) {
-      // Not the active project — skip push (it was already saved to IDB)
-      console.warn(`[sync] Skipping push for non-active project ${projectId}`);
-      updateSyncState({ remote: "idle" });
+      await pushProjectFromIDB(projectId);
       return;
     }
 
@@ -235,10 +232,11 @@ async function pullProjectData(projectId: string): Promise<CloudProjectData | nu
 }
 
 function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
-  // NOTE: Photos from cloud are excluded from the persisted data because they
-  // don't have local blob URLs. Photo download is handled by Phase 4 (photoSync).
-  // By excluding photos here, we avoid creating entries with broken url:"" that
-  // would be dropped on the next push cycle.
+  // Photos from cloud are included with a placeholder marker URL so they
+  // survive the round-trip. The url "cloud:assetId" is not renderable but
+  // ensures toCloudProjectData() can still find the photoId→assetId mapping
+  // on the next push (via the IDB photoRefs, not the URL).
+  // Phase 4 (photoSync) replaces these with real blob: URLs.
   return {
     name: cloud.name,
     locations: cloud.locations.map((loc) => ({
@@ -247,7 +245,16 @@ function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
       nameLocal: loc.nameLocal,
       coordinates: loc.coordinates,
       isWaypoint: loc.isWaypoint ?? false,
-      // Photos intentionally omitted — they require blob download (Phase 4)
+      ...(loc.photoRefs?.length
+        ? {
+            photos: loc.photoRefs.map((ref) => ({
+              id: ref.photoId,
+              url: `cloud:${ref.assetId}`, // Placeholder — not renderable, preserves ref
+              caption: ref.caption,
+              focalPoint: ref.focalPoint,
+            })),
+          }
+        : {}),
       photoLayout: loc.photoLayout,
       chapterTitle: loc.chapterTitle,
       chapterNote: loc.chapterNote,
@@ -263,7 +270,19 @@ function cloudToPersistedData(cloud: CloudProjectData): ImportRouteData {
       iconVariant: seg.iconVariant,
     })),
     mapStyle: cloud.mapStyle,
-    timingOverrides: cloud.timingOverrides,
+    // Convert segment-ID-keyed overrides to index-keyed for ImportRouteData format
+    ...(cloud.timingOverrides && Object.keys(cloud.timingOverrides).length > 0
+      ? {
+          timingOverrides: Object.fromEntries(
+            Object.entries(cloud.timingOverrides)
+              .map(([segId, duration]) => {
+                const idx = cloud.segments.findIndex((s) => s.id === segId);
+                return idx >= 0 ? [String(idx), duration] : null;
+              })
+              .filter((entry): entry is [string, number] => entry !== null),
+          ),
+        }
+      : {}),
   };
 }
 
