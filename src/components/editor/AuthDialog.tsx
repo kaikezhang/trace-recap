@@ -63,6 +63,7 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
   };
 
   const resetForm = () => {
+    setMode("signin");
     setEmail("");
     setPassword("");
     setError("");
