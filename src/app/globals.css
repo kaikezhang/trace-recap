@@ -166,6 +166,9 @@
   /* Sunset gradient for hero text */
   .gradient-sunset {
     background: linear-gradient(135deg, #f97316 0%, #ec4899 50%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   /* Route line gradient */
