@@ -1360,8 +1360,15 @@ export default function FreeCanvas({
         />
       ) : null}
       {showCaptionToolbar && selectedCaptionToolbarState ? (
+        <>
+        {/* Click-outside backdrop to close caption toolbar */}
         <div
-          className="absolute z-10 flex flex-col gap-2 overflow-hidden rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
+          className="fixed inset-0"
+          style={{ zIndex: maxZIndex + 3 }}
+          onPointerDown={() => setSelection(null)}
+        />
+        <div
+          className="absolute flex flex-col gap-2 overflow-hidden rounded-xl border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl"
           onPointerDown={(event) => event.stopPropagation()}
           style={{
             left: `${selectedCaptionToolbarState.toolbarPosition.toolbarLeft}px`,
@@ -1523,6 +1530,7 @@ export default function FreeCanvas({
             )}
           </div>
         </div>
+        </>
       ) : null}
     </div>
   );
