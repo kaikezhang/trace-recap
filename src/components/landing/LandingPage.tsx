@@ -3,6 +3,7 @@ import Image from "next/image";
 import { ArrowRight, MonitorPlay, PlaneTakeoff } from "lucide-react";
 import { FaqSection } from "@/components/landing/FaqSection";
 import { brand } from "@/lib/brand";
+import { HeroCarousel } from "@/components/landing/HeroCarousel";
 
 export default function LandingPage() {
   return (
@@ -94,27 +95,12 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Hero screenshot — the one visual */}
+          {/* Hero carousel — auto-rotating showcase */}
           <div className="landing-animate-in mt-16 sm:mt-20">
-            <div
-              className="relative mx-auto overflow-hidden rounded-2xl border"
-              style={{
-                borderColor: brand.colors.warm[200],
-                boxShadow: `${brand.shadows.xl}, 0 0 80px rgba(249,115,22,0.06)`,
-              }}
-            >
-              <Image
-                src="/landing/hero.webp"
-                alt="TraceRecap editor — route on map with photo stops"
-                width={1280}
-                height={800}
-                className="w-full"
-                priority
-              />
-            </div>
+            <HeroCarousel />
           </div>
 
-          {/* Gentle caption under the screenshot */}
+          {/* Gentle caption under the screenshots */}
           <p
             className="mx-auto mt-8 max-w-lg text-center text-sm italic leading-relaxed"
             style={{ color: brand.colors.warm[400], fontFamily: brand.fonts.handwritten, fontSize: "1.1rem" }}
