@@ -271,7 +271,7 @@ export default function QuickStyleBar() {
 
   return (
     <>
-      <div className="relative z-10 border-b px-3 py-2 md:px-4" style={surfaceStyle}>
+      <div className="relative border-b px-3 py-2 md:px-4" style={surfaceStyle}>
         <div className="hidden h-10 items-center gap-4 md:grid md:grid-cols-[minmax(0,1.6fr)_190px_auto]">
           <MapStyleScroller mapStyle={mapStyle} onSelect={setMapStyle} />
           <SpeedControl
