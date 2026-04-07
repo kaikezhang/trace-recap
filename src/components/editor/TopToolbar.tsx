@@ -480,7 +480,7 @@ export default function TopToolbar() {
             </DropdownMenu>
 
             {/* Settings gear */}
-            <div className="relative">
+            <div className="relative z-50">
               <Tooltip>
                 <TooltipTrigger
                   render={
