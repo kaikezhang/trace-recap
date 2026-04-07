@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { MessageSquarePlus, Bug, Lightbulb, MessageCircle, HelpCircle } from "lucide-react";
+import { useRef, useState } from "react";
+import { MessageSquarePlus, Bug, Lightbulb, MessageCircle, HelpCircle, ImagePlus, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -36,9 +36,30 @@ export default function FeedbackDialog({ open, onOpenChange }: FeedbackDialogPro
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const user = useAuthStore((s) => s.user);
   const addToast = useUIStore((s) => s.addToast);
+
+  const handleScreenshotSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      addToast({ title: "Image must be under 5MB", variant: "error" });
+      return;
+    }
+    setScreenshot(file);
+    setScreenshotPreview(URL.createObjectURL(file));
+  };
+
+  const clearScreenshot = () => {
+    setScreenshot(null);
+    if (screenshotPreview) URL.revokeObjectURL(screenshotPreview);
+    setScreenshotPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const handleSubmit = async () => {
     if (!message.trim()) return;
@@ -59,17 +80,40 @@ export default function FeedbackDialog({ open, onOpenChange }: FeedbackDialogPro
         locale: navigator.language,
       };
 
+      // Upload screenshot if provided (authenticated users only)
+      let screenshotPath: string | null = null;
+      if (screenshot && user) {
+        const ext = screenshot.name.split(".").pop() || "png";
+        const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("feedback-screenshots")
+          .upload(path, screenshot, { contentType: screenshot.type, upsert: false });
+        if (!uploadError) {
+          screenshotPath = path;
+        } else {
+          console.warn("[feedback] Screenshot upload failed:", uploadError.message);
+        }
+      }
+
       if (user) {
         // Authenticated: use RPC
-        const { error } = await supabase.rpc("create_feedback", {
+        const { data: feedbackId, error } = await supabase.rpc("create_feedback", {
           p_category: category,
           p_message: message.trim(),
           p_context: context,
           p_email: null,
         });
         if (error) throw error;
+
+        // Attach screenshot path if uploaded
+        if (screenshotPath && feedbackId) {
+          await supabase
+            .from("feedback")
+            .update({ screenshot_path: screenshotPath })
+            .eq("id", feedbackId);
+        }
       } else {
-        // Anonymous: direct insert (service role not needed for basic insert)
+        // Anonymous: use RPC (no screenshot for anonymous)
         const { error } = await supabase.rpc("create_anonymous_feedback", {
           p_category: category,
           p_message: message.trim(),
@@ -88,6 +132,7 @@ export default function FeedbackDialog({ open, onOpenChange }: FeedbackDialogPro
         setMessage("");
         setEmail("");
         setCategory("general");
+        clearScreenshot();
         onOpenChange(false);
       }, 1500);
     } catch (err) {
@@ -176,6 +221,46 @@ export default function FeedbackDialog({ open, onOpenChange }: FeedbackDialogPro
                 {message.length}/5000
               </p>
             </div>
+
+            {/* Screenshot (authenticated only) */}
+            {user && (
+              <div>
+                {screenshotPreview ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={screenshotPreview}
+                      alt="Screenshot preview"
+                      className="max-h-32 rounded-lg border"
+                      style={{ borderColor: brand.colors.warm[200] }}
+                    />
+                    <button
+                      type="button"
+                      className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white"
+                      onClick={clearScreenshot}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors hover:bg-stone-50"
+                    style={{ borderColor: brand.colors.warm[200], color: brand.colors.warm[600] }}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    Attach Screenshot
+                  </button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleScreenshotSelect}
+                />
+              </div>
+            )}
 
             {/* Email (anonymous only) */}
             {!user && (
