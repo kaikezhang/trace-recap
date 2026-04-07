@@ -24,20 +24,6 @@ export const demoProject: ImportRouteData = {
       chapterEmoji: "☕",
       chapterTitle: "Seattle",
       chapterDate: "Day 1",
-      photos: [
-        { url: "/demo-photos/seattle-1.jpg", caption: "Emerald City skyline ✨" },
-        { url: "/demo-photos/seattle-2.jpg", caption: "Pike Place Market 🐟" },
-      ],
-      photoLayout: {
-        mode: "auto",
-        template: "rows",
-        gap: 4,
-        borderRadius: 6,
-        photoStyle: "kenburns",
-        enterAnimation: "scale",
-        sceneTransition: "dissolve",
-        captionFontSize: 16,
-      },
     },
     {
       name: "Honolulu",
