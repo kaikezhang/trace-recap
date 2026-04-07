@@ -297,7 +297,7 @@ export default function QuickStyleBar() {
             type="button"
             variant="outline"
             size="sm"
-            className="shrink-0 rounded-full"
+            className="touch-target-mobile shrink-0 rounded-full"
             style={{
               backgroundColor: "rgba(255, 251, 245, 0.8)",
               borderColor: brand.colors.warm[300],

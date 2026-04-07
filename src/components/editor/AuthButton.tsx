@@ -36,8 +36,9 @@ export default function AuthButton() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="touch-target-mobile h-8 w-8"
                 onClick={() => setAuthDialogOpen(true)}
+                aria-label="Sign in"
                 style={{ color: "#78716c" }}
               >
                 <LogIn className="h-4 w-4" />
@@ -67,7 +68,8 @@ export default function AuthButton() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-full"
+            className="touch-target-mobile h-8 w-8 rounded-full"
+            aria-label="Account"
           />
         }
       >
