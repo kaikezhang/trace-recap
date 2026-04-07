@@ -124,6 +124,26 @@ export default memo(function MapCanvas() {
     };
   }, [setMap]);
 
+  // Fit map to route bounds when locations first populate
+  const prevLocationCountRef = useRef(0);
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !mapLoaded) return;
+    if (playbackState !== "idle") return;
+
+    const coords = locations
+      .filter((l) => l.coordinates)
+      .map((l) => l.coordinates as [number, number]);
+
+    // Only fit when locations go from 0 → N (initial load / project switch)
+    if (coords.length >= 2 && prevLocationCountRef.current === 0) {
+      const bounds = new mapboxgl.LngLatBounds();
+      for (const [lng, lat] of coords) bounds.extend([lng, lat]);
+      map.fitBounds(bounds, { padding: 60, duration: 0 });
+    }
+    prevLocationCountRef.current = coords.length;
+  }, [locations, mapLoaded, playbackState]);
+
   // Handle map click -> reverse geocode -> add location
   useEffect(() => {
     const map = mapInstanceRef.current;

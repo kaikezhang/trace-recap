@@ -603,7 +603,11 @@ function parseImportedUISettings(data: ImportRouteData): RouteUISettings {
 function applyImportedUISettings(uiSettings: RouteUISettings): void {
   const nextState: Partial<ReturnType<typeof useUIStore.getState>> = {};
 
-  if (uiSettings.viewportRatio !== undefined) nextState.viewportRatio = uiSettings.viewportRatio;
+  if (uiSettings.viewportRatio !== undefined) {
+    // On mobile, always use free ratio to avoid tiny constrained map
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+    nextState.viewportRatio = isMobile ? "free" : uiSettings.viewportRatio;
+  }
   if (uiSettings.speedMultiplier !== undefined) nextState.speedMultiplier = uiSettings.speedMultiplier;
   if (uiSettings.cityLabelLang !== undefined) nextState.cityLabelLang = uiSettings.cityLabelLang === "zh" ? "local" : uiSettings.cityLabelLang;
   if (uiSettings.cityLabelSize !== undefined) nextState.cityLabelSize = uiSettings.cityLabelSize;
