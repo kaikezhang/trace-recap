@@ -924,7 +924,7 @@ export default memo(function LocationCard({
                 {/* Chevron expand/collapse toggle */}
                 <button
                   type="button"
-                  className="relative z-20 shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="touch-target-mobile-hitbox relative z-20 shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
                   aria-label={isExpanded ? "Collapse" : "Expand"}
                 >
