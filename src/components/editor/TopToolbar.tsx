@@ -593,11 +593,11 @@ export default function TopToolbar() {
               variant="ghost"
               size="icon"
               className="touch-target-mobile h-8 w-8"
-              onClick={() => void handleShareLink()}
-              aria-label="Share project link"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
               style={{ color: "#78716c" }}
             >
-              <Share2 className="h-4 w-4" />
+              <Settings className="h-4 w-4" />
             </Button>
 
             {/* Export — always visible on mobile */}
