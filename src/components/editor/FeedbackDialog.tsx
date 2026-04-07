@@ -80,23 +80,8 @@ export default function FeedbackDialog({ open, onOpenChange }: FeedbackDialogPro
         locale: navigator.language,
       };
 
-      // Upload screenshot if provided (authenticated users only)
-      let screenshotPath: string | null = null;
-      if (screenshot && user) {
-        const ext = screenshot.name.split(".").pop() || "png";
-        const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from("feedback-screenshots")
-          .upload(path, screenshot, { contentType: screenshot.type, upsert: false });
-        if (!uploadError) {
-          screenshotPath = path;
-        } else {
-          console.warn("[feedback] Screenshot upload failed:", uploadError.message);
-        }
-      }
-
       if (user) {
-        // Authenticated: use RPC
+        // 1. Create feedback record first
         const { data: feedbackId, error } = await supabase.rpc("create_feedback", {
           p_category: category,
           p_message: message.trim(),
@@ -105,12 +90,27 @@ export default function FeedbackDialog({ open, onOpenChange }: FeedbackDialogPro
         });
         if (error) throw error;
 
-        // Attach screenshot path if uploaded
-        if (screenshotPath && feedbackId) {
-          await supabase
-            .from("feedback")
-            .update({ screenshot_path: screenshotPath })
-            .eq("id", feedbackId);
+        // 2. Upload screenshot after feedback exists (prevents orphaned blobs)
+        if (screenshot && feedbackId) {
+          const ext = screenshot.name.split(".").pop() || "png";
+          const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+          const { error: uploadError } = await supabase.storage
+            .from("feedback-screenshots")
+            .upload(path, screenshot, { contentType: screenshot.type, upsert: false });
+
+          if (!uploadError) {
+            const { error: updateError } = await supabase
+              .from("feedback")
+              .update({ screenshot_path: path })
+              .eq("id", feedbackId);
+            if (updateError) {
+              console.warn("[feedback] Failed to attach screenshot:", updateError.message);
+              // Clean up orphaned blob
+              await supabase.storage.from("feedback-screenshots").remove([path]);
+            }
+          } else {
+            console.warn("[feedback] Screenshot upload failed:", uploadError.message);
+          }
         }
       } else {
         // Anonymous: use RPC (no screenshot for anonymous)
