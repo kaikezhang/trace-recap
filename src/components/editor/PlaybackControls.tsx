@@ -8,6 +8,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Bike,
   Bus,
@@ -104,7 +105,8 @@ export default memo(function PlaybackControls({
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
-  const shouldAutoHide = isPlaying && viewportRatio === "9:16" && !isHovered;
+  const isMobileViewport = typeof window !== "undefined" && window.innerWidth < 768;
+  const shouldAutoHide = isPlaying && viewportRatio === "9:16" && !isHovered && !isMobileViewport;
   const showPlaybackHint = Boolean(hintMessage && onHintDismiss);
   const thumbLeft = Math.min(Math.max(progress, 0.5), 99.5);
   const activeTimelineEntry = timeline[currentSegmentIndex];
@@ -289,7 +291,9 @@ export default memo(function PlaybackControls({
       : "w-[82px] opacity-100",
   ].join(" ");
 
-  return (
+  // Use a portal so fixed positioning works inside overflow-hidden containers
+  // (constrained 9:16 map viewport clips fixed elements on mobile)
+  const controls = (
     <div
       ref={containerRef}
       className={`${containerClassName} ${shouldAutoHide ? "opacity-0" : "opacity-100"} transition-opacity`}
@@ -452,4 +456,7 @@ export default memo(function PlaybackControls({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return controls;
+  return createPortal(controls, document.body);
 });
