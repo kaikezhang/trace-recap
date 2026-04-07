@@ -528,7 +528,7 @@ export default memo(function LocationCard({
   const isWaypoint = location.isWaypoint;
   const photoCount = location.photos.length;
   const coverPhoto = location.photos[0];
-  // AccentIcon and transportLabel removed — mobile badges moved to expanded state
+  const transportLabel = !isFirst && transportMode ? TRANSPORT_LABELS[transportMode] : undefined;
   const detailsId = `location-card-details-${locationId}`;
   const stopLabel = location.name || `stop ${index + 1}`;
   const isCompactMobile = isMobile && mobileSheet;
@@ -900,10 +900,12 @@ export default memo(function LocationCard({
               </div>
 
               {/* Metadata line */}
-              {(location.nameLocal || photoCount > 0 || hasChapterContent || isWaypoint) && (
+              {(location.nameLocal || photoCount > 0 || hasChapterContent || isWaypoint || transportLabel) && (
                 <div className="mt-0.5 flex items-center gap-1.5 text-xs" style={{ color: brand.colors.warm[500] }}>
                   {location.nameLocal && <span className="truncate">{location.nameLocal}</span>}
-                  {location.nameLocal && (photoCount > 0 || hasChapterContent) && <span>·</span>}
+                  {location.nameLocal && (photoCount > 0 || hasChapterContent || transportLabel) && <span>·</span>}
+                  {transportLabel && <span className="shrink-0">{transportLabel}</span>}
+                  {transportLabel && (photoCount > 0 || hasChapterContent) && <span>·</span>}
                   {photoCount > 0 && (
                     <span className="flex shrink-0 items-center gap-0.5">
                       <Camera className="h-3 w-3" /> {photoCount}
