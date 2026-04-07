@@ -287,7 +287,7 @@ export default memo(function PlaybackControls({
   const timeContainerClassName = [
     "overflow-hidden whitespace-nowrap text-right transition-all duration-300 ease-in-out",
     isPlaying
-      ? "pointer-events-none w-0 -ml-2 opacity-0 md:-ml-3"
+      ? "w-[82px] opacity-70"
       : "w-[82px] opacity-100",
   ].join(" ");
 

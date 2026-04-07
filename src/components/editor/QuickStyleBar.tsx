@@ -236,7 +236,7 @@ function AspectRatioChips({
           <button
             key={ratio}
             type="button"
-            className="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+            className="touch-target-mobile rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
             style={{
               color: active ? brand.colors.warm[50] : brand.colors.warm[700],
               backgroundColor: active ? brand.colors.primary[500] : "rgba(255, 251, 245, 0.72)",
