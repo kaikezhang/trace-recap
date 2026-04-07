@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   Download,
   Save,
-  Share2,
   Upload,
   PanelLeftClose,
   PanelLeft,
@@ -261,40 +260,6 @@ export default function TopToolbar() {
     a.download = `${routeData.name || "trace-recap"}.zip`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const handleShareLink = async () => {
-    const url = window.location.href;
-
-    try {
-      if (typeof navigator.share === "function") {
-        await navigator.share({ url, title: currentProjectName });
-        addToast({
-          title: "Link shared",
-          description: "The current project link is ready to send.",
-          variant: "success",
-        });
-        return;
-      }
-
-      await navigator.clipboard.writeText(url);
-      addToast({
-        title: "Link copied",
-        description: "The current project URL was copied to your clipboard.",
-        variant: "success",
-      });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-
-      console.error("Failed to share the current project link.", error);
-      addToast({
-        title: "Could not share link",
-        description: "Try copying the URL from your browser address bar.",
-        variant: "error",
-      });
-    }
   };
 
   const saveStatusConfig = {
@@ -553,24 +518,6 @@ export default function TopToolbar() {
 
             {/* Divider */}
             <div className="mx-2 h-5 w-px" style={{ backgroundColor: "#e7e5e4" }} />
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => void handleShareLink()}
-                    aria-label="Share project link"
-                    style={{ color: "#78716c" }}
-                  />
-                }
-              >
-                <Share2 className="h-4 w-4" />
-              </TooltipTrigger>
-              <TooltipContent>Share link</TooltipContent>
-            </Tooltip>
 
             <AuthButton />
 
