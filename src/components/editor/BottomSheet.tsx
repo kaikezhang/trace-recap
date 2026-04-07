@@ -60,15 +60,18 @@ export default function BottomSheet({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setViewportHeight(window.innerHeight);
+    const getHeight = () => window.visualViewport?.height ?? window.innerHeight;
+    setViewportHeight(getHeight());
     setMounted(true);
 
-    const updateViewportHeight = () => {
-      setViewportHeight(window.innerHeight);
-    };
+    const updateViewportHeight = () => setViewportHeight(getHeight());
 
     window.addEventListener("resize", updateViewportHeight);
-    return () => window.removeEventListener("resize", updateViewportHeight);
+    window.visualViewport?.addEventListener("resize", updateViewportHeight);
+    return () => {
+      window.removeEventListener("resize", updateViewportHeight);
+      window.visualViewport?.removeEventListener("resize", updateViewportHeight);
+    };
   }, []);
 
   const collapsedHeight = 94;
@@ -200,7 +203,7 @@ export default function BottomSheet({
         animate={{ y: currentOffset }}
         onDragEnd={handleDragEnd}
         transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", damping: 30, stiffness: 280 }}
-        className="fixed bottom-0 left-0 right-0 z-50 flex touch-pan-x flex-col overflow-hidden rounded-t-[30px] border-t"
+        className="fixed bottom-0 left-0 right-0 z-50 flex max-w-[100vw] touch-pan-x flex-col overflow-hidden rounded-t-[30px] border-t"
         style={{ height: maxSheetHeight || "85vh" }}
       >
         <div

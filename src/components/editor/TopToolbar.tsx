@@ -316,14 +316,14 @@ export default function TopToolbar() {
     <>
       <TooltipProvider delay={300}>
         <div
-          className="flex h-12 items-center justify-between px-3 md:px-4"
+          className="flex h-12 items-center justify-between overflow-hidden px-3 md:px-4"
           style={{
             backgroundColor: "#fffbf5",
             borderBottom: "1px solid #e7e5e4",
           }}
         >
           {/* Left: panel toggle + breadcrumb + save dot */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
             <Button
               variant="ghost"
               size="icon"
@@ -579,7 +579,7 @@ export default function TopToolbar() {
           </div>
 
           {/* Right side — mobile */}
-          <div className="flex md:hidden items-center gap-1.5">
+          <div className="flex shrink-0 md:hidden items-center gap-1.5">
             <AuthButton />
 
             <Button
