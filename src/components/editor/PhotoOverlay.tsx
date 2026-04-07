@@ -606,6 +606,17 @@ export default function PhotoOverlay({
         right: 0,
       }}
     >
+      {/* Map dimming scrim — creates depth separation behind photos */}
+      {hasDisplayPhotos && (
+        <div
+          className="absolute inset-0 transition-opacity duration-500"
+          style={{
+            backgroundColor: "rgba(0,0,0,0.15)",
+            pointerEvents: "none",
+            opacity: opacity,
+          }}
+        />
+      )}
       <div className="absolute inset-0" style={{ pointerEvents: "none", ...transitionOutgoingStyle }}>
         {hasDisplayPhotos && photoStyle === "portal" && !shouldFlyToAlbum ? (
           <PortalPhotoLayer
@@ -730,15 +741,18 @@ export default function PhotoOverlay({
                     footer={
                       !displayIsFreeMode && hasCaption && !frameHandlesCaption ? (
                         <p
-                          className="mt-1 rounded-md px-2 py-1 text-center text-white shadow-sm"
+                          className="mt-0.5 px-3 py-1.5 text-center text-white"
                           style={{
                             minHeight: `${captionH}px`,
-                            fontSize: `${captionFontSizePx}px`,
+                            fontSize: `${Math.max(captionFontSizePx, 14)}px`,
                             fontFamily: captionFontFamily,
                             flexShrink: 0,
-                            backgroundColor: DEFAULT_CAPTION_BG_COLOR,
+                            background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.25) 60%, transparent 100%)",
                             color: "#ffffff",
-                            textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                            textShadow: "0 1px 4px rgba(0,0,0,0.5)",
+                            letterSpacing: "0.02em",
+                            lineHeight: 1.4,
+                            borderRadius: "0 0 6px 6px",
                           }}
                         >
                           {captionDisplay.text}

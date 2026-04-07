@@ -3345,17 +3345,23 @@ export class VideoExporter {
 
     if (hasFooterCaption && footerHeight > 0) {
       const footerY = mediaY + mediaH;
+      // Gradient fade-up instead of flat black bar
+      const grad = ctx.createLinearGradient(0, footerY, 0, footerY + footerHeight);
+      grad.addColorStop(0, "rgba(0,0,0,0)");
+      grad.addColorStop(0.4, "rgba(0,0,0,0.25)");
+      grad.addColorStop(1, "rgba(0,0,0,0.5)");
       this.drawRoundedRectPath(ctx, innerX, footerY, innerW, footerHeight, 6 * options.scaleX);
-      ctx.fillStyle = DEFAULT_CAPTION_BG_COLOR;
+      ctx.fillStyle = grad;
       ctx.fill();
 
       ctx.save();
-      ctx.font = `${options.caption.fontSizePx}px ${captionFontFamily}, -apple-system, sans-serif`;
+      const exportFontSize = Math.max(options.caption.fontSizePx, 14 * options.scaleX);
+      ctx.font = `${exportFontSize}px ${captionFontFamily}, -apple-system, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = "rgba(0,0,0,0.35)";
-      ctx.shadowBlur = 3 * options.scaleX;
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 4 * options.scaleX;
 
       const textStartY =
         footerY
@@ -3562,6 +3568,16 @@ export class VideoExporter {
     this.drawChapterPins(offCtx, scaleX, scaleY, time, totalDuration, frameIndex, fps);
 
     this.drawTripStats(offCtx, offscreen.width, offscreen.height, scaleX, captured);
+
+    // Map dimming scrim when photos are showing — matches preview overlay
+    const progressForDim = captured.progress as AnimationEvent | null;
+    if (progressForDim?.showPhotos) {
+      offCtx.save();
+      offCtx.fillStyle = "rgba(0,0,0,0.15)";
+      offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
+      offCtx.restore();
+    }
+
     this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps, time, totalDuration);
     this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
 

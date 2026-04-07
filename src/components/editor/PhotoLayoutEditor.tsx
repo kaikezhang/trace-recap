@@ -479,7 +479,10 @@ function LayoutStyleSelectorSection({
       </div>
 
       {isMobile ? (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="relative">
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-4 bg-gradient-to-r from-white to-transparent" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-4 bg-gradient-to-l from-white to-transparent" />
+        <div className="flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -495,6 +498,7 @@ function LayoutStyleSelectorSection({
               {label}
             </button>
           ))}
+        </div>
         </div>
       ) : (
         <div className="space-y-2">
