@@ -105,7 +105,8 @@ export default memo(function PlaybackControls({
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
-  const shouldAutoHide = isPlaying && viewportRatio === "9:16" && !isHovered;
+  const isMobileViewport = typeof window !== "undefined" && window.innerWidth < 768;
+  const shouldAutoHide = isPlaying && viewportRatio === "9:16" && !isHovered && !isMobileViewport;
   const showPlaybackHint = Boolean(hintMessage && onHintDismiss);
   const thumbLeft = Math.min(Math.max(progress, 0.5), 99.5);
   const activeTimelineEntry = timeline[currentSegmentIndex];
