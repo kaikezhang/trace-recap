@@ -899,8 +899,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   );
   // Use the same 95%×88% inset dimensions that PhotoOverlay measures internally,
   // so drag targets align with the actual photo positions.
-  const insetFracW = viewportRatio === "9:16" ? 0.98 : 0.95;
-  const insetFracH = viewportRatio === "9:16" ? 0.92 : 0.88;
+  const insetFracW = viewportRatio === "9:16" ? 1.0 : 1.0;
+  const insetFracH = viewportRatio === "9:16" ? 0.94 : 0.92;
   const insetW = previewSourceSize.width * insetFracW;
   const insetH = previewSourceSize.height * insetFracH;
   const computedRects = useMemo(() => {
@@ -1229,8 +1229,8 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
   const borderRadius = layout.borderRadius ?? 8;
 
   // FreeCanvas needs the same 95%×88% inset that PhotoOverlay uses
-  const freeCanvasInsetW = Math.round(previewSourceSize.width * 0.95);
-  const freeCanvasInsetH = Math.round(previewSourceSize.height * 0.88);
+  const freeCanvasInsetW = Math.round(previewSourceSize.width * 1.0);
+  const freeCanvasInsetH = Math.round(previewSourceSize.height * 0.92);
 
   const layoutPreviewNode = (
     layout.mode === "free" ? (
