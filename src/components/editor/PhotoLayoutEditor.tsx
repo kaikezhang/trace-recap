@@ -61,6 +61,7 @@ import { SCENE_TRANSITION_LABELS } from "@/lib/sceneTransition";
 import { computePhotoLayout, computedRectsToFreeTransforms, type PhotoMeta as LayoutPhotoMeta } from "@/lib/photoLayout";
 import { CAPTION_FONT_OPTIONS, DEFAULT_CAPTION_FONT_FAMILY } from "@/lib/constants";
 import { getPhotoFrameRotation } from "@/lib/frameStyles";
+import { track } from "@/lib/analytics";
 import { useMap } from "./MapContext";
 import PhotoOverlay from "./PhotoOverlay";
 import FreeCanvas, { type FreeCanvasInitialGesture } from "./FreeCanvas";
@@ -780,6 +781,12 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     };
   }, [location.coordinates, map]);
 
+  // Track layout editor opened once on mount
+  useEffect(() => {
+    track("photo_layout_opened", { photo_count: location.photos.length });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Measure whichever preview panel is visible (mobile or desktop)
   const mobilePreviewRef = useRef<HTMLDivElement>(null);
   const desktopPreviewRef = useRef<HTMLDivElement>(null);
@@ -1050,6 +1057,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
       const config = LAYOUT_STYLES.find((s) => s.id === style);
       if (!config) return;
       useHistoryStore.getState().pushState();
+      track("photo_layout_template_changed", { template: style });
       if (style === "free") {
         // Bake visual rotation into free transforms so switching to Free mode
         // doesn't visually change photo positions or tilts.
