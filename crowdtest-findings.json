@@ -1,0 +1,223 @@
+{
+  "issues": [
+    {
+      "id": 1,
+      "severity": "critical",
+      "category": "layout",
+      "flow": "10. General Mobile Issues",
+      "description": "Bottom sheet fixed-position container is 439px wide on a 390px viewport, causing the entire bottom panel and all its children to overflow horizontally. This causes left-side clipping of almost every element in the route panel: 'TraceRecap' logo, '16:9' aspect ratio button, 'Collapse All' button, search icon, '7 stops' text, and the 'Actions' menu title are all partially cut off on the left edge.",
+      "expected": "The bottom sheet should be constrained to the 390px viewport width. All content should be fully visible within the mobile viewport.",
+      "actual": "The fixed-positioned bottom sheet (`.fixed.bottom-0.left-0.right-0.z-50`) computes to 439px width instead of 390px. This causes a ~49px horizontal shift that clips left-side content across the entire route panel UI.",
+      "element": "Bottom sheet container (.fixed.bottom-0.left-0.right-0.z-50)",
+      "viewport": "390x844"
+    },
+    {
+      "id": 2,
+      "severity": "critical",
+      "category": "layout",
+      "flow": "1. Initial View & Navigation",
+      "description": "On initial load, the map shows Africa/Atlantic Ocean instead of the Pacific Rim route. The 7 map markers exist in the DOM but are not visible because the map is centered on the wrong region. The route line between cities is not visible.",
+      "expected": "The map should auto-fit to show all route stops (Seattle, Honolulu, Tokyo, Taipei, Tainan, Alishan) with the route line visible.",
+      "actual": "The map displays North/West Africa (Morocco, Algeria, Nigeria area). No route stops or route lines are visible. Only after clicking a location card does the map navigate to the correct region.",
+      "element": "Map region (Mapbox canvas)",
+      "viewport": "390x844"
+    },
+    {
+      "id": 3,
+      "severity": "critical",
+      "category": "layout",
+      "flow": "4. Playback",
+      "description": "The map viewport renders as a small 380x213px rectangle (16:9 aspect ratio) at the top of the screen, leaving approximately 60% of the screen as an empty dark area below. This happens both during editing and playback. On a phone screen, the map should use much more of the available vertical space.",
+      "expected": "On mobile in 16:9 mode, the map should fill the available width and use a proportional height, or the layout should adapt to use the vertical space effectively. During playback, the map should ideally fill the full screen.",
+      "actual": "The 16:9 map is only 213px tall on a 844px screen. During playback, there is a massive ~500px dark gap between the map bottom and the playback controls. This wastes most of the screen real estate.",
+      "element": "Map container and canvas viewport",
+      "viewport": "390x844"
+    },
+    {
+      "id": 4,
+      "severity": "critical",
+      "category": "interaction",
+      "flow": "4. Playback",
+      "description": "When the bottom sheet route panel is expanded (default state), the playback controls (Play, Reset, progress slider, time) are completely covered by the bottom sheet. The bottom sheet has z-index: 50 and the playback bar has z-index: 45. Users cannot tap Play without first collapsing the bottom sheet.",
+      "expected": "Playback controls should always be accessible and visible above the bottom sheet, or the bottom sheet should leave room for the playback bar.",
+      "actual": "The bottom sheet (z-50) completely overlaps the playback bar (z-45) at y=462. The Play button is hidden behind the route panel. Users must collapse the bottom sheet first, which is non-obvious.",
+      "element": "Playback controls bar (.fixed z-[45]) vs bottom sheet (.fixed z-50)",
+      "viewport": "390x844"
+    },
+    {
+      "id": 5,
+      "severity": "critical",
+      "category": "interaction",
+      "flow": "4. Playback",
+      "description": "Even when the bottom sheet is collapsed, the playback controls are still partially cut off at the bottom of the screen. The Play button is at y=816 to y=872, extending 28px below the 844px viewport height.",
+      "expected": "Playback controls should be fully visible when the bottom sheet is collapsed.",
+      "actual": "The Play button, Reset button, progress slider, and time display are all partially clipped at the bottom edge. Only the very tops of these elements are visible.",
+      "element": "Playback bar",
+      "viewport": "390x844"
+    },
+    {
+      "id": 6,
+      "severity": "critical",
+      "category": "interaction",
+      "flow": "8. Menu",
+      "description": "The hamburger menu button is positioned at x=395, completely beyond the 390px viewport. It is untappable on mobile. Users have no way to access the menu (Undo, Redo, Import Route, Save Route, Settings, Clear Route) through normal touch interaction.",
+      "expected": "The hamburger menu should be within the viewport and tappable.",
+      "actual": "The menu button is 5px beyond the right edge of the viewport. It is invisible and inaccessible to mobile users.",
+      "element": "Menu button (hamburger icon)",
+      "viewport": "390x844"
+    },
+    {
+      "id": 7,
+      "severity": "high",
+      "category": "interaction",
+      "flow": "5. Aspect Ratio Switching",
+      "description": "Clicking the aspect ratio buttons (9:16, 1:1) appears to inadvertently add new stops to the route. Each click adds a new location (Bainbridge Island, then Seattle, then Silverdale). The stop count went from 7 to 8 to 9 to 10 across three button clicks. This may be caused by click events propagating to the map behind the buttons, triggering the 'add stop' map click handler.",
+      "expected": "Clicking aspect ratio buttons should only change the map aspect ratio. No stops should be added.",
+      "actual": "Each aspect ratio button click adds a new stop at whatever map location is behind the button. The route grew from 7 to 10 stops unintentionally.",
+      "element": "Aspect ratio buttons (16:9, 9:16, 1:1) and map click handler",
+      "viewport": "390x844"
+    },
+    {
+      "id": 8,
+      "severity": "high",
+      "category": "responsiveness",
+      "flow": "5. Aspect Ratio Switching",
+      "description": "Switching to 9:16 or 1:1 aspect ratio does not visually change the map container on mobile. The map canvas remains at 380x213px (approximately 16:9) regardless of which aspect ratio is selected.",
+      "expected": "In 9:16 mode, the map should become taller and narrower (portrait). In 1:1 mode, the map should be square. The canvas aspect ratio should update to match the selected ratio.",
+      "actual": "The map canvas stays at 380x213px (16:9 aspect ratio) regardless of selection. The canvas even retains `aspect-ratio: auto 1140/639` which is hardcoded 16:9.",
+      "element": "Map canvas and container",
+      "viewport": "390x844"
+    },
+    {
+      "id": 9,
+      "severity": "high",
+      "category": "layout",
+      "flow": "2. Bottom Sheet / Route Panel",
+      "description": "When the route panel is collapsed, the expand button is positioned at y=883, which is 39px below the 844px viewport. The button is not visible or tappable without scrolling. There is also no visible summary info (7 stops, distance, city names) in the collapsed state - just a massive empty dark area between the map and the off-screen button.",
+      "expected": "The collapsed route panel should show a compact summary bar with the expand chevron that is always visible and tappable.",
+      "actual": "The collapsed panel shows nothing visible. The expand button is off-screen at y=883. Users see a huge empty dark area with no affordance to re-expand the panel.",
+      "element": "Route panel collapse/expand button",
+      "viewport": "390x844"
+    },
+    {
+      "id": 10,
+      "severity": "high",
+      "category": "layout",
+      "flow": "9. Export Dialog",
+      "description": "The Export dialog content is shifted to the right, causing left-side clipping. The title's sparkle icon, 'Choose a resolution...' text, 'Resolution' label, 'HD' option card, and 'Export Settings' labels are all partially cut off on the left edge.",
+      "expected": "The export dialog should be centered and fully visible within the mobile viewport.",
+      "actual": "Text is clipped: 'Choose' shows as 'oose', 'Resolution' as 'solution'. The HD resolution card is partially hidden on the left edge.",
+      "element": "Export dialog (role=dialog)",
+      "viewport": "390x844"
+    },
+    {
+      "id": 11,
+      "severity": "high",
+      "category": "layout",
+      "flow": "8. Menu",
+      "description": "The Actions menu drawer title is clipped on the left, showing only 'ns' instead of 'Actions'. Menu items (Undo, Redo, Import Route, Save Route, Settings) are left-aligned near the edge with minimal padding.",
+      "expected": "The menu title 'Actions' should be fully visible with proper padding.",
+      "actual": "The title 'Actions' is clipped to just 'ns'. The same horizontal overflow issue affects the menu drawer.",
+      "element": "Menu drawer (Actions)",
+      "viewport": "390x844"
+    },
+    {
+      "id": 12,
+      "severity": "medium",
+      "category": "layout",
+      "flow": "1. Initial View & Navigation",
+      "description": "The top toolbar 'TraceRecap' logo is cut off to 'eceRecap' or 'Recap'. The project name 'Pacific Rim Adv...' is truncated. While truncation is expected, the logo itself should not be clipped.",
+      "expected": "The logo should be fully visible. Truncation of the project name is acceptable, but the brand logo should not be clipped.",
+      "actual": "Logo shows 'eceRecap' when the page is slightly scrolled. The horizontal overflow causes the entire header to shift.",
+      "element": "Top navigation bar / TraceRecap link",
+      "viewport": "390x844"
+    },
+    {
+      "id": 13,
+      "severity": "medium",
+      "category": "visibility",
+      "flow": "3. Location Card Interactions",
+      "description": "The 'Remove location' (X) button on each route card is partially cut off at the right edge of the screen. While the button is technically accessible, it appears cropped.",
+      "expected": "All action buttons should be fully visible within the card.",
+      "actual": "The X button is partially clipped on the right edge, though tappable.",
+      "element": "Remove location button",
+      "viewport": "390x844"
+    },
+    {
+      "id": 14,
+      "severity": "medium",
+      "category": "layout",
+      "flow": "1. Initial View & Navigation",
+      "description": "There is a persistent dark/black gap (approximately 100-200px tall) between the bottom of the map canvas and the top of the bottom sheet route panel. This area serves no purpose and wastes valuable mobile screen space.",
+      "expected": "The map and bottom sheet should be adjacent or the gap should be eliminated. The map could expand to fill available space.",
+      "actual": "A dark empty rectangle sits between the 16:9 map and the route panel, further compressing the usable area of both the map and the route list.",
+      "element": "Gap between map container and bottom sheet",
+      "viewport": "390x844"
+    },
+    {
+      "id": 15,
+      "severity": "medium",
+      "category": "layout",
+      "flow": "2. Bottom Sheet / Route Panel",
+      "description": "The desktop sidebar (aside element with class 'hidden' and w-[400px]) is properly hidden on mobile, but the bottom sheet mobile alternative has sizing issues. The bottom sheet height is 743px which, combined with the header and playback bar, causes overflow.",
+      "expected": "The mobile bottom sheet should be properly sized to fit within the viewport alongside the header, map, and playback bar.",
+      "actual": "The bottom sheet is oversized (743px height on 844px viewport) and doesn't leave proper space for other UI elements.",
+      "element": "Mobile bottom sheet container",
+      "viewport": "390x844"
+    },
+    {
+      "id": 16,
+      "severity": "medium",
+      "category": "interaction",
+      "flow": "7. Search",
+      "description": "The search dropdown results show Paris arrondissements correctly, but the location pin icons in the dropdown are clipped on the left edge due to the horizontal overflow issue. The search input icon is also clipped.",
+      "expected": "Search results should display with properly visible pin icons and full text.",
+      "actual": "Pin icons are partially clipped on the left. Otherwise the dropdown works functionally.",
+      "element": "Search cities combobox and results listbox",
+      "viewport": "390x844"
+    },
+    {
+      "id": 17,
+      "severity": "low",
+      "category": "visibility",
+      "flow": "4. Playback",
+      "description": "During playback, there is no persistent city name label overlay (e.g., 'Now arriving: Tokyo') on the playback view. The city name only appears as part of the map marker / photo layout. A dedicated overlay would improve orientation for viewers.",
+      "expected": "A route label or city name should be visible during playback to orient the viewer.",
+      "actual": "No dedicated city name label is shown during playback. The city name is only visible as part of the photo overlay on the map.",
+      "element": "Playback view",
+      "viewport": "390x844"
+    },
+    {
+      "id": 18,
+      "severity": "low",
+      "category": "interaction",
+      "flow": "3. Location Card Interactions",
+      "description": "The reorder drag handle (6-dot grid icon) on each route card is quite small (approximately 44x44px tap area but visually small dots). On mobile, this may be hard to activate for drag-and-drop reordering. Note: drag-and-drop is inherently challenging on mobile touch devices.",
+      "expected": "Reorder handles should have a clear visual affordance and adequate tap target size for mobile.",
+      "actual": "The drag handle is small but meets the 44px minimum tap target. However, the drag-and-drop interaction itself may be difficult on mobile touch.",
+      "element": "Reorder stop button (drag handle)",
+      "viewport": "390x844"
+    }
+  ],
+  "scores": {
+    "first_impression": 3,
+    "navigation": 4,
+    "task_completion": 3,
+    "visual_quality": 5,
+    "touch_targets": 4,
+    "responsiveness": 2,
+    "playback_experience": 3,
+    "overall": 3
+  },
+  "positives": [
+    "Photo layout on the map during playback looks beautiful - polaroid-style cards with captions are visually appealing",
+    "The city search functionality works correctly - typing 'Paris' returns relevant results quickly with arrondissement-level detail",
+    "The route list structure is well-designed with clear hierarchy: stops, transport segments, pass-throughs, and expandable details",
+    "Airplane animation on flight segments is a charming detail that works well on mobile",
+    "The export dialog shows useful information (resolution options, estimated size, current settings) in a clear layout",
+    "Location cards show rich information: city name (English + local), emoji icon, photo count, day range, transport mode badges",
+    "The bottom sheet drawer pattern is the correct UX choice for mobile - the implementation just needs sizing fixes",
+    "Action buttons (Chapter, Photos, Layout, Duplicate, Delete) on expanded cards are well-organized and appropriately sized"
+  ],
+  "summary": "The TraceRecap editor has a fundamentally broken mobile layout caused by a ~49px horizontal overflow in the bottom sheet fixed-position container, which cascades into left-side clipping of virtually every route panel element. Combined with critical issues like the map showing the wrong region on load, playback controls being hidden behind the bottom sheet, the hamburger menu being off-screen, and aspect ratio buttons inadvertently adding stops, the mobile experience is currently unusable for core editing and playback tasks. The underlying design and visual quality are strong, but the responsive layout needs significant structural fixes to the bottom sheet sizing, map viewport allocation, z-index stacking, and aspect ratio switching before mobile users can accomplish basic workflows."
+}
