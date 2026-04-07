@@ -21,9 +21,11 @@ import MyFeedback, { useUnreadFeedbackCount } from "./MyFeedback";
 
 export default function AuthButton() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [myFeedbackOpen, setMyFeedbackOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const initialized = useAuthStore((s) => s.initialized);
   const signOut = useAuthStore((s) => s.signOut);
+  const unreadCount = useUnreadFeedbackCount();
 
   // Hide auth UI entirely when Supabase is not configured
   if (!isSupabaseConfigured() || !initialized) return null;
@@ -54,9 +56,6 @@ export default function AuthButton() {
       </>
     );
   }
-
-  const [myFeedbackOpen, setMyFeedbackOpen] = useState(false);
-  const unreadCount = useUnreadFeedbackCount();
 
   const avatarUrl = user.user_metadata?.avatar_url as string | undefined;
   const displayName =

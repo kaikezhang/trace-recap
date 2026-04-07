@@ -93,9 +93,20 @@ export default function MyFeedback({ open, onOpenChange }: MyFeedbackProps) {
     if (open) void fetchItems();
   }, [open, fetchItems]);
 
-  // Mark as viewed when expanded
+  // Mark as viewed when expanded + update local state immediately
   const handleExpand = async (itemId: string) => {
-    setExpandedId(expandedId === itemId ? null : itemId);
+    const isCollapsing = expandedId === itemId;
+    setExpandedId(isCollapsing ? null : itemId);
+
+    if (isCollapsing) return;
+
+    // Immediately update local state so unread indicator clears
+    const now = new Date().toISOString();
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId ? { ...item, last_user_viewed_at: now } : item,
+      ),
+    );
 
     if (!isSupabaseConfigured()) return;
     const supabase = createClient();
@@ -104,7 +115,7 @@ export default function MyFeedback({ open, onOpenChange }: MyFeedbackProps) {
     try {
       await supabase.rpc("mark_feedback_viewed", { p_feedback_id: itemId });
     } catch {
-      // silent
+      // silent — local state already updated
     }
   };
 

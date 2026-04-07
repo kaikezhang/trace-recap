@@ -83,6 +83,12 @@ export default function AdminFeedbackPage() {
   const [replyText, setReplyText] = useState("");
   const [replying, setReplying] = useState(false);
 
+  // Clear reply draft when switching between feedback items
+  const handleToggleExpand = (id: string) => {
+    setExpandedId(expandedId === id ? null : id);
+    setReplyText("");
+  };
+
   // Initialize auth
   useEffect(() => {
     void initialize();
@@ -302,7 +308,7 @@ export default function AdminFeedbackPage() {
                   <button
                     type="button"
                     className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-stone-50/50"
-                    onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                    onClick={() => handleToggleExpand(item.id)}
                   >
                     <CategoryIcon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: brand.colors.warm[500] }} />
                     <div className="min-w-0 flex-1">
