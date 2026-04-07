@@ -513,6 +513,7 @@ function EditorContent() {
     initializeProjectPersistence({ skipRestore: nextShouldLoadDemo });
     void useAuthStore.getState().initialize();
     initSyncRepository();
+    track("editor_opened");
   }, []);
 
   useEffect(() => {

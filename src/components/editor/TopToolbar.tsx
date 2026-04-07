@@ -56,6 +56,7 @@ import { ALBUM_STYLE_CONFIGS } from "@/lib/albumStyles";
 import AuthButton from "./AuthButton";
 import SyncIndicator from "./SyncIndicator";
 import { useAuthStore } from "@/stores/authStore";
+import { track } from "@/lib/analytics";
 
 export default function TopToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -196,6 +197,7 @@ export default function TopToolbar() {
         await loadRouteData(data);
         void enrichLocalNames();
       }
+      track("route_imported");
     } catch (error) {
       console.error("Failed to import route file.", error);
     }
@@ -260,6 +262,11 @@ export default function TopToolbar() {
     a.download = `${routeData.name || "trace-recap"}.zip`;
     a.click();
     URL.revokeObjectURL(url);
+    const locs = useProjectStore.getState().locations;
+    track("route_exported", {
+      stop_count: locs.length,
+      photo_count: locs.reduce((sum, l) => sum + l.photos.length, 0),
+    });
   };
 
   const saveStatusConfig = {

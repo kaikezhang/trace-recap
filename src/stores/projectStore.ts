@@ -42,6 +42,7 @@ import {
   isImageOversized,
 } from "@/lib/imageUtils";
 import { ALLOWED_CAPTION_FONTS } from "@/lib/constants";
+import { track } from "@/lib/analytics";
 
 export interface RouteUISettings {
   viewportRatio?: AspectRatio;
@@ -1569,6 +1570,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       label: `Add ${formatStopLabel(newLocation.name)}`,
     });
     set(nextState);
+    track("location_added", { stop_count: locations.length });
   },
 
   duplicateLocation: (locationId) => {
@@ -1614,6 +1616,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       label: buildBatchRemoveLabel([removedLocation]),
     });
     set(nextState);
+    track("location_removed", { stop_count: nextState.locations.length });
   },
 
   batchRemoveLocations: (ids) => {
@@ -1838,6 +1841,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           : l,
       ),
     }));
+    const loc = get().locations.find((l) => l.id === locationId);
+    track("photo_added", {
+      photo_count: loc?.photos.length ?? 1,
+      stop_count: get().locations.length,
+    });
     return newId;
   },
 
@@ -2166,6 +2174,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       });
       tryUpdateLastSavedJson(data);
       useHistoryStore.getState().resetHistory();
+      track("project_created", { stop_count: 0, photo_count: 0 });
 
       return id;
     }),

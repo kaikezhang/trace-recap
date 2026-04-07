@@ -88,7 +88,13 @@ type AnalyticsEvents = {
   photo_added: { photo_count: number; stop_count: number };
   photo_removed: { photo_count: number };
   photo_layout_changed: { template: string };
+  photo_layout_opened: { photo_count: number };
+  photo_layout_template_changed: { template: string };
   transport_mode_changed: { mode: string };
+
+  // Route import/export
+  route_exported: ProjectEvent;
+  route_imported: Record<string, never>;
 
   // Playback
   playback_started: ProjectEvent;
