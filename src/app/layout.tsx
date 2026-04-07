@@ -3,6 +3,8 @@ import { Caveat, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import PostHogProvider from "@/components/PostHogProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -116,8 +118,11 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+        <PostHogProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+        </PostHogProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

@@ -3,6 +3,7 @@
 import { lineString } from "@turf/helpers";
 import { length } from "@turf/length";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { track } from "@/lib/analytics";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import mapboxgl from "mapbox-gl";
 import {
@@ -552,6 +553,7 @@ function EditorContent() {
         // Demo always replaces the current project without confirmation
         await replaceCurrentProject(demoProject.name);
         await loadRouteData(demoProject);
+        track("demo_loaded", { is_demo: true });
       } catch (error) {
         console.error("Failed to load demo project.", error);
         demoLoadedRef.current = false;
@@ -896,6 +898,11 @@ function EditorContent() {
   }, [map, locations, segmentTimingOverrides, segments, speedMultiplier]);
 
   const handlePlay = useCallback(() => {
+    track("playback_started", {
+      stop_count: locations.length,
+      photo_count: locations.reduce((sum, l) => sum + l.photos.length, 0),
+      segment_count: segments.length,
+    });
     // Immediately hide all future segment layers on the map
     if (map) {
       const style = map.getStyle();

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { brand } from "@/lib/brand";
+import { track } from "@/lib/analytics";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -124,6 +125,7 @@ export default function FeedbackDialog({ open, onOpenChange }: FeedbackDialogPro
       }
 
       setSubmitted(true);
+      track("feedback_submitted", { category, has_screenshot: !!screenshot });
       addToast({ title: "Feedback sent — thank you!", variant: "success" });
 
       // Reset after a delay
