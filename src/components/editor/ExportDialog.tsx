@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { track } from "@/lib/analytics";
 import {
   Download,
   X,
@@ -194,6 +195,15 @@ export default function ExportDialog() {
   const startExport = useCallback(async (settings: ExportSettings) => {
     if (!map || segments.length === 0) return;
 
+    const exportProps = {
+      resolution: settings.resolution,
+      aspect_ratio: settings.viewportRatio,
+      stop_count: locations.length,
+      photo_count: locations.reduce((sum, l) => sum + l.photos.length, 0),
+      segment_count: segments.length,
+    };
+    track("export_started", exportProps);
+
     setIsExporting(true);
     setDownloadUrl(null);
     setDownloadSize(null);
@@ -239,12 +249,16 @@ export default function ExportDialog() {
         setDownloadSize(`${sizeMB} MB`);
         const ext = blob.type.includes("webm") ? "webm" : "mp4";
         setDownloadExt(ext);
+        track("export_completed", exportProps);
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
+        track("export_canceled", {});
         setProgress(null);
         return;
       }
+      const errorMsg = error instanceof Error ? error.message : "unknown";
+      track("export_failed", { ...exportProps, error_code: errorMsg });
       setExportError(
         error instanceof Error
           ? error.message

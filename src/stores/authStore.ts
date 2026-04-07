@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { track, identifyUser, resetUser } from "@/lib/analytics";
 import type { User, Session } from "@supabase/supabase-js";
 
 interface AuthState {
@@ -61,6 +62,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         data: { subscription },
       } = supabase.auth.onAuthStateChange((_event, session) => {
         set({ user: session?.user ?? null, session });
+        if (session?.user) {
+          identifyUser(session.user.id);
+        } else {
+          resetUser();
+        }
       });
 
       // Cleanup on page unload to prevent leaked subscriptions
@@ -81,6 +87,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       password,
     });
     set({ loading: false });
+    if (error) {
+      track("auth_failed", { method: "email", error_code: error.message });
+    } else {
+      track("auth_succeeded", { method: "email" });
+    }
     return { error: error?.message };
   },
 
