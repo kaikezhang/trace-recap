@@ -211,8 +211,11 @@ function constrainAutoLayoutForCompactViewport(
   return scaleRectsToInnerBounds(rects, gap + extraGap);
 }
 
-function shouldUsePortraitFriendlyLayout(viewportRatio?: AspectRatio): boolean {
-  return viewportRatio === "9:16";
+function shouldUsePortraitFriendlyLayout(viewportRatio?: AspectRatio, containerAspect?: number): boolean {
+  if (viewportRatio === "9:16") return true;
+  // Also trigger for actual portrait containers (mobile free mode)
+  if (containerAspect !== undefined && containerAspect <= 0.75) return true;
+  return false;
 }
 
 function seedFromPhotos(photos: PhotoMeta[]): number {
@@ -601,7 +604,7 @@ export function computePhotoLayout(
       : 16 / 9;
   const gap = gapPx / GAP_REFERENCE_WIDTH;
 
-  if (shouldUsePortraitFriendlyLayout(viewportRatio)) {
+  if (shouldUsePortraitFriendlyLayout(viewportRatio, containerAspect)) {
     if (layout?.mode !== "free" && layout?.template) {
       return computeTemplateLayout(
         photos,
