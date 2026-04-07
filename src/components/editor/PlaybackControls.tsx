@@ -457,6 +457,8 @@ export default memo(function PlaybackControls({
     </div>
   );
 
+  // Portal only on mobile — desktop uses absolute positioning inside map container
   if (typeof document === "undefined") return controls;
-  return createPortal(controls, document.body);
+  const useMobilePortal = typeof window !== "undefined" && window.innerWidth < 768;
+  return useMobilePortal ? createPortal(controls, document.body) : controls;
 });
