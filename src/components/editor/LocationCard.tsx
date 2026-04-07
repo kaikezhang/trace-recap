@@ -528,14 +528,7 @@ export default memo(function LocationCard({
   const isWaypoint = location.isWaypoint;
   const photoCount = location.photos.length;
   const coverPhoto = location.photos[0];
-  const AccentIcon = !isFirst && transportMode ? TRANSPORT_ICONS[transportMode] : null;
-  const transportLabel = !isFirst && transportMode ? TRANSPORT_LABELS[transportMode] : undefined;
-  const transportMetaLabel = !isFirst && transportMode ? TRANSPORT_META_LABELS[transportMode] : undefined;
-  const desktopMetaLabel = location.chapterDate
-    || location.nameLocal
-    || (isWaypoint ? "Pass-through stop" : "Main destination");
-  const mobileDateLabel = location.chapterDate || `Day ${index + 1}`;
-  const mobilePhotoLabel = `${photoCount} photo${photoCount === 1 ? "" : "s"}`;
+  // AccentIcon and transportLabel removed — mobile badges moved to expanded state
   const detailsId = `location-card-details-${locationId}`;
   const stopLabel = location.name || `stop ${index + 1}`;
   const isCompactMobile = isMobile && mobileSheet;
@@ -722,32 +715,7 @@ export default memo(function LocationCard({
   };
 
   const actionButtonClassName = "relative z-20 inline-flex items-center justify-center rounded-lg border transition-[transform,background-color,border-color] duration-150 hover:bg-white active:scale-95";
-  const mobileActionButtonClassName = `touch-target-mobile ${actionButtonClassName} h-11 w-11 rounded-xl`;
   const hasChapterContent = !!(location.chapterTitle || location.chapterNote);
-  const mobileActionBar = (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        data-no-seek
-        disabled={!onEditLayout}
-        className={`${mobileActionButtonClassName} disabled:cursor-not-allowed disabled:opacity-50`}
-        style={{
-          borderColor: brand.colors.warm[200],
-          color: brand.colors.warm[700],
-          backgroundColor: "rgba(255,255,255,0.86)",
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEditLayout();
-        }}
-        aria-label="Edit layout"
-        title="Edit layout"
-      >
-        <LayoutTemplate className="h-[18px] w-[18px]" />
-      </button>
-    </div>
-  );
-
   return (
       <div
         ref={setNodeRef}
@@ -827,14 +795,13 @@ export default memo(function LocationCard({
               aria-label={dragDisabled ? "Reordering unavailable" : "Reorder stop"}
               title={dragDisabled ? "Reordering is temporarily unavailable" : "Reorder stop"}
               disabled={dragDisabled}
-              className={`touch-target-mobile relative z-20 flex shrink-0 items-center justify-center border transition-colors touch-none disabled:cursor-not-allowed disabled:opacity-55 ${
+              className={`touch-target-mobile relative z-20 flex shrink-0 items-center justify-center transition-colors touch-none disabled:cursor-not-allowed disabled:opacity-55 ${
                 dragDisabled ? "" : "cursor-grab active:cursor-grabbing"
               } ${
-                isWaypoint ? "h-7 w-7 rounded-lg" : "h-7 w-7 rounded-xl"
+                isWaypoint ? "h-6 w-6 rounded-md" : "h-6 w-6 rounded-lg"
               }`}
               style={{
-                borderColor: brand.colors.warm[200],
-                backgroundColor: isHovered ? "rgba(255,255,255,0.98)" : "rgba(255,251,245,0.92)",
+                color: brand.colors.warm[300],
                 cursor: dragDisabled ? "default" : undefined,
               }}
               {...(dragDisabled ? {} : attributes)}
@@ -950,62 +917,7 @@ export default memo(function LocationCard({
             </div>
           </div>
 
-          <div className="flex items-start justify-between gap-3 text-xs md:hidden">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5" style={{ color: brand.colors.warm[500] }}>
-              {AccentIcon ? (
-                <>
-                  <span
-                    className="inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 py-1"
-                    style={{ backgroundColor: `${accentColor}14`, color: accentColor }}
-                    title={transportLabel}
-                  >
-                    <AccentIcon className="h-3 w-3" style={{ color: accentColor }} />
-                    {transportMetaLabel}
-                  </span>
-                </>
-              ) : isWaypoint ? (
-                <span
-                  className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
-                  style={{
-                    color: brand.colors.warm[500],
-                    backgroundColor: brand.colors.warm[100],
-                  }}
-                >
-                  Pass-through
-                </span>
-              ) : null}
-              <span
-                className="truncate rounded-full px-2.5 py-1"
-                style={{ backgroundColor: "rgba(255,255,255,0.84)", color: brand.colors.warm[600] }}
-              >
-                {mobileDateLabel}
-              </span>
-              <span
-                className="truncate rounded-full px-2.5 py-1"
-                style={{ backgroundColor: "rgba(255,255,255,0.84)", color: brand.colors.warm[600] }}
-              >
-                {mobilePhotoLabel}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {mobileActionBar}
-              <button
-                data-delete-btn
-                className="touch-target-mobile relative z-20 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-[transform,background-color] duration-150 active:scale-95 hover:bg-[#fff1f2]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemove();
-                }}
-                aria-label="Remove location"
-                style={{
-                  borderColor: brand.colors.warm[200],
-                  backgroundColor: "rgba(255,255,255,0.86)",
-                }}
-              >
-                <X className="h-[18px] w-[18px]" style={{ color: brand.colors.warm[500] }} />
-              </button>
-            </div>
-          </div>
+          {/* Mobile actions moved to expanded state — collapsed card stays clean */}
 
         </div>
 
