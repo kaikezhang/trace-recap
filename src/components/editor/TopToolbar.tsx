@@ -18,8 +18,10 @@ import {
   Palette,
   X,
   Menu,
+  MessageSquarePlus,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
+import FeedbackDialog from "./FeedbackDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,6 +65,7 @@ export default function TopToolbar() {
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const setExportDialogOpen = useUIStore((s) => s.setExportDialogOpen);
   const addToast = useUIStore((s) => s.addToast);
   const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
@@ -460,6 +463,10 @@ export default function TopToolbar() {
                   <Save className="h-4 w-4" />
                   Save Route
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setFeedbackOpen(true)}>
+                  <MessageSquarePlus className="h-4 w-4" />
+                  Send Feedback
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
@@ -675,6 +682,11 @@ export default function TopToolbar() {
                 label="Settings"
                 onClick={() => { setMobileMenuOpen(false); setSettingsOpen(true); }}
               />
+              <MobileActionButton
+                icon={<MessageSquarePlus className="h-4 w-4" />}
+                label="Send Feedback"
+                onClick={() => { setMobileMenuOpen(false); setFeedbackOpen(true); }}
+              />
               <div className="my-2 h-px" style={{ backgroundColor: "#e7e5e4" }} />
               <MobileActionButton
                 icon={<Trash2 className="h-4 w-4" />}
@@ -754,6 +766,8 @@ export default function TopToolbar() {
         className="hidden"
         onChange={handleImport}
       />
+
+      <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
         <DialogContent showCloseButton={false} className="touch-target-mobile-scope">
