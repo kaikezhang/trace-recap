@@ -22,6 +22,7 @@ export function initAnalytics(): void {
 
   posthog.init(key, {
     api_host: host,
+    defaults: "2026-01-30",
     capture_pageview: true,
     capture_pageleave: true,
     autocapture: false, // Manual events only — editor is too complex for autocapture
