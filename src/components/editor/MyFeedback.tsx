@@ -114,6 +114,7 @@ export default function MyFeedback({ open, onOpenChange }: MyFeedbackProps) {
 
     try {
       await supabase.rpc("mark_feedback_viewed", { p_feedback_id: itemId });
+      invalidateUnreadCount(); // Refresh badge immediately
     } catch {
       // silent — local state already updated
     }
@@ -231,6 +232,13 @@ export default function MyFeedback({ open, onOpenChange }: MyFeedbackProps) {
   );
 }
 
+/** Dispatch this event to force an immediate unread count refresh */
+function invalidateUnreadCount() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("feedback-read"));
+  }
+}
+
 /** Hook to get unread feedback count for badge display */
 export function useUnreadFeedbackCount(): number {
   const user = useAuthStore((s) => s.user);
@@ -257,9 +265,16 @@ export function useUnreadFeedbackCount(): number {
     };
 
     void fetchCount();
-    // Poll every 60 seconds
     const interval = setInterval(() => void fetchCount(), 60000);
-    return () => clearInterval(interval);
+
+    // Listen for immediate refresh events (e.g., after marking feedback as read)
+    const handleRefresh = () => void fetchCount();
+    window.addEventListener("feedback-read", handleRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("feedback-read", handleRefresh);
+    };
   }, [user]);
 
   return count;
