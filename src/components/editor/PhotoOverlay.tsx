@@ -342,18 +342,18 @@ export default function PhotoOverlay({
       return { width: "100%", height: "100%" };
     }
     if (viewportRatio === "9:16") {
-      return { width: "98%", height: "92%" };
+      return { width: "100%", height: "94%" };
     }
     if (viewportRatio === "free") {
       return {
-        width: "95%",
+        width: "100%",
         height:
           bottomInsetPx > 0
-            ? `min(88%, calc(100% - ${bottomInsetPx}px))`
-            : "88%",
+            ? `min(92%, calc(100% - ${bottomInsetPx}px))`
+            : "92%",
       };
     }
-    return { width: "95%", height: "88%" };
+    return { width: "100%", height: "92%" };
   }, [bottomInsetPx, viewportRatio, usesPortalLayout]);
 
   const containerRef = useRef<HTMLDivElement>(null);

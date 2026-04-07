@@ -2101,8 +2101,8 @@ export class VideoExporter {
     }
     if (loaded.length === 0) return;
 
-    const insetW = canvasWidth * 0.95;
-    const insetH = canvasHeight * 0.88;
+    const insetW = canvasWidth * 1.0;
+    const insetH = canvasHeight * 0.92;
     const insetX = (canvasWidth - insetW) / 2;
     const insetY = (canvasHeight - insetH) / 2;
 
@@ -2592,8 +2592,8 @@ export class VideoExporter {
     }
     if (loaded.length === 0) return;
 
-    const insetW = canvasWidth * 0.95;
-    const insetH = canvasHeight * 0.88;
+    const insetW = canvasWidth * 1.0;
+    const insetH = canvasHeight * 0.92;
     const insetX = (canvasWidth - insetW) / 2;
     const insetY = (canvasHeight - insetH) / 2;
 
