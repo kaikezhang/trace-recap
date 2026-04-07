@@ -341,16 +341,16 @@ export default function TopToolbar() {
 
             <Link
               href="/"
-              className="text-sm md:text-base font-semibold tracking-tight hover:opacity-80 transition-opacity"
+              className="hidden md:inline text-sm md:text-base font-semibold tracking-tight hover:opacity-80 transition-opacity"
               style={{ color: "#1c1917" }}
             >
               TraceRecap
             </Link>
 
-            <span className="text-xs select-none" style={{ color: "#d6d3d1" }}>/</span>
+            <span className="hidden md:inline text-xs select-none" style={{ color: "#d6d3d1" }}>/</span>
 
             <button
-              className="touch-target-mobile flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors max-w-[140px] md:max-w-[200px] hover:bg-stone-100"
+              className="touch-target-mobile flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors max-w-[180px] md:max-w-[200px] hover:bg-stone-100"
               onClick={() => setProjectListOpen(true)}
               disabled={isSwitchingProject}
               style={{ color: "#78716c" }}
@@ -585,7 +585,7 @@ export default function TopToolbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="touch-target-mobile h-8 w-8"
               onClick={() => void handleShareLink()}
               aria-label="Share project link"
               style={{ color: "#78716c" }}

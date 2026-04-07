@@ -1475,7 +1475,7 @@ function EditorContent() {
           ) : (
             <div
               ref={stageViewportRef}
-              className="flex h-full w-full items-start justify-center p-1 md:items-center md:p-6"
+              className="flex h-full w-full items-center justify-center p-1 md:p-6"
             >
               {constrainedMapSize && (
                 <div
