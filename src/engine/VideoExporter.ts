@@ -3565,11 +3565,42 @@ export class VideoExporter {
     this.drawPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps, time, totalDuration);
     this.drawSceneTransitionPhotos(offCtx, offscreen.width, offscreen.height, scaleX, scaleY, captured, frameIndex, fps);
 
+    // Watermark — always last, on top of everything
+    this.drawWatermark(offCtx, offscreen.width, offscreen.height, scaleX);
+
     // Clear photo start tracking when photos stop showing so re-entry is tracked fresh
     const capturedProgress = captured.progress as AnimationEvent | null;
     if (!capturedProgress || !capturedProgress.showPhotos) {
       this.photoShowStartFrame.clear();
     }
+  }
+
+  private drawWatermark(
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    scaleX: number,
+  ): void {
+    const baseFontSize = 14;
+    const fontSize = Math.round(baseFontSize * scaleX);
+    const padding = Math.round(12 * scaleX);
+
+    ctx.save();
+    ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+
+    // Shadow for readability on light backgrounds
+    ctx.shadowColor = "rgba(0,0,0,0.3)";
+    ctx.shadowBlur = 3 * scaleX;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1 * scaleX;
+
+    // Semi-transparent white text
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.fillText("TraceRecap", canvasWidth - padding, canvasHeight - padding);
+
+    ctx.restore();
   }
 
   private async exportWithWebCodecs(

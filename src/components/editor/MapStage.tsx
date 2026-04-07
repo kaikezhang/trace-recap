@@ -266,6 +266,23 @@ export default function MapStage({
           onPlayingMobileInsetChange={setPlaybackBarInsetPx}
         />
       )}
+      {/* Watermark — visible during playback */}
+      {(isPlaying || playbackState === "paused") && (
+        <div
+          className="pointer-events-none absolute left-3 top-3 z-20 select-none md:left-4 md:top-4"
+          style={{
+            opacity: 0.35,
+            textShadow: "0 1px 3px rgba(0,0,0,0.3)",
+          }}
+        >
+          <span
+            className="text-xs font-semibold tracking-wide text-white md:text-sm"
+            style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+          >
+            TraceRecap
+          </span>
+        </div>
+      )}
     </div>
   );
 }
