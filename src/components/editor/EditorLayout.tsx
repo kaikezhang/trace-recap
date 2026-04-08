@@ -1494,12 +1494,13 @@ function EditorContent() {
               {constrainedMapSize && (
                 <div
                   ref={mapContainerRef}
-                  className={`relative rounded-lg border border-white/10 bg-background shadow-2xl ${locations.length === 0 ? "" : "overflow-hidden"}`}
+                  className="relative rounded-lg border border-white/10 bg-background shadow-2xl"
                   style={{
                     width: constrainedMapSize.width,
                     height: constrainedMapSize.height,
                   }}
                 >
+                  <div className={`absolute inset-0 ${locations.length === 0 ? "" : "overflow-hidden"} rounded-lg`}>
                   <MapStage
                     cityLabelSize={cityLabelSize}
                     currentCityLabel={currentCityLabel}
@@ -1524,6 +1525,7 @@ function EditorContent() {
                     onFlyToAlbumComplete={handleFlyToAlbumComplete}
                     onStopEditingLayout={() => setEditingLocationId(null)}
                   />
+                  </div>
                 </div>
               )}
             </div>
