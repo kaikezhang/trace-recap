@@ -1487,7 +1487,9 @@ async function runProjectTransition<T>(
   try {
     return await operation();
   } catch (error) {
-    console.error(`Failed to ${label}.`, error);
+    if (!(error instanceof Error && error.message === "CONFIRM_REPLACE")) {
+      console.error(`Failed to ${label}.`, error);
+    }
     throw error;
   } finally {
     useProjectStore.setState({ isSwitchingProject: false });
@@ -1868,6 +1870,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         ),
       );
     }
+    const loc = get().locations.find((l) => l.id === locationId);
+    track("photo_removed", { photo_count: loc?.photos.length ?? 0 });
   },
 
   setPhotoLayout: (locationId, layout) => {
@@ -2067,6 +2071,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       registerPhotoUrls(parsed.locations);
 
       useHistoryStore.getState().resetHistory();
+      track("project_loaded", {
+        stop_count: parsed.locations.length,
+        photo_count: parsed.locations.reduce((s, l) => s + l.photos.length, 0),
+        segment_count: parsed.segments.length,
+      });
       await get().regenerateSegmentGeometries();
       void runBackgroundPhotoCompression().catch((error) => {
         console.error("Failed to compress restored project photos.", error);

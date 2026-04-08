@@ -14,6 +14,7 @@ import {
   resolveIconVariant,
 } from "@/lib/transportIcons";
 import { generateRouteGeometry } from "@/engine/RouteGeometry";
+import { track } from "@/lib/analytics";
 import type { Segment, TransportIconStyle, TransportMode, IconVariant } from "@/types";
 import {
   Tooltip,
@@ -196,8 +197,10 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
   }, [segment.geometry, segment.transportMode, fromLoc, toLoc, fetchGeometry]);
 
   const handleModeChange = (mode: TransportMode) => {
+    if (mode === segment.transportMode) return;
     setTransportMode(segment.id, mode);
     fetchGeometry(mode);
+    track("transport_mode_changed", { mode });
   };
 
   const handleStyleChange = (iconStyle: TransportIconStyle) => {
