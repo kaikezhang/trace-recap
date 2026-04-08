@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { writeFile, stat } from "fs/promises";
 import path from "path";
+import { rateLimit } from "@/lib/rateLimit";
 
-export async function POST(request: Request): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const limited = rateLimit(request, { maxRequests: 600, windowMs: 60_000, prefix: "encode-frame" });
+  if (limited) return limited;
   try {
     const formData = await request.formData();
     const sessionId = formData.get("sessionId");
