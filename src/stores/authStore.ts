@@ -21,6 +21,7 @@ interface AuthState {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ error?: string }>;
+  resetPassword: (email: string) => Promise<{ error?: string }>;
 }
 
 let initPromise: Promise<void> | null = null;
@@ -190,5 +191,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const msg = err instanceof Error ? err.message : "Failed to delete account";
       return { error: msg };
     }
+  },
+
+  resetPassword: async (email) => {
+    const supabase = createClient();
+    if (!supabase) return { error: "Auth is not configured" };
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    });
+    return { error: error?.message };
   },
 }));
