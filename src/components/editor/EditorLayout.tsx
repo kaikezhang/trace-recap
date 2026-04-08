@@ -890,6 +890,11 @@ function EditorContent() {
     engine.on("complete", () => {
       setPlaybackState("idle");
       setCurrentSegmentIndex(0);
+      track("playback_completed", {
+        stop_count: locations.length,
+        photo_count: locations.reduce((s, l) => s + l.photos.length, 0),
+        segment_count: segments.length,
+      });
     });
 
     return () => {
@@ -937,6 +942,7 @@ function EditorContent() {
     clearAlbumSequenceTimersRef.current();
     engineRef.current?.pause();
     setPlaybackState("paused");
+    track("playback_paused");
   }, [setPlaybackState]);
 
   const handleReset = useCallback(() => {
@@ -1483,7 +1489,7 @@ function EditorContent() {
           ) : (
             <div
               ref={stageViewportRef}
-              className="flex h-full w-full items-center justify-center p-1 md:p-6"
+              className="flex h-full w-full items-start justify-center pt-0 px-1 pb-1 md:items-center md:p-6"
             >
               {constrainedMapSize && (
                 <div
