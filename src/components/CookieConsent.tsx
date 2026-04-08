@@ -35,7 +35,7 @@ export default function CookieConsent() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[200] border-t bg-white/95 px-4 py-3 shadow-lg backdrop-blur-sm sm:flex sm:items-center sm:justify-between sm:px-6"
+    <div className="fixed bottom-0 left-0 right-0 z-[200] border-t bg-white/95 px-4 py-3 shadow-lg backdrop-blur-sm sm:flex sm:items-center sm:justify-between sm:px-6 md:bottom-auto md:top-0 md:border-b md:border-t-0"
       style={{ borderColor: "#e7e5e4" }}
     >
       <p className="text-sm text-stone-600">
