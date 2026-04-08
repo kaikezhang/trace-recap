@@ -30,7 +30,11 @@ const QUICK_STYLE_IDS = [
   "monochrome",
 ] as const satisfies readonly MapStyle[];
 
-const QUICK_RATIO_OPTIONS = ["16:9", "9:16", "1:1"] as const satisfies readonly AspectRatio[];
+const QUICK_RATIO_OPTIONS = ["free", "16:9", "9:16", "1:1"] as const satisfies readonly AspectRatio[];
+
+const RATIO_LABELS: Partial<Record<AspectRatio, string>> = {
+  free: "Free",
+};
 
 const MAP_STYLE_PREVIEWS: Record<
   (typeof QUICK_STYLE_IDS)[number],
@@ -245,7 +249,7 @@ function AspectRatioChips({
             }}
             onClick={() => onSelect(ratio)}
           >
-            {ratio}
+            {RATIO_LABELS[ratio] ?? ratio}
           </button>
         );
       })}
@@ -279,7 +283,7 @@ export default function QuickStyleBar() {
             onChange={setSpeedMultiplier}
           />
           <div className="flex items-center justify-end gap-2">
-            <SurfaceLabel className="hidden lg:inline">Frame</SurfaceLabel>
+            <SurfaceLabel className="hidden md:inline">Frame</SurfaceLabel>
             <AspectRatioChips
               viewportRatio={viewportRatio}
               onSelect={setViewportRatio}
