@@ -18,7 +18,7 @@ interface AuthDialogProps {
 }
 
 export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -28,11 +28,26 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
   const signInWithEmail = useAuthStore((s) => s.signInWithEmail);
   const signUpWithEmail = useAuthStore((s) => s.signUpWithEmail);
   const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle);
+  const resetPassword = useAuthStore((s) => s.resetPassword);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccessMessage("");
+
+    if (mode === "forgot") {
+      if (!email) {
+        setError("Please enter your email address.");
+        return;
+      }
+      const result = await resetPassword(email);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setSuccessMessage("Password reset link sent. Check your email.");
+      }
+      return;
+    }
 
     if (!email || !password) {
       setError("Please enter email and password.");
@@ -86,17 +101,19 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>
-            {mode === "signin" ? "Sign In" : "Create Account"}
+            {mode === "forgot" ? "Reset Password" : mode === "signin" ? "Sign In" : "Create Account"}
           </DialogTitle>
           <DialogDescription>
-            {mode === "signin"
-              ? "Sign in to sync your projects across devices."
-              : "Create an account to save your projects to the cloud."}
+            {mode === "forgot"
+              ? "Enter your email and we'll send you a reset link."
+              : mode === "signin"
+                ? "Sign in to sync your projects across devices."
+                : "Create an account to save your projects to the cloud."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 pt-2">
-          <Button
+          {mode !== "forgot" && <Button
             variant="outline"
             className="w-full gap-2"
             onClick={handleGoogleSignIn}
@@ -121,9 +138,9 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
               />
             </svg>
             Continue with Google
-          </Button>
+          </Button>}
 
-          <div className="relative">
+          {mode !== "forgot" && <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
@@ -132,7 +149,7 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
                 or
               </span>
             </div>
-          </div>
+          </div>}
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <Input
@@ -143,7 +160,7 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
               disabled={loading}
               autoComplete="email"
             />
-            <Input
+            {mode !== "forgot" && <Input
               type="password"
               placeholder="Password"
               value={password}
@@ -152,7 +169,7 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
               autoComplete={
                 mode === "signin" ? "current-password" : "new-password"
               }
-            />
+            />}
 
             {error && (
               <p className="text-sm text-red-500">{error}</p>
@@ -164,14 +181,25 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
             <Button type="submit" disabled={loading} className="w-full">
               {loading
                 ? "..."
-                : mode === "signin"
-                  ? "Sign In"
-                  : "Create Account"}
+                : mode === "forgot"
+                  ? "Send Reset Link"
+                  : mode === "signin"
+                    ? "Sign In"
+                    : "Create Account"}
             </Button>
           </form>
 
           <p className="text-center text-xs text-muted-foreground">
-            {mode === "signin" ? (
+            {mode === "forgot" ? (
+              <>
+                <button
+                  className="underline hover:text-foreground"
+                  onClick={() => { setMode("signin"); setError(""); setSuccessMessage(""); }}
+                >
+                  Back to sign in
+                </button>
+              </>
+            ) : mode === "signin" ? (
               <>
                 No account?{" "}
                 <button
@@ -179,6 +207,13 @@ export default function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
                   onClick={switchMode}
                 >
                   Sign up
+                </button>
+                {" · "}
+                <button
+                  className="underline hover:text-foreground"
+                  onClick={() => { setMode("forgot"); setError(""); setSuccessMessage(""); }}
+                >
+                  Forgot password?
                 </button>
               </>
             ) : (

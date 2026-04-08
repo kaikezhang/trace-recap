@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import PostHogProvider from "@/components/PostHogProvider";
 import CookieConsent from "@/components/CookieConsent";
+import OfflineBanner from "@/components/OfflineBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -122,6 +123,7 @@ export default function RootLayout({
         <PostHogProvider>
           <TooltipProvider>{children}</TooltipProvider>
           <CookieConsent />
+          <OfflineBanner />
         </PostHogProvider>
         <Analytics />
         <SpeedInsights />
