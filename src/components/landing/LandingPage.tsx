@@ -134,6 +134,8 @@ export default function LandingPage() {
               <Link href="/editor" className="hover:underline">Editor</Link>
               <Link href="/editor?demo=true" className="hover:underline">Demo</Link>
               <a href="#faq" className="hover:underline">FAQ</a>
+              <Link href="/privacy" className="hover:underline">Privacy</Link>
+              <Link href="/terms" className="hover:underline">Terms</Link>
             </div>
 
             <div className="flex flex-wrap justify-center gap-2">

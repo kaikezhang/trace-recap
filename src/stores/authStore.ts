@@ -20,6 +20,7 @@ interface AuthState {
   ) => Promise<{ error?: string }>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error?: string }>;
 }
 
 let initPromise: Promise<void> | null = null;
@@ -127,5 +128,67 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Soft-clear: reset UI state, keep IDB photo cache for next login
     const { useProjectStore } = await import("@/stores/projectStore");
     await useProjectStore.getState().resetForSignOut();
+  },
+
+  deleteAccount: async () => {
+    const supabase = createClient();
+    if (!supabase) return { error: "Auth is not configured" };
+
+    const user = get().user;
+    if (!user) return { error: "Not signed in" };
+
+    try {
+      // Delete user feedback from cloud
+      const { error: feedbackError } = await supabase
+        .from("feedback")
+        .delete()
+        .eq("user_id", user.id);
+      if (feedbackError) {
+        console.error("[auth] Failed to delete feedback:", feedbackError.message);
+      }
+
+      // Delete user photo storage objects
+      const { data: photoFiles } = await supabase.storage
+        .from("photos")
+        .list(user.id);
+      if (photoFiles && photoFiles.length > 0) {
+        await supabase.storage
+          .from("photos")
+          .remove(photoFiles.map((f) => `${user.id}/${f.name}`));
+      }
+
+      // Delete all user projects from cloud (fail fast)
+      const { error: deleteError } = await supabase
+        .from("projects")
+        .delete()
+        .eq("user_id", user.id);
+      if (deleteError) {
+        return { error: `Failed to delete cloud data: ${deleteError.message}` };
+      }
+
+      // Only sign out and clear local state after remote cleanup succeeds
+      await supabase.auth.signOut();
+      set({ user: null, session: null });
+
+      const { useProjectStore } = await import("@/stores/projectStore");
+      await useProjectStore.getState().resetForSignOut();
+
+      // Clear local photo cache
+      try {
+        const { openDB } = await import("idb");
+        const db = await openDB("trace-recap", 2);
+        const tx = db.transaction("photo-assets", "readwrite");
+        await tx.store.clear();
+        await tx.done;
+      } catch {
+        // Best effort — local cache cleanup is non-critical
+      }
+
+      track("account_deleted");
+      return {};
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete account";
+      return { error: msg };
+    }
   },
 }));
