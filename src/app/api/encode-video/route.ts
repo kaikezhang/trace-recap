@@ -1,13 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { readFile, rm, readdir, stat } from "fs/promises";
 import { execFile, type ChildProcess } from "child_process";
 import path from "path";
+import { rateLimit } from "@/lib/rateLimit";
 
 export const maxDuration = 300; // 5 minutes for long videos
 
 const FFMPEG_PATH = "ffmpeg"; // uses PATH, works on Mac (homebrew) and Linux
 
-export async function POST(request: Request): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const limited = rateLimit(request, { maxRequests: 5, windowMs: 60_000, prefix: "encode-video" });
+  if (limited) return limited;
   let tmpDir = "";
   let ffmpegProcess: ChildProcess | null = null;
 

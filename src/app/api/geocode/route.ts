@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rateLimit";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 export async function GET(request: NextRequest) {
+  const limited = rateLimit(request, { maxRequests: 60, windowMs: 60_000, prefix: "geocode" });
+  if (limited) return limited;
   const { searchParams } = request.nextUrl;
   const q = searchParams.get("q");
   const lng = searchParams.get("lng");
