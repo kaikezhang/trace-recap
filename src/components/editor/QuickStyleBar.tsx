@@ -314,7 +314,7 @@ export default function QuickStyleBar() {
 
       <Dialog open={mobileControlsOpen} onOpenChange={setMobileControlsOpen}>
         <DialogContent
-          className="top-auto bottom-0 left-0 right-0 max-w-none translate-x-0 translate-y-0 gap-5 rounded-t-[28px] rounded-b-none border-x-0 border-b-0 px-4 pb-6 pt-4 sm:max-w-none"
+          className="top-auto bottom-[env(safe-area-inset-bottom)] left-0 right-0 z-[60] max-w-none translate-x-0 translate-y-0 gap-5 rounded-t-[28px] rounded-b-none border-x-0 border-b-0 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 sm:max-w-none max-h-[70vh] overflow-y-auto"
           style={{
             backgroundColor: "rgba(255, 251, 245, 0.96)",
             borderColor: brand.colors.warm[200],
