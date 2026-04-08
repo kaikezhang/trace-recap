@@ -23,6 +23,7 @@ export default function AuthButton() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [myFeedbackOpen, setMyFeedbackOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const user = useAuthStore((s) => s.user);
   const initialized = useAuthStore((s) => s.initialized);
   const signOut = useAuthStore((s) => s.signOut);
@@ -79,12 +80,13 @@ export default function AuthButton() {
             />
           }
         >
-          {avatarUrl ? (
+          {avatarUrl && !avatarError ? (
             <img
               src={avatarUrl}
               alt={displayName}
               className="h-6 w-6 rounded-full"
               referrerPolicy="no-referrer"
+              onError={() => setAvatarError(true)}
             />
           ) : (
             <User className="h-4 w-4" style={{ color: "#78716c" }} />

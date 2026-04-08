@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
               "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.posthog.com https://va.vercel-scripts.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.mapbox.com",
               "font-src 'self' https://fonts.gstatic.com",
-              "img-src 'self' blob: data: https://*.mapbox.com https://*.googleapis.com https://*.googleusercontent.com https://*.supabase.co https://tile.openstreetmap.org",
+              "img-src 'self' blob: data: https://*.mapbox.com https://*.googleapis.com https://*.googleusercontent.com https://*.ggpht.com https://*.supabase.co https://tile.openstreetmap.org",
               "connect-src 'self' https://*.mapbox.com https://*.supabase.co https://*.posthog.com https://va.vercel-scripts.com https://vitals.vercel-insights.com",
               "worker-src 'self' blob:",
               "frame-ancestors 'none'",
