@@ -1181,7 +1181,37 @@ function layoutHero(
     );
   }
 
-  // Custom proportions: cols[0] = hero weight, cols[1] = right panel weight
+  // Portrait / near-square: hero on top, remaining in bottom row
+  if (containerAspect < 1.15) {
+    const rowWeights = customProportions?.rows?.slice(0, 2) ?? [3, 2]; // default 60/40
+    const totalRowH = rowWeights[0] + rowWeights[1];
+    const availH = 1 - gap * 3;
+    const heroH = (rowWeights[0] / totalRowH) * availH;
+    const heroW = 1 - gap * 2;
+    const bottomH = (rowWeights[1] / totalRowH) * availH;
+    const remaining = n - 1;
+    const cols = Math.min(remaining, 4);
+    const cellW = (heroW - gap * (cols - 1)) / cols;
+
+    const slots: LayoutSlot[] = [{ x: gap, y: gap, width: heroW, height: heroH }];
+
+    for (let i = 0; i < remaining; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const rowCount = Math.ceil(remaining / cols);
+      const cellH = rowCount > 1 ? (bottomH - gap * (rowCount - 1)) / rowCount : bottomH;
+      slots.push({
+        x: gap + col * (cellW + gap),
+        y: gap * 2 + heroH + row * (cellH + gap),
+        width: cellW,
+        height: cellH,
+      });
+    }
+
+    return fillSlots(photos, slots, containerAspect);
+  }
+
+  // Landscape: hero left, remaining in right panel
   const colWeights = customProportions?.cols?.slice(0, 2) ?? [3, 2]; // default 60/40
   const totalColW = colWeights[0] + colWeights[1];
   const availW = 1 - gap * 3;
@@ -1239,6 +1269,11 @@ function layoutCollage(photos: PhotoMeta[], containerAspect: number, gap: number
       ),
       gap
     );
+  }
+
+  // For 5+ photos, use magazine layout to show all photos instead of silently dropping
+  if (n > 4) {
+    return layoutMagazine(photos, containerAspect, gap);
   }
 
   const slots =
@@ -1318,7 +1353,8 @@ function layoutPolaroid(
       { x: 0.62, y: 0.3, width: 0.26, height: 0.34, rotation: -4 },
       { x: 0.18, y: 0.62, width: 0.28, height: 0.24, rotation: 7 },
     ];
-    const slots = (containerAspect < 1 ? portraitSlots : landscapeSlots).slice(0, n);
+    // Square containers use portrait slots (they fit better than wide landscape slots)
+    const slots = (containerAspect < 1.15 ? portraitSlots : landscapeSlots).slice(0, n);
     const rects = slots.map((slot, index) => ({
       ...fitPhotoToSlot(
         { x: slot.x, y: slot.y, width: slot.width, height: slot.height },
@@ -1464,38 +1500,47 @@ function layoutFull(photos: PhotoMeta[], containerAspect: number): PhotoRect[] {
 function layoutFilmstrip(photos: PhotoMeta[], containerAspect: number, gap: number): PhotoRect[] {
   const n = photos.length;
   if (n === 0) return [];
+
+  // Portrait: use hero+sides for up to 3 photos, justified rows for more
   if (containerAspect < 1) {
-    const rects: PhotoRect[] = [
-      fitPhotoToSlot(
-        { x: 0.2, y: 0.1, width: 0.6, height: 0.8 },
-        photos[0],
-        containerAspect
-      ),
-    ];
-
-    if (n > 1) {
-      rects.push(
+    if (n <= 3) {
+      const rects: PhotoRect[] = [
         fitPhotoToSlot(
-          { x: 0.03, y: 0.2, width: 0.2, height: 0.62 },
-          photos[1],
+          { x: 0.2, y: 0.1, width: 0.6, height: 0.8 },
+          photos[0],
           containerAspect
-        )
-      );
+        ),
+      ];
+      if (n > 1) {
+        rects.push(
+          fitPhotoToSlot(
+            { x: 0.03, y: 0.2, width: 0.2, height: 0.62 },
+            photos[1],
+            containerAspect
+          )
+        );
+      }
+      if (n > 2) {
+        rects.push(
+          fitPhotoToSlot(
+            { x: 0.77, y: 0.2, width: 0.2, height: 0.62 },
+            photos[2],
+            containerAspect
+          )
+        );
+      }
+      return scaleRectsToInnerBounds(rects, gap);
     }
-
-    if (n > 2) {
-      rects.push(
-        fitPhotoToSlot(
-          { x: 0.77, y: 0.2, width: 0.2, height: 0.62 },
-          photos[2],
-          containerAspect
-        )
-      );
-    }
-
-    return scaleRectsToInnerBounds(rects, gap);
+    // 4+ photos in portrait: use justified rows so nothing is dropped
+    return layoutJustifiedRows(photos, containerAspect, gap);
   }
 
+  // Square containers with many photos: single row gets too short; use justified rows
+  if (containerAspect <= 1.15 && n >= 4) {
+    return layoutJustifiedRows(photos, containerAspect, gap);
+  }
+
+  // Landscape: single horizontal row
   const totalAspect = photos.reduce((sum, photo) => sum + safeAspect(photo.aspect), 0);
   const innerWidth = 1 - gap * 2;
   const availW = 1 - gap * (n + 1);

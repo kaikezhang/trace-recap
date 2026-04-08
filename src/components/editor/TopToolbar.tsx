@@ -67,6 +67,14 @@ export default function TopToolbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const setExportDialogOpen = useUIStore((s) => s.setExportDialogOpen);
+  const handleOpenExport = () => {
+    setExportDialogOpen(true);
+    track("export_dialog_opened", {
+      stop_count: useProjectStore.getState().locations.length,
+      photo_count: useProjectStore.getState().locations.reduce((s, l) => s + l.photos.length, 0),
+      segment_count: useProjectStore.getState().segments.length,
+    });
+  };
   const addToast = useUIStore((s) => s.addToast);
   const leftPanelOpen = useUIStore((s) => s.leftPanelOpen);
   const immersiveMode = useUIStore((s) => s.immersiveMode);
@@ -291,7 +299,7 @@ export default function TopToolbar() {
     <>
       <TooltipProvider delay={300}>
         <div
-          className="flex h-12 items-center justify-between overflow-hidden px-3 md:px-4"
+          className="flex h-12 items-center justify-between overflow-visible px-3 md:px-4"
           style={{
             backgroundColor: "#fffbf5",
             borderBottom: "1px solid #e7e5e4",
@@ -452,76 +460,24 @@ export default function TopToolbar() {
             </DropdownMenu>
 
             {/* Settings gear */}
-            <div className="relative z-50">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      ref={settingsButtonRef}
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setSettingsOpen((v) => !v)}
-                      aria-label="Settings"
-                      style={{ color: settingsOpen ? "#f97316" : "#78716c" }}
-                    />
-                  }
-                >
-                  <Settings className="h-4 w-4" />
-                </TooltipTrigger>
-                <TooltipContent>Settings</TooltipContent>
-              </Tooltip>
-
-              {/* Desktop settings panel */}
-              {settingsOpen && !isMobile && (
-                <div
-                  ref={settingsPanelRef}
-                  className="absolute right-0 top-full mt-2 z-50 w-80 max-h-[80vh] overflow-y-auto rounded-xl p-5 space-y-5"
-                  style={{
-                    backgroundColor: "#fffbf5",
-                    border: "1px solid #e7e5e4",
-                    boxShadow: "0 8px 32px rgba(28, 25, 23, 0.08), 0 2px 8px rgba(28, 25, 23, 0.04)",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold" style={{ color: "#1c1917" }}>Settings</p>
-                    <button
-                      onClick={() => setSettingsOpen(false)}
-                      className="touch-target-mobile flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-stone-100"
-                      style={{ color: "#78716c" }}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <SettingsContent
-                    mapStyle={mapStyle}
-                    setMapStyle={setMapStyle}
-                    cityLabelLang={cityLabelLang}
-                    setCityLabelLang={setCityLabelLang}
-                    localLanguage={localLanguage}
-                    setLocalLanguage={setLocalLanguage}
-                    cityLabelSize={cityLabelSize}
-                    setCityLabelSize={setCityLabelSize}
-                    cityLabelTopPercent={cityLabelTopPercent}
-                    setCityLabelTopPercent={setCityLabelTopPercent}
-                    routeLabelBottomPercent={routeLabelBottomPercent}
-                    setRouteLabelBottomPercent={setRouteLabelBottomPercent}
-                    routeLabelSize={routeLabelSize}
-                    setRouteLabelSize={setRouteLabelSize}
-                    moodColorsEnabled={moodColorsEnabled}
-                    setMoodColorsEnabled={setMoodColorsEnabled}
-                    albumStyle={albumStyle}
-                    setAlbumStyle={setAlbumStyle}
-                    albumCaptionsEnabled={albumCaptionsEnabled}
-                    setAlbumCaptionsEnabled={setAlbumCaptionsEnabled}
-                    viewportRatio={viewportRatio}
-                    setViewportRatio={setViewportRatio}
-                    ratioOptions={ratioOptions}
-                    ratioLabels={ratioLabels}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    ref={settingsButtonRef}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setSettingsOpen((v) => !v)}
+                    aria-label="Settings"
+                    style={{ color: settingsOpen ? "#f97316" : "#78716c" }}
                   />
-                </div>
-              )}
-            </div>
+                }
+              >
+                <Settings className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent>Settings</TooltipContent>
+            </Tooltip>
 
             {/* Divider */}
             <div className="mx-2 h-5 w-px" style={{ backgroundColor: "#e7e5e4" }} />
@@ -532,7 +488,7 @@ export default function TopToolbar() {
             <button
               className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition-all hover:brightness-110 active:scale-[0.97]"
               style={{ backgroundColor: "#f97316" }}
-              onClick={() => setExportDialogOpen(true)}
+              onClick={handleOpenExport}
             >
               <Download className="h-4 w-4" />
               Export
@@ -558,7 +514,7 @@ export default function TopToolbar() {
             <button
               className="touch-target-mobile flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
               style={{ backgroundColor: "#f97316" }}
-              onClick={() => setExportDialogOpen(true)}
+              onClick={handleOpenExport}
             >
               <Download className="h-3.5 w-3.5" />
               Export
@@ -652,6 +608,58 @@ export default function TopToolbar() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Desktop settings panel — fixed position to avoid flex-item overflow clipping */}
+      {settingsOpen && !isMobile && (
+        <div
+          ref={settingsPanelRef}
+          className="fixed z-[100] w-80 max-h-[80vh] overflow-y-auto rounded-xl p-5 space-y-5"
+          style={{
+            top: (settingsButtonRef.current?.getBoundingClientRect().bottom ?? 48) + 8,
+            right: window.innerWidth - (settingsButtonRef.current?.getBoundingClientRect().right ?? 0),
+            backgroundColor: "#fffbf5",
+            border: "1px solid #e7e5e4",
+            boxShadow: "0 8px 32px rgba(28, 25, 23, 0.08), 0 2px 8px rgba(28, 25, 23, 0.04)",
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold" style={{ color: "#1c1917" }}>Settings</p>
+            <button
+              onClick={() => setSettingsOpen(false)}
+              className="touch-target-mobile flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-stone-100"
+              style={{ color: "#78716c" }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <SettingsContent
+            mapStyle={mapStyle}
+            setMapStyle={setMapStyle}
+            cityLabelLang={cityLabelLang}
+            setCityLabelLang={setCityLabelLang}
+            localLanguage={localLanguage}
+            setLocalLanguage={setLocalLanguage}
+            cityLabelSize={cityLabelSize}
+            setCityLabelSize={setCityLabelSize}
+            cityLabelTopPercent={cityLabelTopPercent}
+            setCityLabelTopPercent={setCityLabelTopPercent}
+            routeLabelBottomPercent={routeLabelBottomPercent}
+            setRouteLabelBottomPercent={setRouteLabelBottomPercent}
+            routeLabelSize={routeLabelSize}
+            setRouteLabelSize={setRouteLabelSize}
+            moodColorsEnabled={moodColorsEnabled}
+            setMoodColorsEnabled={setMoodColorsEnabled}
+            albumStyle={albumStyle}
+            setAlbumStyle={setAlbumStyle}
+            albumCaptionsEnabled={albumCaptionsEnabled}
+            setAlbumCaptionsEnabled={setAlbumCaptionsEnabled}
+            viewportRatio={viewportRatio}
+            setViewportRatio={setViewportRatio}
+            ratioOptions={ratioOptions}
+            ratioLabels={ratioLabels}
+          />
+        </div>
       )}
 
       {/* Mobile settings drawer */}
