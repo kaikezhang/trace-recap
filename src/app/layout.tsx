@@ -27,17 +27,7 @@ const siteName = "TraceRecap";
 const siteTitle = "TraceRecap — Turn Travel Routes into Cinematic Videos";
 const siteDescription =
   "TraceRecap turns routes, photos, and transport legs into cinematic travel videos you can build in minutes and share anywhere from your browser.";
-const manifestHref = `data:application/manifest+json,${encodeURIComponent(
-  JSON.stringify({
-    name: "TraceRecap",
-    short_name: "TraceRecap",
-    start_url: "/",
-    display: "standalone",
-    background_color: "#fffbf5",
-    theme_color: "#f97316",
-    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
-  }),
-)}`;
+const manifestHref = "/manifest.json";
 
 function getMetadataBase() {
   const rawUrl =
@@ -117,6 +107,26 @@ export default function RootLayout({
         <link
           href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&family=ZCOOL+KuaiLe&family=ZCOOL+XiaoWei&family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              name: "TraceRecap",
+              url: "https://tracerecap.vercel.app",
+              description: siteDescription,
+              applicationCategory: "MultimediaApplication",
+              operatingSystem: "Any",
+              offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            }),
+          }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if("serviceWorker"in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js")})}`,
+          }}
         />
       </head>
       <body className="min-h-full flex flex-col">
