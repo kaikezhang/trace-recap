@@ -31,8 +31,41 @@ function updateSyncState(partial: Parameters<ReturnType<typeof useUIStore.getSta
 // ---------------------------------------------------------------------------
 
 const forkingProjects = new Set<string>(); // Guard against infinite fork loops
+const pendingDeletes = new Set<string>(); // Cloud deletes deferred during unhealthy sync
+
+function flushPendingDeletes() {
+  if (pendingDeletes.size === 0) return;
+  const ids = [...pendingDeletes];
+  pendingDeletes.clear();
+  for (const id of ids) {
+    void deleteFromCloud(id);
+  }
+}
+const pushLocks = new Map<string, Promise<void>>(); // Serialize pushes per project
 
 async function pushProject(projectId: string): Promise<void> {
+  // Serialize: wait for any in-flight push for the same project
+  const existing = pushLocks.get(projectId);
+  if (existing) {
+    await existing;
+  }
+  const { promise, resolve } = (() => {
+    let r: () => void;
+    const p = new Promise<void>((res) => { r = res; });
+    return { promise: p, resolve: r! };
+  })();
+  pushLocks.set(projectId, promise);
+  try {
+    await pushProjectInner(projectId);
+  } finally {
+    resolve();
+    if (pushLocks.get(projectId) === promise) {
+      pushLocks.delete(projectId);
+    }
+  }
+}
+
+async function pushProjectInner(projectId: string): Promise<void> {
   if (!isSupabaseConfigured()) return;
   const supabase = createClient();
   if (!supabase) return;
@@ -102,7 +135,11 @@ async function pushProject(projectId: string): Promise<void> {
       try {
         console.warn("[sync] Conflict detected — forking cloud version as separate project");
         const serverRev = result.server_revision as number | undefined;
-        await forkCloudVersion(projectId);
+        const forkOk = await forkCloudVersion(projectId);
+        if (!forkOk) {
+          updateSyncState({ remote: "error" });
+          return;
+        }
         // Update local cloudRevision to server's current revision so the
         // retry push uses the correct base and doesn't conflict again.
         if (serverRev) {
@@ -115,10 +152,11 @@ async function pushProject(projectId: string): Promise<void> {
               await db.put("projects", freshMeta);
             });
           }
-          // Retry push once with corrected base revision
-          await pushProject(projectId);
+          // Retry push once with corrected base revision (call inner to avoid deadlock)
+          await pushProjectInner(projectId);
+        } else {
+          updateSyncState({ remote: "error" });
         }
-        updateSyncState({ remote: "synced" });
       } finally {
         forkingProjects.delete(projectId);
       }
@@ -140,6 +178,7 @@ async function pushProject(projectId: string): Promise<void> {
     }
 
     updateSyncState({ remote: "synced" });
+    flushPendingDeletes();
   } catch (err) {
     console.error("[sync] Push error:", err);
     updateSyncState({ remote: "error" });
@@ -442,12 +481,12 @@ async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjec
 // Conflict resolution: fork cloud version as a new project (never lose data)
 // ---------------------------------------------------------------------------
 
-async function forkCloudVersion(originalProjectId: string): Promise<void> {
+async function forkCloudVersion(originalProjectId: string): Promise<boolean> {
   try {
     const cloudData = await pullProjectData(originalProjectId);
     if (!cloudData) {
       console.warn("[sync] Cannot fork — failed to pull cloud data");
-      return;
+      return false;
     }
 
     // Create a new project with the cloud data, suffixed to indicate origin
@@ -492,8 +531,10 @@ async function forkCloudVersion(originalProjectId: string): Promise<void> {
     useProjectStore.setState({ projects: refreshed });
 
     console.info(`[sync] Forked cloud version of ${originalProjectId} → ${forkId} "${forkName}"`);
+    return true;
   } catch (err) {
     console.error("[sync] Fork failed:", err);
+    return false;
   }
 }
 
@@ -610,9 +651,17 @@ async function onAuthReady(): Promise<void> {
         if (local.updatedAt > (cloudMeta.updatedAt ?? 0)) {
           // Both sides changed — fork cloud version, keep local as-is, then push local
           console.warn(`[sync] Conflict: project ${cloudMeta.id} — forking cloud version to avoid data loss`);
-          await forkCloudVersion(cloudMeta.id);
-          // Push local version (will create a new cloud revision for the original project)
-          await pushProjectFromIDB(local.id);
+          const forkOk = await forkCloudVersion(cloudMeta.id);
+          if (forkOk) {
+            // Update local cloudRevision to cloud's current so push won't re-conflict
+            local.cloudRevision = cloudRev;
+            await withSyncMuted(async () => {
+              const { openDB } = await import("idb");
+              const db = await openDB("trace-recap", 2);
+              await db.put("projects", local);
+            });
+            await pushProjectFromIDB(local.id);
+          }
           continue;
         }
       }
@@ -653,6 +702,7 @@ async function onAuthReady(): Promise<void> {
     }
 
     updateSyncState({ remote: "synced" });
+    flushPendingDeletes();
   } catch (err) {
     console.error("[sync] Auth ready hydration failed:", err);
     updateSyncState({ remote: "error" });
@@ -718,10 +768,11 @@ export function initSyncRepository(): void {
     },
     onProjectDeleted: (projectId) => {
       // Only delete from cloud if sync is healthy and delete was user-initiated.
-      // During syncing/conflict/error states, skip cloud delete to prevent data loss.
+      // During syncing/conflict/error states, queue for retry to prevent data loss.
       const syncState = useUIStore.getState().syncState;
       if (syncState.remote !== "synced" && syncState.remote !== "idle") {
-        console.warn(`[sync] Skipping cloud delete — sync state is "${syncState.remote}"`);
+        console.warn(`[sync] Deferring cloud delete — sync state is "${syncState.remote}"`);
+        pendingDeletes.add(projectId);
         return;
       }
       void deleteFromCloud(projectId);

@@ -197,6 +197,7 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
   }, [segment.geometry, segment.transportMode, fromLoc, toLoc, fetchGeometry]);
 
   const handleModeChange = (mode: TransportMode) => {
+    if (mode === segment.transportMode) return;
     setTransportMode(segment.id, mode);
     fetchGeometry(mode);
     track("transport_mode_changed", { mode });
