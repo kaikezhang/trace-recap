@@ -138,22 +138,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!user) return { error: "Not signed in" };
 
     try {
-      // Delete all user projects from cloud
+      // Delete user feedback from cloud
+      const { error: feedbackError } = await supabase
+        .from("feedback")
+        .delete()
+        .eq("user_id", user.id);
+      if (feedbackError) {
+        console.error("[auth] Failed to delete feedback:", feedbackError.message);
+      }
+
+      // Delete user photo storage objects
+      const { data: photoFiles } = await supabase.storage
+        .from("photos")
+        .list(user.id);
+      if (photoFiles && photoFiles.length > 0) {
+        await supabase.storage
+          .from("photos")
+          .remove(photoFiles.map((f) => `${user.id}/${f.name}`));
+      }
+
+      // Delete all user projects from cloud (fail fast)
       const { error: deleteError } = await supabase
         .from("projects")
         .delete()
         .eq("user_id", user.id);
-
       if (deleteError) {
-        console.error("[auth] Failed to delete user projects:", deleteError.message);
+        return { error: `Failed to delete cloud data: ${deleteError.message}` };
       }
 
-      // Sign out and clear local state
+      // Only sign out and clear local state after remote cleanup succeeds
       await supabase.auth.signOut();
       set({ user: null, session: null });
 
       const { useProjectStore } = await import("@/stores/projectStore");
       await useProjectStore.getState().resetForSignOut();
+
+      // Clear local photo cache
+      try {
+        const { openDB } = await import("idb");
+        const db = await openDB("trace-recap", 2);
+        const tx = db.transaction("photo-assets", "readwrite");
+        await tx.store.clear();
+        await tx.done;
+      } catch {
+        // Best effort — local cache cleanup is non-critical
+      }
 
       track("account_deleted");
       return {};

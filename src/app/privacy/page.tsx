@@ -24,8 +24,12 @@ export default function PrivacyPage() {
             If signed in, projects sync to our cloud database hosted on Supabase.
           </p>
           <p className="mt-2">
+            <strong>Feedback:</strong> If you submit feedback through the editor, we store the message text, an optional contact email, and an optional screenshot.
+            Feedback is linked to your user ID if signed in.
+          </p>
+          <p className="mt-2">
             <strong>Analytics:</strong> With your consent, we use PostHog to collect anonymous usage events (e.g., feature clicks, export counts).
-            We do not record session replays unless you explicitly opt in. No personally identifiable information is sent to PostHog.
+            Session replay is currently disabled. No personally identifiable information is sent to PostHog.
           </p>
           <p className="mt-2">
             <strong>Performance:</strong> Vercel Analytics and Speed Insights collect anonymous page-load metrics.
@@ -82,7 +86,15 @@ export default function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="mb-2 text-lg font-semibold text-stone-800">7. Changes</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-800">7. Contact</h2>
+          <p>
+            TraceRecap is operated by Kaike Zhang. For privacy-related inquiries or data deletion requests,
+            please reach out via the in-app feedback form or email at privacy@tracerecap.com.
+          </p>
+        </div>
+
+        <div>
+          <h2 className="mb-2 text-lg font-semibold text-stone-800">8. Changes</h2>
           <p>
             We may update this policy. Material changes will be noted with an updated date at the top.
           </p>

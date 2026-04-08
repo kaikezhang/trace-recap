@@ -73,7 +73,15 @@ export default function TermsPage() {
         </div>
 
         <div>
-          <h2 className="mb-2 text-lg font-semibold text-stone-800">8. Changes</h2>
+          <h2 className="mb-2 text-lg font-semibold text-stone-800">8. Contact</h2>
+          <p>
+            TraceRecap is operated by Kaike Zhang. For questions about these terms,
+            contact us via the in-app feedback form or at support@tracerecap.com.
+          </p>
+        </div>
+
+        <div>
+          <h2 className="mb-2 text-lg font-semibold text-stone-800">9. Changes</h2>
           <p>
             We may update these terms. Continued use after changes constitutes acceptance.
           </p>

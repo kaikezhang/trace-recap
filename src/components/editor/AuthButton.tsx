@@ -143,8 +143,11 @@ export default function AuthButton() {
               </button>
               <button
                 onClick={async () => {
+                  const result = await deleteAccount();
+                  if (result.error) {
+                    alert(`Account deletion failed: ${result.error}`);
+                  }
                   setDeleteConfirm(false);
-                  await deleteAccount();
                 }}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
               >

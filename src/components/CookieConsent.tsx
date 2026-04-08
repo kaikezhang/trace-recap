@@ -9,8 +9,12 @@ export type ConsentValue = "accepted" | "declined" | null;
 
 export function getConsent(): ConsentValue {
   if (typeof window === "undefined") return null;
-  const v = localStorage.getItem(CONSENT_KEY);
-  if (v === "accepted" || v === "declined") return v;
+  try {
+    const v = localStorage.getItem(CONSENT_KEY);
+    if (v === "accepted" || v === "declined") return v;
+  } catch {
+    // localStorage unavailable (e.g., incognito Safari)
+  }
   return null;
 }
 
@@ -22,7 +26,7 @@ export default function CookieConsent() {
   }, []);
 
   const respond = (value: "accepted" | "declined") => {
-    localStorage.setItem(CONSENT_KEY, value);
+    try { localStorage.setItem(CONSENT_KEY, value); } catch { /* storage unavailable */ }
     setVisible(false);
     // Trigger a custom event so PostHogProvider can react
     window.dispatchEvent(new CustomEvent("cookie-consent-change", { detail: value }));
