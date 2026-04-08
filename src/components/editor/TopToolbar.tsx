@@ -499,17 +499,6 @@ export default function TopToolbar() {
           <div className="flex shrink-0 md:hidden items-center gap-1.5">
             <AuthButton />
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="touch-target-mobile h-8 w-8"
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Settings"
-              style={{ color: "#78716c" }}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-
             {/* Export — always visible on mobile */}
             <button
               className="touch-target-mobile flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
