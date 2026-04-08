@@ -47,6 +47,7 @@ import {
   Minimize2,
   Undo2,
   Redo2,
+  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProjectStore } from "@/stores/projectStore";
@@ -103,6 +104,35 @@ const LAYOUT_STYLES: { id: LayoutStyle; label: string; icon: typeof LayoutGrid; 
 ];
 
 const RANDOM_LAYOUT_TEMPLATES: LayoutTemplateType[] = ["scatter", "overlap"];
+
+function getRecommendedStyles(photoCount: number): LayoutStyle[] {
+  if (photoCount <= 1) return ["single", "full"];
+  if (photoCount === 2) return ["collage", "magazine", "grid", "rows"];
+  if (photoCount === 3) return ["magazine", "collage", "diagonal"];
+  return ["grid", "collage", "magazine"];
+}
+
+/** Tiny SVG thumbnails showing layout pattern (24x36, 9:16 aspect) */
+function LayoutPreview({ style, active }: { style: LayoutStyle; active: boolean }) {
+  const fill = active ? "#f97316" : "#d6d3d1";
+  const w = 24;
+  const h = 36;
+  const r = 1.5;
+  const previews: Record<LayoutStyle, React.ReactNode> = {
+    grid: <><rect x={1} y={6} width={10} height={10} rx={r} fill={fill} /><rect x={13} y={6} width={10} height={10} rx={r} fill={fill} /><rect x={1} y={19} width={10} height={10} rx={r} fill={fill} /><rect x={13} y={19} width={10} height={10} rx={r} fill={fill} /></>,
+    collage: <><rect x={1} y={4} width={14} height={14} rx={r} fill={fill} /><rect x={9} y={18} width={14} height={14} rx={r} fill={fill} /></>,
+    single: <rect x={3} y={8} width={18} height={20} rx={r} fill={fill} />,
+    carousel: <><rect x={1} y={10} width={8} height={16} rx={r} fill={fill} /><rect x={10} y={10} width={8} height={16} rx={r} fill={fill} opacity={0.6} /><rect x={19} y={12} width={4} height={12} rx={r} fill={fill} opacity={0.3} /></>,
+    scatter: <><rect x={2} y={5} width={10} height={10} rx={r} fill={fill} transform="rotate(-8 7 10)" /><rect x={12} y={14} width={10} height={10} rx={r} fill={fill} transform="rotate(5 17 19)" /><rect x={4} y={22} width={8} height={8} rx={r} fill={fill} transform="rotate(3 8 26)" /></>,
+    overlap: <><rect x={3} y={8} width={12} height={14} rx={r} fill={fill} opacity={0.5} /><rect x={7} y={12} width={12} height={14} rx={r} fill={fill} opacity={0.7} /><rect x={5} y={10} width={12} height={14} rx={r} fill={fill} /></>,
+    diagonal: <><rect x={1} y={4} width={10} height={10} rx={r} fill={fill} /><rect x={7} y={13} width={10} height={10} rx={r} fill={fill} opacity={0.8} /><rect x={13} y={22} width={10} height={10} rx={r} fill={fill} opacity={0.6} /></>,
+    rows: <><rect x={2} y={5} width={20} height={9} rx={r} fill={fill} /><rect x={2} y={17} width={20} height={9} rx={r} fill={fill} opacity={0.7} /></>,
+    magazine: <><rect x={2} y={3} width={20} height={14} rx={r} fill={fill} /><rect x={2} y={20} width={9} height={12} rx={r} fill={fill} opacity={0.7} /><rect x={13} y={20} width={9} height={12} rx={r} fill={fill} opacity={0.7} /></>,
+    full: <rect x={1} y={1} width={22} height={34} rx={r} fill={fill} />,
+    free: <><rect x={3} y={6} width={8} height={8} rx={r} fill={fill} transform="rotate(-5 7 10)" /><rect x={11} y={16} width={10} height={10} rx={r} fill={fill} transform="rotate(8 16 21)" /><circle cx={8} cy={26} r={3} fill={fill} opacity={0.5} /></>,
+  };
+  return <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0">{previews[style]}</svg>;
+}
 
 const PHOTO_ANIMATION_OPTIONS: PhotoAnimation[] = [
   "scale",
@@ -450,15 +480,18 @@ function LayoutStyleSelectorSection({
   variant,
   activeStyle,
   isRandomLayoutActive,
+  photoCount,
   onSelect,
   onRefresh,
 }: {
   variant: "mobile" | "desktop";
   activeStyle: LayoutStyle;
   isRandomLayoutActive: boolean;
+  photoCount: number;
   onSelect: (style: LayoutStyle) => void;
   onRefresh: () => void;
 }) {
+  const recommended = getRecommendedStyles(photoCount);
   const isMobile = variant === "mobile";
 
   return (
@@ -491,33 +524,41 @@ function LayoutStyleSelectorSection({
               onClick={() => onSelect(id)}
               className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-colors ${
                 activeStyle === id
-                  ? "bg-indigo-500 text-white"
+                  ? "bg-orange-500 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
               {label}
+              {recommended.includes(id) && activeStyle !== id && <Sparkles className="h-3 w-3 text-orange-400" />}
             </button>
           ))}
         </div>
         </div>
       ) : (
-        <div className="space-y-2">
-          {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onSelect(id)}
-              className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                activeStyle === id
-                  ? "border-indigo-200 bg-indigo-50 text-indigo-600"
-                  : "border-transparent text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
+        <div className="space-y-1">
+          {LAYOUT_STYLES.map(({ id, label, icon: Icon }) => {
+            const isActive = activeStyle === id;
+            const isRecommended = recommended.includes(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onSelect(id)}
+                className={`flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "border-orange-200 bg-orange-50 text-orange-600"
+                    : "border-transparent text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <LayoutPreview style={id} active={isActive} />
+                <span className="flex-1 text-left">{label}</span>
+                {isRecommended && !isActive && (
+                  <Sparkles className="h-3.5 w-3.5 text-orange-400" />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1396,6 +1437,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                     variant="mobile"
                     activeStyle={activeStyle}
                     isRandomLayoutActive={isRandomLayoutActive}
+                    photoCount={location.photos.length}
                     onSelect={handleStyleSelect}
                     onRefresh={refreshRandomLayout}
                   />
@@ -1560,6 +1602,7 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
                   variant="desktop"
                   activeStyle={activeStyle}
                   isRandomLayoutActive={isRandomLayoutActive}
+                  photoCount={location.photos.length}
                   onSelect={handleStyleSelect}
                   onRefresh={refreshRandomLayout}
                 />

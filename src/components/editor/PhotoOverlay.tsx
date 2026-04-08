@@ -449,7 +449,7 @@ export default function PhotoOverlay({
   // Caption sizing: scale proportionally based on container width (reference: 1000px)
   const captionScale = containerSize.w > 0 ? containerSize.w / 1000 : 1;
   const rawCaptionFontSizePx = (displayLayout?.captionFontSize ?? 14) * captionScale;
-  const captionFontSizePx = viewportRatio === "9:16" ? Math.max(rawCaptionFontSizePx, 14) : Math.max(rawCaptionFontSizePx, 7);
+  const captionFontSizePx = viewportRatio === "9:16" ? Math.max(rawCaptionFontSizePx, 14) : Math.max(rawCaptionFontSizePx, 10);
   const captionH = captionFontSizePx * 2;
   const captionFontFamily = displayLayout?.captionFontFamily ?? "system-ui";
   const displayIsFreeMode = displayLayout?.mode === "free";
@@ -823,7 +823,7 @@ export default function PhotoOverlay({
                         color: captionDisplay.color,
                         fontFamily: captionDisplay.fontFamily,
                         fontSize: `${captionDisplay.fontSizePx}px`,
-                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                        textShadow: "0 1px 4px rgba(0,0,0,0.5), 0 0 8px rgba(0,0,0,0.3)",
                       }}
                     >
                       {captionDisplay.text}
@@ -919,7 +919,7 @@ export default function PhotoOverlay({
                               flexShrink: 0,
                               backgroundColor: DEFAULT_CAPTION_BG_COLOR,
                               color: "#ffffff",
-                              textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                              textShadow: "0 1px 4px rgba(0,0,0,0.5), 0 0 8px rgba(0,0,0,0.3)",
                             }}
                           >
                             {captionDisplay.text}
@@ -976,7 +976,7 @@ export default function PhotoOverlay({
                         color: captionDisplay.color,
                         fontFamily: captionDisplay.fontFamily,
                         fontSize: `${captionDisplay.fontSizePx}px`,
-                        textShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                        textShadow: "0 1px 4px rgba(0,0,0,0.5), 0 0 8px rgba(0,0,0,0.3)",
                         zIndex: (freeTransform?.zIndex ?? index) + 1,
                       }}
                     >
