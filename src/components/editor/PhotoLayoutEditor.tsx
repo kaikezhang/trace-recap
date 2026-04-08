@@ -875,9 +875,20 @@ export default function PhotoLayoutEditor({ location, onClose }: PhotoLayoutEdit
     return w / h;
   }, [capturedMapSize, panelSize, viewportRatio]);
 
+  // WYSIWYG: compute layout at playback resolution (capturedMapSize), then scale
+  // down to fit the editor panel. This ensures photo sizes, gaps, and positions
+  // match what the user will see during actual playback.
   const previewSourceSize = useMemo(() => {
-    if (viewportRatio === "free" && capturedMapSize && capturedMapSize.width > 0 && capturedMapSize.height > 0) {
-      return capturedMapSize;
+    if (capturedMapSize && capturedMapSize.width > 0 && capturedMapSize.height > 0) {
+      if (viewportRatio === "free") {
+        return capturedMapSize;
+      }
+      // For fixed ratios, use the captured map width and derive height from aspect
+      const targetRatio = previewAspect;
+      return {
+        width: capturedMapSize.width,
+        height: capturedMapSize.width / targetRatio,
+      };
     }
     if (!panelSize) {
       return { width: 0, height: 0 };
