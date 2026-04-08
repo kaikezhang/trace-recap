@@ -30,6 +30,8 @@ function updateSyncState(partial: Parameters<ReturnType<typeof useUIStore.getSta
 // Push: local → cloud
 // ---------------------------------------------------------------------------
 
+const forkingProjects = new Set<string>(); // Guard against infinite fork loops
+
 async function pushProject(projectId: string): Promise<void> {
   if (!isSupabaseConfigured()) return;
   const supabase = createClient();
@@ -90,8 +92,36 @@ async function pushProject(projectId: string): Promise<void> {
     }
 
     if (result?.status === "conflict") {
-      console.warn("[sync] Conflict detected — server has newer revision");
-      updateSyncState({ remote: "conflict" });
+      // Prevent infinite fork loop: only fork once per project per sync cycle
+      if (forkingProjects.has(projectId)) {
+        console.error("[sync] Conflict persists after fork — aborting to prevent loop");
+        updateSyncState({ remote: "error" });
+        return;
+      }
+      forkingProjects.add(projectId);
+      try {
+        console.warn("[sync] Conflict detected — forking cloud version as separate project");
+        const serverRev = result.server_revision as number | undefined;
+        await forkCloudVersion(projectId);
+        // Update local cloudRevision to server's current revision so the
+        // retry push uses the correct base and doesn't conflict again.
+        if (serverRev) {
+          const freshMeta = await getProjectMeta(projectId);
+          if (freshMeta) {
+            freshMeta.cloudRevision = serverRev;
+            await withSyncMuted(async () => {
+              const { openDB } = await import("idb");
+              const db = await openDB("trace-recap", 2);
+              await db.put("projects", freshMeta);
+            });
+          }
+          // Retry push once with corrected base revision
+          await pushProject(projectId);
+        }
+        updateSyncState({ remote: "synced" });
+      } finally {
+        forkingProjects.delete(projectId);
+      }
       return;
     }
 
@@ -409,6 +439,65 @@ async function createPhotoRefsForCloudData(projectId: string, cloud: CloudProjec
 }
 
 // ---------------------------------------------------------------------------
+// Conflict resolution: fork cloud version as a new project (never lose data)
+// ---------------------------------------------------------------------------
+
+async function forkCloudVersion(originalProjectId: string): Promise<void> {
+  try {
+    const cloudData = await pullProjectData(originalProjectId);
+    if (!cloudData) {
+      console.warn("[sync] Cannot fork — failed to pull cloud data");
+      return;
+    }
+
+    // Create a new project with the cloud data, suffixed to indicate origin
+    const forkId = crypto.randomUUID();
+    const forkName = `${cloudData.name} (cloud)`;
+    const now = Date.now();
+
+    const forkMeta: ProjectMeta = {
+      id: forkId,
+      name: forkName,
+      createdAt: now,
+      updatedAt: now,
+      locationCount: cloudData.locations.length,
+      previewLocations: cloudData.locations.slice(0, 3).map((l) => l.name),
+      cloudRevision: 0, // Will get a revision on first push
+    };
+
+    const persistedData = cloudToPersistedData(cloudData);
+    await withSyncMuted(() => saveProject(forkMeta, persistedData));
+    await createPhotoRefsForCloudData(forkId, cloudData);
+
+    // Only upgrade to V2 if ALL photo refs were successfully downloaded.
+    // Otherwise keep the placeholder snapshot to avoid silently losing photos.
+    const totalCloudPhotos = cloudData.locations.reduce(
+      (n, loc) => n + (loc.photoRefs?.length ?? 0), 0,
+    );
+    const localRefs = await listPhotoRefsByProject(forkId);
+    if (localRefs.length >= totalCloudPhotos) {
+      const v2Data = await convertToV2WithRefs(forkId, cloudData);
+      if (v2Data) {
+        await withSyncMuted(() => saveProject(forkMeta, v2Data));
+      }
+    } else {
+      console.warn(`[sync] Fork ${forkId}: ${localRefs.length}/${totalCloudPhotos} photos downloaded — keeping placeholder data`);
+    }
+
+    // Push the fork to cloud as a new project (uses original cloud data, no photo loss)
+    await pushProjectFromIDB(forkId);
+
+    // Refresh project list
+    const refreshed = await listProjects();
+    useProjectStore.setState({ projects: refreshed });
+
+    console.info(`[sync] Forked cloud version of ${originalProjectId} → ${forkId} "${forkName}"`);
+  } catch (err) {
+    console.error("[sync] Fork failed:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Delete: remove from cloud
 // ---------------------------------------------------------------------------
 
@@ -416,6 +505,18 @@ async function deleteFromCloud(projectId: string): Promise<void> {
   if (!isSupabaseConfigured()) return;
   const supabase = createClient();
   if (!supabase || !useAuthStore.getState().user) return;
+
+  // Safety: verify this project actually belongs to the user before deleting
+  const { data: existing } = await supabase
+    .from("projects")
+    .select("id, revision")
+    .eq("id", projectId)
+    .single();
+
+  if (!existing) {
+    // Project doesn't exist on cloud — nothing to delete
+    return;
+  }
 
   const { error } = await supabase
     .from("projects")
@@ -507,9 +608,11 @@ async function onAuthReady(): Promise<void> {
       if (local && cloudRev > localRev) {
         // Cloud is newer but local might have unpushed edits too
         if (local.updatedAt > (cloudMeta.updatedAt ?? 0)) {
-          // Both sides changed — conflict
-          console.warn(`[sync] Conflict: project ${cloudMeta.id} — cloud rev ${cloudRev} > local rev ${localRev}, but local has newer edits`);
-          updateSyncState({ remote: "conflict" });
+          // Both sides changed — fork cloud version, keep local as-is, then push local
+          console.warn(`[sync] Conflict: project ${cloudMeta.id} — forking cloud version to avoid data loss`);
+          await forkCloudVersion(cloudMeta.id);
+          // Push local version (will create a new cloud revision for the original project)
+          await pushProjectFromIDB(local.id);
           continue;
         }
       }
@@ -614,11 +717,11 @@ export function initSyncRepository(): void {
       debouncedPush(projectId);
     },
     onProjectDeleted: (projectId) => {
-      // Only delete from cloud if sync is not in conflict state
-      // (prevents accidentally deleting the authoritative cloud copy)
+      // Only delete from cloud if sync is healthy and delete was user-initiated.
+      // During syncing/conflict/error states, skip cloud delete to prevent data loss.
       const syncState = useUIStore.getState().syncState;
-      if (syncState.remote === "conflict") {
-        console.warn("[sync] Skipping cloud delete — sync is in conflict state");
+      if (syncState.remote !== "synced" && syncState.remote !== "idle") {
+        console.warn(`[sync] Skipping cloud delete — sync state is "${syncState.remote}"`);
         return;
       }
       void deleteFromCloud(projectId);
