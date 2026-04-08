@@ -1,11 +1,9 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { Upload, Trash2, LayoutGrid, Undo2, Redo2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Upload, X } from "lucide-react";
 import { compressImage, getImageDimensions } from "@/lib/imageUtils";
 import { useProjectStore } from "@/stores/projectStore";
-import { useHistoryStore } from "@/stores/historyStore";
 import { useAuthStore } from "@/stores/authStore";
 import { putPhotoAsset, attachPhotoRef } from "@/lib/storage";
 import { queueUpload } from "@/lib/sync/photoSync";
@@ -113,7 +111,7 @@ export function usePhotoDropZone(locationId: string) {
   return { isDragOver, dropProps, handleFiles };
 }
 
-export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerProps) {
+export default function PhotoManager({ locationId }: PhotoManagerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const location = useProjectStore((s) =>
     s.locations.find((l) => l.id === locationId)
@@ -121,10 +119,6 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
   const addPhoto = useProjectStore((s) => s.addPhoto);
   const removePhoto = useProjectStore((s) => s.removePhoto);
   const setPhotoCaption = useProjectStore((s) => s.setPhotoCaption);
-  const undo = useHistoryStore((s) => s.undo);
-  const redo = useHistoryStore((s) => s.redo);
-  const canUndo = useHistoryStore((s) => s.canUndo);
-  const canRedo = useHistoryStore((s) => s.canRedo);
 
   if (!location) return null;
 
@@ -154,7 +148,7 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
           {/* Photo grid with add button */}
           <div className="grid grid-cols-4 gap-1.5">
             {location.photos.map((photo) => (
-              <div key={photo.id} className="relative">
+              <div key={photo.id} className="group/photo relative">
                 <div className="relative">
                   <img
                     src={photo.url}
@@ -165,10 +159,10 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
                   <button
                     type="button"
                     aria-label="Delete photo"
-                    className="absolute -right-2 -top-2 flex h-11 w-11 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm md:-right-1 md:-top-1 md:h-9 md:w-9"
+                    className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-opacity hover:bg-black/70 md:h-5 md:w-5 md:opacity-0 md:group-hover/photo:opacity-100"
                     onClick={() => removePhoto(locationId, photo.id)}
                   >
-                    <Trash2 className="h-4 w-4 md:h-3.5 md:w-3.5" />
+                    <X className="h-3.5 w-3.5 md:h-3 md:w-3" />
                   </button>
                 </div>
                 <input
@@ -209,42 +203,6 @@ export default function PhotoManager({ locationId, onEditLayout }: PhotoManagerP
         </button>
       )}
 
-      {/* Layout + Undo/Redo buttons */}
-      {hasPhotos && (
-        <div className="flex items-center gap-1">
-          {onEditLayout && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-11 px-3 text-sm gap-1.5 md:min-h-9 md:text-xs"
-              onClick={() => onEditLayout(locationId)}
-            >
-              <LayoutGrid className="h-4 w-4 md:h-3.5 md:w-3.5" />
-              Layout
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-11 w-11 md:h-9 md:w-9"
-            onClick={undo}
-            disabled={!canUndo}
-            aria-label="Undo"
-          >
-            <Undo2 className="h-4.5 w-4.5 md:h-4 md:w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-11 w-11 md:h-9 md:w-9"
-            onClick={redo}
-            disabled={!canRedo}
-            aria-label="Redo"
-          >
-            <Redo2 className="h-4.5 w-4.5 md:h-4 md:w-4" />
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
