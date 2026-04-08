@@ -150,11 +150,17 @@ export default memo(function MapCanvas() {
     if (!map) return;
 
     const handleClick = async (e: mapboxgl.MapMouseEvent) => {
+      if (useAnimationStore.getState().playbackState !== "idle") return;
       setContextMenu(null);
-      await addLocationAtCoordinates({
-        lng: e.lngLat.lng,
-        lat: e.lngLat.lat,
-      });
+      const bss = useUIStore.getState().bottomSheetState;
+      if (bss !== "collapsed") {
+        useUIStore.getState().setBottomSheetState("collapsed");
+        return;
+      }
+      const coords = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+      // Capture coords synchronously, then check again after async geocode guard
+      if (useAnimationStore.getState().playbackState !== "idle") return;
+      await addLocationAtCoordinates(coords);
     };
 
     map.on("click", handleClick);
@@ -168,6 +174,7 @@ export default memo(function MapCanvas() {
     if (!map) return;
 
     const handleContextMenu = (e: mapboxgl.MapMouseEvent & { point: mapboxgl.Point }) => {
+      if (useAnimationStore.getState().playbackState !== "idle") return;
       const originalTarget = e.originalEvent.target as HTMLElement | null;
       if (originalTarget?.closest(".mapboxgl-marker")) {
         return;

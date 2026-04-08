@@ -372,8 +372,8 @@ export default memo(function PlaybackControls({
               className={[
                 "relative z-10",
                 isPlaying
-                  ? "h-4 [&>div:first-child]:h-1 md:[&>div:first-child]:h-1"
-                  : "h-5 [&>div:first-child]:h-2 md:[&>div:first-child]:h-1.5",
+                  ? "h-6 [&>div:first-child]:h-1.5 md:h-4 md:[&>div:first-child]:h-1"
+                  : "h-7 [&>div:first-child]:h-2.5 md:h-5 md:[&>div:first-child]:h-1.5",
                 "[&_[data-slot=slider-range]]:bg-orange-500",
                 "[&_[data-slot=slider-thumb]]:border-orange-500",
               ].join(" ")}
