@@ -44,6 +44,7 @@ interface PlaybackControlsProps {
   hintMessage?: string;
   onHintDismiss?: () => void;
   onPlayingMobileInsetChange?: (insetPx: number) => void;
+  mapContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 function formatTime(seconds: number): string {
@@ -87,6 +88,7 @@ export default memo(function PlaybackControls({
   hintMessage,
   onHintDismiss,
   onPlayingMobileInsetChange,
+  mapContainerRef,
 }: PlaybackControlsProps) {
   const playbackState = useAnimationStore((s) => s.playbackState);
   const currentTime = useAnimationStore((s) => s.currentTime);
@@ -102,6 +104,20 @@ export default memo(function PlaybackControls({
   const scrubberRef = useRef<HTMLDivElement>(null);
   const [hoveredTickId, setHoveredTickId] = useState<string | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [mapRect, setMapRect] = useState<DOMRect | null>(null);
+
+  // Track map container position for desktop portal centering
+  useEffect(() => {
+    const el = mapContainerRef?.current;
+    if (!el || typeof window === "undefined" || window.innerWidth < 768) return;
+
+    const update = () => setMapRect(el.getBoundingClientRect());
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("scroll", update, true);
+    return () => { ro.disconnect(); window.removeEventListener("scroll", update, true); };
+  }, [mapContainerRef]);
 
   const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
   const isPlaying = playbackState === "playing";
@@ -266,8 +282,8 @@ export default memo(function PlaybackControls({
     "fixed left-0 right-0 z-[55] items-center justify-center transition-all duration-300 ease-in-out",
     controlsBottomClass,
     isPlaying
-      ? "md:absolute md:bottom-2 md:left-1/2 md:right-auto md:w-[90%] md:max-w-2xl md:-translate-x-1/2"
-      : "md:absolute md:bottom-4 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2 md:z-10",
+      ? ""
+      : "md:z-10",
   ].join(" ");
   const barClassName = [
     "flex items-center overflow-hidden border shadow-xl transition-all duration-300 ease-in-out rounded-none md:rounded-2xl",
@@ -291,12 +307,25 @@ export default memo(function PlaybackControls({
       : "w-[82px] opacity-100",
   ].join(" ");
 
-  // Use a portal so fixed positioning works inside overflow-hidden containers
-  // (constrained 9:16 map viewport clips fixed elements on mobile)
+  // Always portal to body to escape overflow-hidden on the map container.
+  // On desktop, use mapRect to center controls over the map area.
+  const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
+  const desktopStyle: React.CSSProperties | undefined =
+    isDesktop && mapRect
+      ? {
+          left: mapRect.left + mapRect.width / 2,
+          transform: "translateX(-50%)",
+          bottom: Math.max(window.innerHeight - mapRect.bottom + (isPlaying ? 8 : 16), 8),
+          width: isPlaying ? mapRect.width * 0.9 : undefined,
+          maxWidth: isPlaying ? "42rem" : undefined,
+          right: "auto",
+        }
+      : undefined;
   const controls = (
     <div
       ref={containerRef}
       className={`${containerClassName} ${shouldAutoHide ? "opacity-0" : "opacity-100"} transition-opacity`}
+      style={desktopStyle}
       onPointerEnter={() => setIsHovered(true)}
       onPointerLeave={() => setIsHovered(false)}
     >
@@ -457,9 +486,7 @@ export default memo(function PlaybackControls({
     </div>
   );
 
-  // Portal on mobile to escape overflow-hidden; desktop uses absolute inside map container
-  // (overflow-hidden is now on an inner div so absolute controls aren't clipped)
+  // Always portal to body to escape overflow-hidden on map container
   if (typeof document === "undefined") return controls;
-  const useMobilePortal = typeof window !== "undefined" && window.innerWidth < 768;
-  return useMobilePortal ? createPortal(controls, document.body) : controls;
+  return createPortal(controls, document.body);
 });

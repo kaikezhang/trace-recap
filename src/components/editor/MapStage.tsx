@@ -40,6 +40,7 @@ interface MapStageProps {
   onFlyToAlbumComplete: (locationId: string) => void;
   onStopEditingLayout: () => void;
   showEmptyState: boolean;
+  mapContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 function CityLabelOverlay({
@@ -135,6 +136,7 @@ export default function MapStage({
   onFlyToAlbumComplete,
   onStopEditingLayout,
   showEmptyState,
+  mapContainerRef,
 }: MapStageProps) {
   const showPhotoLayoutEditor = Boolean(
     editingLocation && editingLocation.photos.length > 0,
@@ -264,6 +266,7 @@ export default function MapStage({
           hintMessage={playHintMessage}
           onHintDismiss={onHintDismiss}
           onPlayingMobileInsetChange={setPlaybackBarInsetPx}
+          mapContainerRef={mapContainerRef}
         />
       )}
       {/* Watermark — visible during playback */}
