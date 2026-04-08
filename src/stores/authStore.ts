@@ -20,6 +20,7 @@ interface AuthState {
   ) => Promise<{ error?: string }>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error?: string }>;
 }
 
 let initPromise: Promise<void> | null = null;
@@ -127,5 +128,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Soft-clear: reset UI state, keep IDB photo cache for next login
     const { useProjectStore } = await import("@/stores/projectStore");
     await useProjectStore.getState().resetForSignOut();
+  },
+
+  deleteAccount: async () => {
+    const supabase = createClient();
+    if (!supabase) return { error: "Auth is not configured" };
+
+    const user = get().user;
+    if (!user) return { error: "Not signed in" };
+
+    try {
+      // Delete all user projects from cloud
+      const { error: deleteError } = await supabase
+        .from("projects")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (deleteError) {
+        console.error("[auth] Failed to delete user projects:", deleteError.message);
+      }
+
+      // Sign out and clear local state
+      await supabase.auth.signOut();
+      set({ user: null, session: null });
+
+      const { useProjectStore } = await import("@/stores/projectStore");
+      await useProjectStore.getState().resetForSignOut();
+
+      track("account_deleted");
+      return {};
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete account";
+      return { error: msg };
+    }
   },
 }));

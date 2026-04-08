@@ -112,6 +112,7 @@ type AnalyticsEvents = {
   // Auth
   auth_succeeded: AuthEvent;
   auth_failed: AuthEvent & { error_code?: string };
+  account_deleted: Record<string, never>;
 
   // Engagement
   feedback_submitted: { category: string; has_screenshot: boolean };
