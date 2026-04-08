@@ -22,9 +22,13 @@ function scheduleCleanup() {
 }
 
 function getClientIp(request: NextRequest): string {
+  // On Vercel, the platform sets x-real-ip reliably and strips spoofed values.
+  // For other hosts, x-forwarded-for is best-effort but still better than nothing.
+  // A truly determined attacker requires edge-level rate limiting (Vercel WAF, Cloudflare).
   return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    (request as NextRequest & { ip?: string }).ip ||
     "unknown"
   );
 }
