@@ -266,8 +266,8 @@ export default memo(function PlaybackControls({
     "fixed left-0 right-0 z-[55] items-center justify-center transition-all duration-300 ease-in-out",
     controlsBottomClass,
     isPlaying
-      ? "md:absolute md:bottom-2 md:left-1/2 md:right-auto md:w-[90%] md:max-w-2xl md:-translate-x-1/2"
-      : "md:absolute md:bottom-4 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2 md:z-10",
+      ? "md:bottom-2 md:left-1/2 md:right-auto md:w-[90%] md:max-w-2xl md:-translate-x-1/2"
+      : "md:bottom-4 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2 md:z-10",
   ].join(" ");
   const barClassName = [
     "flex items-center overflow-hidden border shadow-xl transition-all duration-300 ease-in-out rounded-none md:rounded-2xl",
@@ -457,8 +457,7 @@ export default memo(function PlaybackControls({
     </div>
   );
 
-  // Portal only on mobile — desktop uses absolute positioning inside map container
+  // Always portal to body to avoid overflow-hidden clipping in constrained viewports (9:16 etc.)
   if (typeof document === "undefined") return controls;
-  const useMobilePortal = typeof window !== "undefined" && window.innerWidth < 768;
-  return useMobilePortal ? createPortal(controls, document.body) : controls;
+  return createPortal(controls, document.body);
 });
