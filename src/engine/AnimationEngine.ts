@@ -267,6 +267,11 @@ export class AnimationEngine {
           zoomOutDur = 0;
           zoomInDur = 0;
           flyDur = effectiveVariable;
+        } else if (group.segments[0].transportMode === "walk" || group.segments[0].transportMode === "bicycle") {
+          // Walking: zoom barely changes, maximize smooth pan time
+          zoomOutDur = effectiveVariable * 0.05;
+          zoomInDur = effectiveVariable * 0.05;
+          flyDur = effectiveVariable * 0.90;
         } else {
           // Normal segment: allocate most time to FLY
           zoomOutDur = effectiveVariable * 0.12;
