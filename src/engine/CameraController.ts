@@ -61,11 +61,14 @@ export class CameraController {
       const bboxWidth = Math.abs(groupBounds[2] - groupBounds[0]);
       const bboxHeight = Math.abs(groupBounds[3] - groupBounds[1]);
       const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
-      // Walking needs street-level zoom (14-16), not city-wide (8)
+      // Walking: street-level (14-16). Short car rides: neighborhood (up to 12).
+      // Long-distance segments naturally get low zoom from the formula, so
+      // raising the cap only affects short urban segments.
+      const flyZoomMax = isWalk ? 16 : 12;
       const flyZoom = clamp(
         Math.log2(360 / maxSpan) - 1,
         1.5,
-        isWalk ? 16 : 8
+        flyZoomMax
       );
 
       const routeLine = group.mergedGeometry;
@@ -119,9 +122,12 @@ export class CameraController {
     this.groupCameras = basicData.map((cam, i) => {
       const isLast = i === basicData.length - 1;
 
+      // Arrive zoom caps: walk needs street level, general raised for short urban legs
+      const arriveMax = cam.isWalk ? 16 : 13;
+      const arriveMin = cam.isWalk ? 13 : 7;
+
       if (isLast) {
-        // Final destination: moderate zoom, walking stays at street level
-        cam.arriveZoom = clamp(cam.flyZoom + 3, 8, cam.isWalk ? 16 : 10);
+        cam.arriveZoom = clamp(cam.flyZoom + 3, 8, arriveMax);
       } else {
         const nextDist = basicData[i + 1].distanceKm;
 
@@ -138,11 +144,10 @@ export class CameraController {
           const bboxHeight = Math.abs(bounds[3] - bounds[1]);
           const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
           const fitZoom = Math.log2(360 / maxSpan) - 1;
-          // Walking: stay at street level (13-16); others: city scale (7-10)
-          cam.arriveZoom = clamp(fitZoom, cam.isWalk ? 13 : 7, cam.isWalk ? 16 : 10);
+          cam.arriveZoom = clamp(fitZoom, arriveMin, arriveMax);
         } else if (nextDist < 200) {
           // Provincial scale (e.g. cities within Yunnan/Taiwan)
-          cam.arriveZoom = clamp(cam.flyZoom + 2, cam.isWalk ? 10 : 7, cam.isWalk ? 14 : 9);
+          cam.arriveZoom = clamp(cam.flyZoom + 2, arriveMin, cam.isWalk ? 14 : 11);
         } else if (nextDist >= 1000) {
           // Very long next leg: barely zoom in
           cam.arriveZoom = clamp(cam.flyZoom + 1, 5, 7);

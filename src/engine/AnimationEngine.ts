@@ -205,16 +205,19 @@ export class AnimationEngine {
 
     const totalVariable = Math.max(totalTarget - totalFixed, n * 1.5);
 
-    // Compute each group's merged route length for proportional FLY timing
+    // Compute each group's effective length for proportional FLY timing.
+    // Flights use sqrt(distance) so a 3000km flight doesn't hog 95% of the time.
     const groupLengths = this.groups.map((g) => {
+      let len = 0;
       if (g.mergedGeometry && g.mergedGeometry.coordinates.length >= 2) {
         try {
-          return length(lineString(g.mergedGeometry.coordinates));
+          len = length(lineString(g.mergedGeometry.coordinates));
         } catch {
-          return 0;
+          len = 0;
         }
       }
-      return 0;
+      const isFlight = g.segments[0].transportMode === "flight";
+      return isFlight ? Math.sqrt(Math.max(len, 1)) : len;
     });
     const totalRouteLength = groupLengths.reduce((sum, l) => sum + l, 0);
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { lineString } from "@turf/helpers";
 import { length } from "@turf/length";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -132,6 +133,19 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
   const [showTiming, setShowTiming] = useState(false);
   const selectorRef = useRef<HTMLDivElement>(null);
   const timingRef = useRef<HTMLDivElement>(null);
+  const timingBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Compute portal position from timing button
+  const timingPanelStyle = useMemo(() => {
+    if (!showTiming || !timingBtnRef.current) return {};
+    const rect = timingBtnRef.current.getBoundingClientRect();
+    return {
+      position: "fixed" as const,
+      top: rect.bottom + 8,
+      left: rect.left + rect.width / 2 - 112, // 112 = w-56 / 2
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTiming]);
 
   const fromLoc = endpoints.from;
   const toLoc = endpoints.to;
@@ -149,11 +163,15 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
   const minDuration = 1.5;
   const effectiveDuration = hasOverride && override < minDuration ? minDuration : null;
 
-  // Close floating panel on outside click
+  // Close floating panel on outside click (check both panel and its trigger button)
   useEffect(() => {
     if (!showTiming) return;
     const handleClick = (e: MouseEvent) => {
-      if (timingRef.current && !timingRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        timingRef.current && !timingRef.current.contains(target) &&
+        timingBtnRef.current && !timingBtnRef.current.contains(target)
+      ) {
         setShowTiming(false);
       }
     };
@@ -340,6 +358,7 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
       {isGroupLeader && autoDuration !== null && (
         <div className="relative" ref={timingRef}>
           <button
+            ref={timingBtnRef}
             className="flex items-center gap-1 text-[10px] tabular-nums hover:text-foreground transition-colors mt-0.5"
             onClick={() => setShowTiming((v) => !v)}
           >
@@ -356,59 +375,52 @@ export default memo(function TransportSelector({ segment }: TransportSelectorPro
             )}
           </button>
 
-          {/* Floating timing panel */}
-          <AnimatePresence>
-            {showTiming && (
-              <motion.div
-                initial={shouldReduceMotion ? false : { opacity: 0, y: -4, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.95 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
-                className="transport-selector-panel absolute left-1/2 top-full z-20 mt-2 w-56 -translate-x-1/2 rounded-xl border border-gray-100 bg-white p-4 shadow-xl"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-medium text-gray-700">Duration</span>
-                  <button
-                    className="text-xs text-indigo-500 hover:text-indigo-600 font-medium transition-colors"
-                    onClick={() => {
-                      setSegmentTiming(segment.id, null);
-                      setShowTiming(false);
-                    }}
-                  >
-                    Auto
-                  </button>
-                </div>
+          {/* Floating timing panel — portaled to body to escape overflow:hidden */}
+          {showTiming && typeof document !== "undefined" && createPortal(
+            <div ref={timingRef} className="transport-selector-panel w-56 rounded-xl border border-gray-100 bg-white p-4 shadow-xl" style={{ ...timingPanelStyle, zIndex: 50 }}>
+              {/* Header */}
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-medium text-gray-700">Duration</span>
+                <button
+                  className="text-xs text-indigo-500 hover:text-indigo-600 font-medium transition-colors"
+                  onClick={() => {
+                    setSegmentTiming(segment.id, null);
+                    setShowTiming(false);
+                  }}
+                >
+                  Auto
+                </button>
+              </div>
 
-                {/* Slider */}
-                <input
-                  type="range"
-                  min={minDuration}
-                  max={30}
-                  step={0.5}
-                  value={displayDuration ?? 4}
-                  onChange={(e) => setSegmentTiming(segment.id, parseFloat(e.target.value))}
-                  className="w-full h-1.5 accent-indigo-500 cursor-pointer"
-                />
+              {/* Slider */}
+              <input
+                type="range"
+                min={minDuration}
+                max={30}
+                step={0.5}
+                value={displayDuration ?? 4}
+                onChange={(e) => setSegmentTiming(segment.id, parseFloat(e.target.value))}
+                className="w-full h-1.5 accent-indigo-500 cursor-pointer"
+              />
 
-                {/* Min / current / max labels */}
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-[10px] text-gray-400">1.5s</span>
-                  <span className="text-xs font-medium text-indigo-600">
-                    {(displayDuration ?? 4).toFixed(1)}s
-                  </span>
-                  <span className="text-[10px] text-gray-400">30s</span>
-                </div>
+              {/* Min / current / max labels */}
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[10px] text-gray-400">1.5s</span>
+                <span className="text-xs font-medium text-indigo-600">
+                  {(displayDuration ?? 4).toFixed(1)}s
+                </span>
+                <span className="text-[10px] text-gray-400">30s</span>
+              </div>
 
-                {/* Auto suggestion */}
-                {hasOverride && autoDuration !== null && (
-                  <p className="text-[10px] text-gray-400 mt-2 text-center">
-                    Auto would be {autoDuration.toFixed(1)}s
-                  </p>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              {/* Auto suggestion */}
+              {hasOverride && autoDuration !== null && (
+                <p className="text-[10px] text-gray-400 mt-2 text-center">
+                  Auto would be {autoDuration.toFixed(1)}s
+                </p>
+              )}
+            </div>,
+            document.body
+          )}
         </div>
       )}
     </div>
