@@ -25,6 +25,7 @@ interface GroupCamera {
   routeLine: GeoJSON.LineString | null;
   routeLength: number;
   distanceKm: number;
+  isWalk: boolean;
 }
 
 export class CameraController {
@@ -50,16 +51,24 @@ export class CameraController {
         point(group.toLoc.coordinates)
       );
 
+      // Determine if this is a walking/cycling segment (street-level camera)
+      const isWalk = group.segments[0].transportMode === "walk" ||
+        group.segments[0].transportMode === "bicycle";
+
       // Fly zoom: fit ALL locations in the group using bbox
       const points = group.allLocations.map((loc) => point(loc.coordinates));
       const groupBounds = bbox(featureCollection(points));
       const bboxWidth = Math.abs(groupBounds[2] - groupBounds[0]);
       const bboxHeight = Math.abs(groupBounds[3] - groupBounds[1]);
       const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
+      // Walking: street-level (14-16). Short car rides: neighborhood (up to 12).
+      // Long-distance segments naturally get low zoom from the formula, so
+      // raising the cap only affects short urban segments.
+      const flyZoomMax = isWalk ? 16 : 12;
       const flyZoom = clamp(
         Math.log2(360 / maxSpan) - 1,
         1.5,
-        8
+        flyZoomMax
       );
 
       const routeLine = group.mergedGeometry;
@@ -105,6 +114,7 @@ export class CameraController {
         routeLength,
         distanceKm: distKm,
         segmentCount: group.segments.length,
+        isWalk,
       };
     });
 
@@ -112,9 +122,12 @@ export class CameraController {
     this.groupCameras = basicData.map((cam, i) => {
       const isLast = i === basicData.length - 1;
 
+      // Arrive zoom caps: walk needs street level, general raised for short urban legs
+      const arriveMax = cam.isWalk ? 16 : 13;
+      const arriveMin = cam.isWalk ? 13 : 7;
+
       if (isLast) {
-        // Final destination: moderate zoom, not street level
-        cam.arriveZoom = clamp(cam.flyZoom + 3, 8, 10);
+        cam.arriveZoom = clamp(cam.flyZoom + 3, 8, arriveMax);
       } else {
         const nextDist = basicData[i + 1].distanceKm;
 
@@ -131,10 +144,10 @@ export class CameraController {
           const bboxHeight = Math.abs(bounds[3] - bounds[1]);
           const maxSpan = Math.max(bboxWidth, bboxHeight, 0.01);
           const fitZoom = Math.log2(360 / maxSpan) - 1;
-          cam.arriveZoom = clamp(fitZoom, 7, 10);
+          cam.arriveZoom = clamp(fitZoom, arriveMin, arriveMax);
         } else if (nextDist < 200) {
           // Provincial scale (e.g. cities within Yunnan/Taiwan)
-          cam.arriveZoom = clamp(cam.flyZoom + 2, 7, 9);
+          cam.arriveZoom = clamp(cam.flyZoom + 2, arriveMin, cam.isWalk ? 14 : 11);
         } else if (nextDist >= 1000) {
           // Very long next leg: barely zoom in
           cam.arriveZoom = clamp(cam.flyZoom + 1, 5, 7);
@@ -156,12 +169,19 @@ export class CameraController {
   /** Get the look-ahead hover duration for a group */
   getHoverDuration(groupIndex: number): number {
     const n = this.groupCameras.length;
+    const gc = this.groupCameras[groupIndex];
     const isLast = groupIndex === n - 1;
 
     // First city gets a longer hover so viewers can register the starting point
     if (groupIndex === 0) return 2.5;
 
     if (isLast) return 2.0;
+
+    // Walk→walk: skip hover — camera just pans continuously at street level
+    if (groupIndex > 0) {
+      const prevGc = this.groupCameras[groupIndex - 1];
+      if (gc.isWalk && prevGc.isWalk) return 0;
+    }
 
     const nextDist = this.groupCameras[groupIndex + 1]?.distanceKm ?? 0;
     if (nextDist < 100) return 1.5;
